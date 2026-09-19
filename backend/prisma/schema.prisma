@@ -1,0 +1,379 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Auth ----------
+
+enum Role {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  phone     String
+  role      Role
+  codeHash  String
+  expiresAt DateTime
+  consumed  Boolean  @default(false)
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([phone, role])
+}
+
+// ---------- Customer ----------
+
+model Customer {
+  id        String   @id @default(uuid())
+  phone     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+}
+
+// ---------- Provider (ช่าง) ----------
+
+enum ProviderStatus {
+  PENDING
+  VERIFIED
+  SUSPENDED
+}
+
+model Provider {
+  id       String @id @default(uuid())
+  phone    String @unique
+  realName String
+  nickname String
+
+  shopName     String?
+  facebookPage String?
+
+  // พื้นที่รับงาน: ปักหมุดตำแหน่งประจำ ใช้คำนวณรัศมี dispatch
+  baseLat Float
+  baseLng Float
+
+  // ช่วงเวลาพร้อมทำงาน (เวลาเดียวใช้ทุกวัน) เก็บเป็นนาทีนับจากเที่ยงคืน 0-1439
+  openMinute  Int
+  closeMinute Int
+
+  status     ProviderStatus @default(PENDING)
+  isOnline   Boolean        @default(false)
+  currentLat Float?
+  currentLng Float?
+  lastSeenAt DateTime?
+
+  // ข้อมูลรับเงิน กรอกหลังแอดมินอนุมัติ ก่อนเบิกครั้งแรก
+  bankName          String?
+  bankAccountName   String?
+  bankAccountNumber String?
+  promptPayId       String?
+
+  ratingAvg   Float @default(0)
+  ratingCount Int   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  serviceCategories ProviderServiceCategory[]
+  vehicleTypes      ProviderVehicleType[]
+  toolPhotos        ProviderToolPhoto[]
+  orders            Order[]
+  dispatchAttempts  DispatchAttempt[]
+  walletEntries     WalletEntry[]
+  withdrawals       WithdrawalRequest[]
+
+  @@index([status, isOnline])
+}
+
+model ProviderToolPhoto {
+  id         String   @id @default(uuid())
+  providerId String
+  url        String
+  createdAt  DateTime @default(now())
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+}
+
+model ProviderServiceCategory {
+  providerId String
+  categoryId String
+
+  provider Provider        @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  category ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([providerId, categoryId])
+}
+
+model ProviderVehicleType {
+  providerId    String
+  vehicleTypeId String
+
+  provider    Provider    @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  vehicleType VehicleType @relation(fields: [vehicleTypeId], references: [id], onDelete: Cascade)
+
+  @@id([providerId, vehicleTypeId])
+}
+
+// ---------- Service catalog ----------
+
+model ServiceCategory {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  name      String
+  iconKey   String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  subServices SubService[]
+  providers   ProviderServiceCategory[]
+  orders      Order[]
+}
+
+enum PriceType {
+  CALL_OUT_FEE // ค่าเรียกช่างไปดู/ประเมินหน้างาน
+  FULL_SERVICE // ราคาเริ่มต้นของบริการเต็ม
+}
+
+model SubService {
+  id          String    @id @default(uuid())
+  categoryId  String
+  name        String
+  description String?
+  basePrice   Int // หน่วยเป็นสตางค์ เก็บเป็น integer กัน floating point error
+  priceType   PriceType
+  infoNote    String? // เนื้อหาใน bottom sheet ปุ่ม (i)
+  sortOrder   Int       @default(0)
+  active      Boolean   @default(true)
+
+  category ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orders   Order[]
+
+  @@index([categoryId])
+}
+
+model VehicleType {
+  id         String  @id @default(uuid())
+  slug       String  @unique
+  name       String
+  multiplier Float   @default(1.0) // ตัวคูณราคาตามประเภทรถ
+  sortOrder  Int     @default(0)
+  active     Boolean @default(true)
+
+  providers ProviderVehicleType[]
+  orders    Order[]
+}
+
+// ---------- Order ----------
+
+enum OrderStatus {
+  CREATED
+  SEARCHING
+  MATCHED
+  EN_ROUTE
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_MATCH // ไล่ครบทุกคนแล้วไม่มีใครรับ -> escalate ให้แอดมิน
+}
+
+model Order {
+  id         String @id @default(uuid())
+  orderNo    String @unique
+  customerId String
+
+  categoryId    String
+  subServiceId  String
+  vehicleTypeId String
+
+  providerId String?
+
+  status OrderStatus @default(CREATED)
+
+  pickupLat     Float
+  pickupLng     Float
+  pickupAddress String?
+  note          String?
+
+  priceEstimated Int // สตางค์
+  priceFinal     Int? // สตางค์ ใส่ตอนปิดงาน
+  commissionRate Float // บันทึกเรตคอมมิชชัน ณ เวลาที่สร้างออเดอร์ (ค่าเริ่มต้น 0.35)
+
+  createdAt   DateTime  @default(now())
+  matchedAt   DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+
+  customer    Customer        @relation(fields: [customerId], references: [id])
+  provider    Provider?       @relation(fields: [providerId], references: [id])
+  category    ServiceCategory @relation(fields: [categoryId], references: [id])
+  subService  SubService      @relation(fields: [subServiceId], references: [id])
+  vehicleType VehicleType     @relation(fields: [vehicleTypeId], references: [id])
+
+  photos           OrderPhoto[]
+  dispatchAttempts DispatchAttempt[]
+  payment          Payment?
+  walletEntries    WalletEntry[]
+  rating           Rating?
+
+  @@index([customerId])
+  @@index([providerId])
+  @@index([status])
+}
+
+model OrderPhoto {
+  id        String   @id @default(uuid())
+  orderId   String
+  url       String
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+// ---------- Dispatch ----------
+
+enum DispatchStatus {
+  OFFERED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+model DispatchAttempt {
+  id          String         @id @default(uuid())
+  orderId     String
+  providerId  String
+  rank        Int // ลำดับความใกล้ 1 = ใกล้สุด
+  distanceKm  Float
+  status      DispatchStatus @default(OFFERED)
+  offeredAt   DateTime       @default(now())
+  expiresAt   DateTime // offeredAt + 5 นาที
+  respondedAt DateTime?
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, providerId])
+  @@index([status, expiresAt])
+}
+
+// ---------- Money ----------
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  PROMPTPAY
+  CARD
+}
+
+model Payment {
+  id       String        @id @default(uuid())
+  orderId  String        @unique
+  amount   Int // สตางค์ ยอดเต็มที่ลูกค้าจ่าย
+  method   PaymentMethod @default(PROMPTPAY)
+  status   PaymentStatus @default(PENDING)
+  chargeId String? // reference จาก payment gateway
+  paidAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+enum WalletEntryType {
+  ORDER_EARNING // ยอดสุทธิที่ช่างได้หลังหักคอมมิชชันแล้ว (65%)
+  WITHDRAWAL // กันยอดไว้ทันทีที่ช่างกดขอเบิก (ค่าติดลบ)
+  ADJUSTMENT // คืนยอดเมื่อแอดมินปฏิเสธคำขอเบิก หรือแอดมินปรับยอดเอง
+}
+
+// หมายเหตุ: คอมมิชชัน 35% ไม่ถูกบันทึกในกระเป๋าช่าง
+// ยอดคงเหลือของช่าง = ผลรวม WalletEntry.amount ทั้งหมดของช่างคนนั้น
+// รายได้ของแอป = ผลรวม (priceFinal * commissionRate) จากออเดอร์ที่ COMPLETED
+
+// Ledger แบบ append-only ยอดคงเหลือ = ผลรวม amount ทั้งหมดของช่างคนนั้น
+model WalletEntry {
+  id           String          @id @default(uuid())
+  providerId   String
+  type         WalletEntryType
+  amount       Int // สตางค์ บวก = เงินเข้า ลบ = เงินออก
+  orderId      String?
+  withdrawalId String?
+  memo         String?
+  createdAt    DateTime        @default(now())
+
+  provider   Provider           @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  order      Order?             @relation(fields: [orderId], references: [id])
+  withdrawal WithdrawalRequest? @relation(fields: [withdrawalId], references: [id])
+
+  @@index([providerId])
+  @@index([orderId])
+}
+
+enum WithdrawalStatus {
+  REQUESTED
+  TRANSFERRED
+  REJECTED
+}
+
+model WithdrawalRequest {
+  id         String           @id @default(uuid())
+  providerId String
+  amount     Int // สตางค์
+  status     WithdrawalStatus @default(REQUESTED)
+
+  // สแนปช็อตข้อมูลบัญชี ณ เวลาที่ขอเบิก กันกรณีช่างแก้บัญชีภายหลัง
+  bankName          String?
+  bankAccountName   String?
+  bankAccountNumber String?
+  promptPayId       String?
+
+  adminNote     String?
+  transferSlip  String? // url สลิปที่แอดมินอัปโหลดหลังโอน
+  requestedAt   DateTime  @default(now())
+  transferredAt DateTime?
+
+  provider      Provider      @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  walletEntries WalletEntry[]
+
+  @@index([providerId])
+  @@index([status])
+}
+
+model Rating {
+  id        String   @id @default(uuid())
+  orderId   String   @unique
+  score     Int // 1-5
+  comment   String?
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+// ---------- Admin ----------
+
+model AdminUser {
+  id           String   @id @default(uuid())
+  phone        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+}

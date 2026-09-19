@@ -1,0 +1,282 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+import 'models.dart';
+
+class ApiException implements Exception {
+  ApiException(this.statusCode, this.message);
+
+  final int statusCode;
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// ผู้ใช้ที่เรียก API — ส่งไปกับการขอ OTP เพื่อบอกว่าเป็นลูกค้าหรือช่าง
+enum ApiRole { customer, provider }
+
+String _roleToJson(ApiRole role) =>
+    role == ApiRole.customer ? 'CUSTOMER' : 'PROVIDER';
+
+class FixGoApiClient {
+  FixGoApiClient({required this.baseUrl, http.Client? httpClient})
+      : _http = httpClient ?? http.Client();
+
+  final String baseUrl;
+  final http.Client _http;
+
+  String? accessToken;
+
+  Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        if (accessToken != null) 'Authorization': 'Bearer $accessToken',
+      };
+
+  Future<dynamic> _send(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, String>? query,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api$path').replace(queryParameters: query);
+    final request = http.Request(method, uri)..headers.addAll(_headers);
+    if (body != null) {
+      request.body = jsonEncode(body);
+    }
+
+    final streamed = await _http.send(request);
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode >= 400) {
+      String message = 'เกิดข้อผิดพลาด (${response.statusCode})';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic> && decoded['message'] != null) {
+          final raw = decoded['message'];
+          message = raw is List ? raw.join('\n') : raw.toString();
+        }
+      } on FormatException {
+        // ไม่ใช่ JSON ใช้ข้อความ default
+      }
+      throw ApiException(response.statusCode, message);
+    }
+
+    if (response.body.isEmpty) return null;
+    return jsonDecode(utf8.decode(response.bodyBytes));
+  }
+
+  // ---------- Auth ----------
+
+  Future<String?> requestOtp(String phone, ApiRole role) async {
+    final result = await _send('POST', '/auth/otp/request', body: {
+      'phone': phone,
+      'role': _roleToJson(role),
+    }) as Map<String, dynamic>;
+    // devCode มีเฉพาะตอน backend รันโหมด development
+    return result['devCode'] as String?;
+  }
+
+  Future<({String accessToken, bool hasProfile})> verifyOtp(
+    String phone,
+    ApiRole role,
+    String code,
+  ) async {
+    final result = await _send('POST', '/auth/otp/verify', body: {
+      'phone': phone,
+      'role': _roleToJson(role),
+      'code': code,
+    }) as Map<String, dynamic>;
+
+    final token = result['accessToken'] as String;
+    accessToken = token;
+    return (
+      accessToken: token,
+      hasProfile: result['hasProfile'] as bool,
+    );
+  }
+
+  // ---------- Catalog ----------
+
+  Future<List<ServiceCategory>> listCategories() async {
+    final result = await _send('GET', '/catalog/categories') as List<dynamic>;
+    return result
+        .cast<Map<String, dynamic>>()
+        .map(ServiceCategory.fromJson)
+        .toList();
+  }
+
+  Future<List<SubService>> listSubServices(String categoryId) async {
+    final result = await _send(
+      'GET',
+      '/catalog/categories/$categoryId/sub-services',
+    ) as List<dynamic>;
+    return result.cast<Map<String, dynamic>>().map(SubService.fromJson).toList();
+  }
+
+  Future<List<VehicleType>> listVehicleTypes() async {
+    final result = await _send('GET', '/catalog/vehicle-types') as List<dynamic>;
+    return result
+        .cast<Map<String, dynamic>>()
+        .map(VehicleType.fromJson)
+        .toList();
+  }
+
+  Future<int> quote(String subServiceId, String vehicleTypeId) async {
+    final result = await _send('GET', '/catalog/quote', query: {
+      'subServiceId': subServiceId,
+      'vehicleTypeId': vehicleTypeId,
+    }) as Map<String, dynamic>;
+    return result['price'] as int;
+  }
+
+  // ---------- Orders (ลูกค้า) ----------
+
+  Future<Order> createOrder({
+    required String categoryId,
+    required String subServiceId,
+    required String vehicleTypeId,
+    required double pickupLat,
+    required double pickupLng,
+    String? pickupAddress,
+    String? note,
+    List<String>? photoUrls,
+  }) async {
+    final result = await _send('POST', '/orders', body: {
+      'categoryId': categoryId,
+      'subServiceId': subServiceId,
+      'vehicleTypeId': vehicleTypeId,
+      'pickupLat': pickupLat,
+      'pickupLng': pickupLng,
+      if (pickupAddress != null) 'pickupAddress': pickupAddress,
+      if (note != null) 'note': note,
+      if (photoUrls != null && photoUrls.isNotEmpty) 'photoUrls': photoUrls,
+    }) as Map<String, dynamic>;
+    return Order.fromJson(result);
+  }
+
+  Future<Order> getOrder(String orderId) async {
+    final result = await _send('GET', '/orders/$orderId') as Map<String, dynamic>;
+    return Order.fromJson(result);
+  }
+
+  Future<List<Order>> listMyOrders() async {
+    final result = await _send('GET', '/orders/mine') as List<dynamic>;
+    return result.cast<Map<String, dynamic>>().map(Order.fromJson).toList();
+  }
+
+  Future<void> cancelOrder(String orderId) async {
+    await _send('POST', '/orders/$orderId/cancel');
+  }
+
+  Future<void> rateOrder(String orderId, int score, {String? comment}) async {
+    await _send('POST', '/orders/$orderId/rate', body: {
+      'score': score,
+      if (comment != null) 'comment': comment,
+    });
+  }
+
+  // ---------- Provider ----------
+
+  Future<void> registerProvider(Map<String, dynamic> form) async {
+    await _send('POST', '/providers/register', body: form);
+  }
+
+  Future<Map<String, dynamic>> getProviderProfile() async {
+    return await _send('GET', '/providers/me') as Map<String, dynamic>;
+  }
+
+  Future<void> setOnline(bool isOnline) async {
+    await _send('PATCH', '/providers/me/online', body: {'isOnline': isOnline});
+  }
+
+  Future<void> updateProviderLocation(double lat, double lng) async {
+    await _send('PATCH', '/providers/me/location', body: {
+      'lat': lat,
+      'lng': lng,
+    });
+  }
+
+  Future<void> updatePayoutInfo({
+    String? bankName,
+    String? bankAccountName,
+    String? bankAccountNumber,
+    String? promptPayId,
+  }) async {
+    await _send('PATCH', '/providers/me/payout-info', body: {
+      if (bankName != null) 'bankName': bankName,
+      if (bankAccountName != null) 'bankAccountName': bankAccountName,
+      if (bankAccountNumber != null) 'bankAccountNumber': bankAccountNumber,
+      if (promptPayId != null) 'promptPayId': promptPayId,
+    });
+  }
+
+  // ---------- Dispatch (ช่าง) ----------
+
+  Future<List<JobOffer>> listOffers() async {
+    final result = await _send('GET', '/dispatch/offers') as List<dynamic>;
+    return result.cast<Map<String, dynamic>>().map(JobOffer.fromJson).toList();
+  }
+
+  Future<void> acceptOffer(String orderId) async {
+    await _send('POST', '/dispatch/offers/$orderId/accept');
+  }
+
+  Future<void> rejectOffer(String orderId) async {
+    await _send('POST', '/dispatch/offers/$orderId/reject');
+  }
+
+  Future<List<Order>> listAssignedOrders() async {
+    final result = await _send('GET', '/orders/assigned') as List<dynamic>;
+    return result.cast<Map<String, dynamic>>().map(Order.fromJson).toList();
+  }
+
+  Future<void> markEnRoute(String orderId) async {
+    await _send('PATCH', '/orders/$orderId/en-route');
+  }
+
+  Future<void> startJob(String orderId) async {
+    await _send('PATCH', '/orders/$orderId/start');
+  }
+
+  Future<void> completeJob(String orderId, int priceFinal) async {
+    await _send('POST', '/orders/$orderId/complete', body: {
+      'priceFinal': priceFinal,
+    });
+  }
+
+  // ---------- Wallet (ช่าง) ----------
+
+  Future<int> getWalletBalance() async {
+    final result = await _send('GET', '/wallet/balance') as Map<String, dynamic>;
+    return result['balance'] as int;
+  }
+
+  Future<List<WalletEntry>> listWalletEntries() async {
+    final result = await _send('GET', '/wallet/entries') as List<dynamic>;
+    return result.cast<Map<String, dynamic>>().map(WalletEntry.fromJson).toList();
+  }
+
+  Future<void> requestWithdrawal(int amount) async {
+    await _send('POST', '/wallet/withdrawals', body: {'amount': amount});
+  }
+
+  // ---------- Payments (ลูกค้า) ----------
+
+  Future<({String chargeId, String qrPayload, int amount})> createPromptPayCharge(
+    String orderId,
+  ) async {
+    final result = await _send(
+      'POST',
+      '/payments/orders/$orderId/promptpay',
+    ) as Map<String, dynamic>;
+    return (
+      chargeId: result['chargeId'] as String,
+      qrPayload: result['qrPayload'] as String,
+      amount: result['amount'] as int,
+    );
+  }
+
+  void dispose() => _http.close();
+}

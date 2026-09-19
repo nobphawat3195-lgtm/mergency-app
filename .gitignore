@@ -1,0 +1,35 @@
+# Secrets — ห้าม commit ไฟล์ .env จริงเด็ดขาด (เก็บแค่ .env.example)
+.env
+.env.*
+!.env.example
+
+# Node / backend
+node_modules/
+dist/
+npm-debug.log*
+
+# Prisma
+backend/prisma/migrations/
+
+# Flutter / Dart
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/build/
+**/.packages
+**/pubspec.lock
+
+# Flutter platform ephemeral (regenerate อัตโนมัติ ไม่ต้องเก็บ)
+**/ios/Flutter/ephemeral/
+**/ios/Pods/
+**/android/.gradle/
+**/android/local.properties
+**/linux/flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+**/windows/flutter/ephemeral/
+
+# OS/editor
+.DS_Store
+*.swp
+.vscode/
+.idea/

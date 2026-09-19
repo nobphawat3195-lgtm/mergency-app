@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FixGo Admin</title>
+<style>
+  :root {
+    --navy: #0B1B2B;
+    --accent: #FFC72C;
+    --surface: #F5F6F8;
+    --text-secondary: #6B7280;
+    --border: #E5E7EB;
+    --success: #22C55E;
+    --error: #EF4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--surface);
+    color: var(--navy);
+  }
+  header {
+    background: var(--navy);
+    color: #fff;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header h1 { margin: 0; font-size: 20px; color: var(--accent); }
+  main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  h2 { font-size: 17px; margin: 0 0 16px; }
+  input {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 15px;
+    width: 100%;
+    max-width: 280px;
+  }
+  button {
+    background: var(--accent);
+    color: var(--navy);
+    border: none;
+    border-radius: 999px;
+    padding: 10px 20px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  button.ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+  }
+  button.danger { background: var(--error); color: #fff; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; }
+  .stat {
+    flex: 1 1 160px;
+    background: var(--navy);
+    color: #fff;
+    border-radius: 16px;
+    padding: 16px;
+  }
+  .stat .value { font-size: 26px; font-weight: 800; color: var(--accent); }
+  .stat .label { font-size: 13px; color: #CBD5E1; }
+  .hidden { display: none; }
+  .error { color: var(--error); margin-top: 12px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FixGo</h1>
+  <span>ระบบหลังบ้าน</span>
+  <span style="flex:1"></span>
+  <button id="logout" class="ghost hidden" style="color:#fff">ออกจากระบบ</button>
+</header>
+
+<main>
+  <section id="login-view" class="card">
+    <h2>เข้าสู่ระบบผู้ดูแล</h2>
+    <div class="row">
+      <input id="phone" placeholder="เบอร์โทรศัพท์" inputmode="numeric">
+      <input id="password" type="password" placeholder="รหัสผ่าน">
+      <button id="login-btn">เข้าสู่ระบบ</button>
+    </div>
+    <div id="login-error" class="error"></div>
+  </section>
+
+  <div id="dashboard-view" class="hidden">
+    <div class="card">
+      <h2>ภาพรวม</h2>
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="card">
+      <h2>ช่างรออนุมัติ</h2>
+      <table><thead><tr>
+        <th>ชื่อ</th><th>เบอร์</th><th>ร้าน/อู่</th><th>เฟซบุ๊ก</th><th>เวลาทำงาน</th><th></th>
+      </tr></thead><tbody id="providers-body"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>คำขอเบิกเงิน</h2>
+      <table><thead><tr>
+        <th>ช่าง</th><th>จำนวน</th><th>บัญชีรับเงิน</th><th>ขอเมื่อ</th><th></th>
+      </tr></thead><tbody id="withdrawals-body"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>ออเดอร์ล่าสุด</h2>
+      <table><thead><tr>
+        <th>เลขที่</th><th>บริการ</th><th>ลูกค้า</th><th>ช่าง</th><th>สถานะ</th><th>ราคา</th>
+      </tr></thead><tbody id="orders-body"></tbody></table>
+    </div>
+  </div>
+</main>
+
+<script>
+// ตั้งค่า API ปลายทาง — เปลี่ยนเป็น URL จริงตอน deploy
+const API_BASE = localStorage.getItem('fixgo_api_base') || 'http://localhost:3000';
+
+let token = localStorage.getItem('fixgo_admin_token');
+
+const el = (id) => document.getElementById(id);
+
+const STATUS_LABELS = {
+  CREATED: 'สร้างแล้ว', SEARCHING: 'กำลังหาช่าง', MATCHED: 'ช่างรับแล้ว',
+  EN_ROUTE: 'กำลังเดินทาง', IN_PROGRESS: 'กำลังซ่อม', COMPLETED: 'เสร็จสิ้น',
+  CANCELLED: 'ยกเลิก', NO_MATCH: 'ไม่มีช่างรับ',
+};
+
+const formatSatang = (satang) =>
+  '฿' + (satang / 100).toLocaleString('th-TH', { maximumFractionDigits: 2 });
+
+const formatMinute = (minute) =>
+  String(Math.floor(minute / 60)).padStart(2, '0') + ':' +
+  String(minute % 60).padStart(2, '0');
+
+async function api(path, options = {}) {
+  const response = await fetch(API_BASE + '/api' + path, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  if (!response.ok) {
+    let message = 'เกิดข้อผิดพลาด (' + response.status + ')';
+    try {
+      const body = await response.json();
+      if (body.message) message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
+    } catch (_) { /* ไม่ใช่ JSON */ }
+    throw new Error(message);
+  }
+  return response.status === 204 ? null : response.json();
+}
+
+async function login() {
+  el('login-error').textContent = '';
+  try {
+    const result = await api('/admin/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        phone: el('phone').value.trim(),
+        password: el('password').value,
+      }),
+    });
+    token = result.accessToken;
+    localStorage.setItem('fixgo_admin_token', token);
+    showDashboard();
+  } catch (error) {
+    el('login-error').textContent = error.message;
+  }
+}
+
+function logout() {
+  token = null;
+  localStorage.removeItem('fixgo_admin_token');
+  el('dashboard-view').classList.add('hidden');
+  el('login-view').classList.remove('hidden');
+  el('logout').classList.add('hidden');
+}
+
+async function showDashboard() {
+  el('login-view').classList.add('hidden');
+  el('dashboard-view').classList.remove('hidden');
+  el('logout').classList.remove('hidden');
+  await Promise.all([loadSummary(), loadProviders(), loadWithdrawals(), loadOrders()]);
+}
+
+async function loadSummary() {
+  const summary = await api('/admin/summary');
+  el('stats').innerHTML = [
+    { label: 'ออเดอร์ทั้งหมด', value: summary.orderCount },
+    { label: 'งานที่เสร็จแล้ว', value: summary.completedCount },
+    { label: 'รายได้ค่าธรรมเนียม', value: formatSatang(summary.commissionRevenue) },
+    { label: 'ช่างรออนุมัติ', value: summary.pendingProviders },
+    { label: 'คำขอเบิกค้าง', value: summary.pendingWithdrawals },
+  ].map((stat) => `<div class="stat"><div class="value">${stat.value}</div><div class="label">${stat.label}</div></div>`).join('');
+}
+
+async function loadProviders() {
+  const providers = await api('/admin/providers?status=PENDING');
+  el('providers-body').innerHTML = providers.length === 0
+    ? '<tr><td colspan="6">ไม่มีช่างรออนุมัติ</td></tr>'
+    : providers.map((provider) => `
+      <tr>
+        <td>${provider.realName} (${provider.nickname})</td>
+        <td>${provider.phone}</td>
+        <td>${provider.shopName || '-'}</td>
+        <td>${provider.facebookPage || '-'}</td>
+        <td>${formatMinute(provider.openMinute)}-${formatMinute(provider.closeMinute)}</td>
+        <td>
+          <button onclick="setProviderStatus('${provider.id}','VERIFIED')">อนุมัติ</button>
+          <button class="danger" onclick="setProviderStatus('${provider.id}','SUSPENDED')">ปฏิเสธ</button>
+        </td>
+      </tr>`).join('');
+}
+
+async function setProviderStatus(id, status) {
+  await api('/admin/providers/' + id + '/status', {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+  await Promise.all([loadProviders(), loadSummary()]);
+}
+
+async function loadWithdrawals() {
+  const withdrawals = await api('/admin/withdrawals?status=REQUESTED');
+  el('withdrawals-body').innerHTML = withdrawals.length === 0
+    ? '<tr><td colspan="5">ไม่มีคำขอเบิกเงิน</td></tr>'
+    : withdrawals.map((withdrawal) => `
+      <tr>
+        <td>${withdrawal.provider.realName} (${withdrawal.provider.nickname})<br><small>${withdrawal.provider.phone}</small></td>
+        <td><strong>${formatSatang(withdrawal.amount)}</strong></td>
+        <td>${withdrawal.promptPayId ? 'พร้อมเพย์ ' + withdrawal.promptPayId : (withdrawal.bankName || '') + ' ' + (withdrawal.bankAccountNumber || '')}<br><small>${withdrawal.bankAccountName || ''}</small></td>
+        <td>${new Date(withdrawal.requestedAt).toLocaleString('th-TH')}</td>
+        <td>
+          <button onclick="resolveWithdrawal('${withdrawal.id}','transferred')">โอนแล้ว</button>
+          <button class="danger" onclick="resolveWithdrawal('${withdrawal.id}','reject')">ปฏิเสธ</button>
+        </td>
+      </tr>`).join('');
+}
+
+async function resolveWithdrawal(id, action) {
+  const note = prompt(action === 'reject' ? 'เหตุผลที่ปฏิเสธ' : 'หมายเหตุ (ไม่บังคับ)') || undefined;
+  if (action === 'reject' && note === undefined) return;
+  await api('/admin/withdrawals/' + id + '/' + action, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+  await Promise.all([loadWithdrawals(), loadSummary()]);
+}
+
+async function loadOrders() {
+  const orders = await api('/admin/orders');
+  el('orders-body').innerHTML = orders.slice(0, 30).map((order) => `
+    <tr>
+      <td>${order.orderNo}</td>
+      <td>${order.subService?.name || order.category?.name || '-'}</td>
+      <td>${order.customer?.phone || '-'}</td>
+      <td>${order.provider ? order.provider.nickname : '-'}</td>
+      <td>${STATUS_LABELS[order.status] || order.status}</td>
+      <td>${formatSatang(order.priceFinal ?? order.priceEstimated)}</td>
+    </tr>`).join('') || '<tr><td colspan="6">ยังไม่มีออเดอร์</td></tr>';
+}
+
+el('login-btn').addEventListener('click', login);
+el('logout').addEventListener('click', logout);
+el('password').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') login();
+});
+
+if (token) {
+  showDashboard().catch(() => logout());
+}
+</script>
+</body>
+</html>
