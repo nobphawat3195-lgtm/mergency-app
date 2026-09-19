@@ -6,9 +6,13 @@ import '../order_tracking_screen.dart';
 
 /// Booking wizard 4 ขั้นตอน: บริการ -> บริการย่อย -> ประเภทรถ -> ยืนยัน
 class BookingFlow extends StatefulWidget {
-  const BookingFlow({super.key, this.initialCategory});
+  const BookingFlow({super.key, this.initialCategory, this.pickupLocation});
 
   final ServiceCategory? initialCategory;
+
+  /// ตำแหน่งที่ดึงมาจากหน้า Home แล้ว — ถ้า null (เช่น ผู้ใช้ปฏิเสธสิทธิ์ตอนนั้น)
+  /// จะลองขอใหม่อีกครั้งตอนยืนยันออเดอร์
+  final LocationResult? pickupLocation;
 
   @override
   State<BookingFlow> createState() => _BookingFlowState();
@@ -22,10 +26,12 @@ class _BookingFlowState extends State<BookingFlow> {
   SubService? _subService;
   VehicleType? _vehicleType;
   bool _submitting = false;
+  LocationResult? _pickupLocation;
 
   @override
   void initState() {
     super.initState();
+    _pickupLocation = widget.pickupLocation;
     if (widget.initialCategory != null) {
       _category = widget.initialCategory;
       _step = 1;
@@ -48,20 +54,32 @@ class _BookingFlowState extends State<BookingFlow> {
 
     setState(() => _submitting = true);
     try {
+      // ยังไม่มีตำแหน่ง (เช่น หน้า Home ขอสิทธิ์ไม่สำเร็จตอนนั้น) ลองขอใหม่อีกครั้ง
+      // ก่อนสร้างออเดอร์จริง — ห้ามส่งพิกัดปลอม/ค่าเริ่มต้นไปเด็ดขาด เพราะระบบ dispatch
+      // ใช้พิกัดนี้คำนวณระยะทางหาช่างใกล้สุด ถ้าใช้ค่าปลอมช่างจะถูกส่งไปผิดที่จริง
+      _pickupLocation ??= await LocationService.getCurrentLocation();
+      if (!mounted) return;
+
+      final location = _pickupLocation!;
       final api = AppStateScope.of(context).api;
       final order = await api.createOrder(
         categoryId: category.id,
         subServiceId: subService.id,
         vehicleTypeId: vehicleType.id,
-        // TODO: ต่อ GPS จริง ตอนนี้ใช้พิกัดกลางกรุงเทพเป็นค่าเริ่มต้น
-        pickupLat: 13.7563,
-        pickupLng: 100.5018,
+        pickupLat: location.latitude,
+        pickupLng: location.longitude,
+        pickupAddress: location.address,
       );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
           builder: (_) => OrderTrackingScreen(orderId: order.id),
         ),
+      );
+    } on LocationException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
       );
     } on ApiException catch (error) {
       if (!mounted) return;
@@ -125,6 +143,7 @@ class _BookingFlowState extends State<BookingFlow> {
           vehicleType: _vehicleType!,
           submitting: _submitting,
           onConfirm: _submit,
+          pickupLocation: _pickupLocation,
         );
     }
   }
@@ -384,6 +403,7 @@ class _ConfirmStep extends StatefulWidget {
     required this.vehicleType,
     required this.submitting,
     required this.onConfirm,
+    required this.pickupLocation,
   });
 
   final ServiceCategory category;
@@ -391,6 +411,7 @@ class _ConfirmStep extends StatefulWidget {
   final VehicleType vehicleType;
   final bool submitting;
   final VoidCallback onConfirm;
+  final LocationResult? pickupLocation;
 
   @override
   State<_ConfirmStep> createState() => _ConfirmStepState();
@@ -434,6 +455,14 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                       _SummaryRow(
                         label: 'ประเภทรถ',
                         value: widget.vehicleType.name,
+                      ),
+                      const Divider(),
+                      _SummaryRow(
+                        label: 'จุดนัดหมาย',
+                        value: widget.pickupLocation?.address ??
+                            (widget.pickupLocation != null
+                                ? '${widget.pickupLocation!.latitude.toStringAsFixed(5)}, ${widget.pickupLocation!.longitude.toStringAsFixed(5)}'
+                                : 'จะขอตำแหน่งอีกครั้งตอนยืนยัน'),
                       ),
                     ],
                   ),

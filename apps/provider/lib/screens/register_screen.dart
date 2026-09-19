@@ -21,9 +21,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   TimeOfDay _openTime = const TimeOfDay(hour: 8, minute: 0);
   TimeOfDay _closeTime = const TimeOfDay(hour: 20, minute: 0);
 
-  // TODO: ต่อ geolocator + แผนที่ให้ช่างปักหมุดจริง ตอนนี้ใช้พิกัดกลางกรุงเทพไปก่อน
-  double _baseLat = 13.7563;
-  double _baseLng = 100.5018;
+  // null จนกว่าช่างจะกดปักหมุดจริง — ห้าม default เป็นพิกัดปลอม เพราะระบบ
+  // dispatch ใช้พิกัดนี้คำนวณระยะทางส่งงาน ถ้าช่างลืมปักหมุดแล้วระบบส่งพิกัดผิด
+  // ไปเงียบๆ งานจะถูกส่งไปหาช่างคนนี้ทั้งที่อยู่ไกลจริง
+  double? _baseLat;
+  double? _baseLng;
+  bool _locatingPin = false;
+  String? _pinError;
 
   final Set<String> _categoryIds = {};
   final Set<String> _vehicleTypeIds = {};
@@ -53,6 +57,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   int _toMinutes(TimeOfDay time) => time.hour * 60 + time.minute;
+
+  Future<void> _pinCurrentLocation() async {
+    setState(() {
+      _locatingPin = true;
+      _pinError = null;
+    });
+    try {
+      final result = await LocationService.getCurrentLocation();
+      if (!mounted) return;
+      setState(() {
+        _baseLat = result.latitude;
+        _baseLng = result.longitude;
+      });
+    } on LocationException catch (error) {
+      if (!mounted) return;
+      setState(() => _pinError = error.message);
+    } finally {
+      if (mounted) setState(() => _locatingPin = false);
+    }
+  }
 
   Future<void> _pickTime({required bool isOpen}) async {
     final picked = await showTimePicker(
@@ -84,6 +108,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _error = 'กรุณาแนบรูปเครื่องมือช่างเพื่อยืนยันตัวตน');
       return;
     }
+    final baseLat = _baseLat;
+    final baseLng = _baseLng;
+    if (baseLat == null || baseLng == null) {
+      setState(() => _error = 'กรุณากดปักหมุดตำแหน่งร้าน/พื้นที่รับงานก่อน');
+      return;
+    }
 
     setState(() {
       _submitting = true;
@@ -99,8 +129,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           'shopName': _shopNameController.text.trim(),
         if (_facebookController.text.trim().isNotEmpty)
           'facebookPage': _facebookController.text.trim(),
-        'baseLat': _baseLat,
-        'baseLng': _baseLng,
+        'baseLat': baseLat,
+        'baseLng': baseLng,
         'openMinute': _toMinutes(_openTime),
         'closeMinute': _toMinutes(_closeTime),
         'categoryIds': _categoryIds.toList(),
@@ -160,18 +190,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const _SectionTitle('ตำแหน่งร้าน / พื้นที่รับงาน'),
             Card(
               child: ListTile(
-                leading: const Icon(Icons.location_on_outlined),
+                leading: Icon(
+                  Icons.location_on_outlined,
+                  color: _pinError != null ? FixGoColors.error : null,
+                ),
                 title: Text(
-                  '${_baseLat.toStringAsFixed(4)}, ${_baseLng.toStringAsFixed(4)}',
+                  _baseLat != null && _baseLng != null
+                      ? '${_baseLat!.toStringAsFixed(4)}, ${_baseLng!.toStringAsFixed(4)}'
+                      : (_pinError ?? 'ยังไม่ได้ปักหมุด'),
                 ),
                 subtitle: const Text('ใช้คำนวณว่างานอยู่ใกล้คุณแค่ไหน'),
                 trailing: TextButton(
-                  // TODO: เปิดแผนที่ให้ปักหมุดจริง
-                  onPressed: () => setState(() {
-                    _baseLat = 13.7563;
-                    _baseLng = 100.5018;
-                  }),
-                  child: const Text('ปักหมุด'),
+                  onPressed: _locatingPin ? null : _pinCurrentLocation,
+                  child: _locatingPin
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('ปักหมุด'),
                 ),
               ),
             ),

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../app_state.dart';
 
@@ -19,6 +20,7 @@ class _OffersScreenState extends State<OffersScreen> {
   bool _loading = true;
   String? _error;
   Timer? _timer;
+  StreamSubscription<Position>? _positionSub;
 
   @override
   void didChangeDependencies() {
@@ -34,7 +36,43 @@ class _OffersScreenState extends State<OffersScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _positionSub?.cancel();
     super.dispose();
+  }
+
+  /// เริ่มส่งตำแหน่งขึ้น backend ต่อเนื่องขณะออนไลน์ — ระบบ auto-dispatch ใช้
+  /// ตำแหน่งนี้คำนวณระยะทางแบบเรียลไทม์ ไม่ใช่แค่ตำแหน่งตอนสมัครสมาชิก
+  /// อัปเดตเฉพาะตอนแอปเปิดอยู่ (foreground) เท่านั้น ยังไม่รองรับ background tracking
+  Future<void> _startTrackingLocation() async {
+    try {
+      // ส่งตำแหน่งปัจจุบันทันทีก่อน ไม่ต้องรอขยับ 50 เมตรตามที่ stream กำหนดไว้
+      final initial = await LocationService.getCurrentLocation();
+      if (!mounted) return;
+      await ProviderAppScope.of(context)
+          .api
+          .updateProviderLocation(initial.latitude, initial.longitude);
+    } on LocationException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    }
+
+    _positionSub?.cancel();
+    _positionSub = LocationService.watchPosition().listen((position) {
+      if (!mounted) return;
+      ProviderAppScope.of(context)
+          .api
+          .updateProviderLocation(position.latitude, position.longitude)
+          .catchError((_) {
+        // เน็ตหลุดชั่วคราวระหว่างวิ่งงาน ไม่ต้องรบกวนช่างด้วย error ทุกครั้ง
+        // รอบถัดไปของ stream จะพยายามส่งใหม่เอง
+      });
+    });
+  }
+
+  void _stopTrackingLocation() {
+    _positionSub?.cancel();
+    _positionSub = null;
   }
 
   Future<void> _refresh() async {
@@ -60,6 +98,14 @@ class _OffersScreenState extends State<OffersScreen> {
       await ProviderAppScope.of(context).api.setOnline(value);
       if (!mounted) return;
       setState(() => _isOnline = value);
+
+      if (value) {
+        await _startTrackingLocation();
+      } else {
+        _stopTrackingLocation();
+      }
+
+      if (!mounted) return;
       await _refresh();
     } on ApiException catch (error) {
       if (!mounted) return;

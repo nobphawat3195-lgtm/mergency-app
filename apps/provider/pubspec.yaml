@@ -12,6 +12,7 @@ dependencies:
   fixgo_core:
     path: ../../packages/fixgo_core
   cupertino_icons: ^1.0.8
+  geolocator: ^13.0.2
 
 dev_dependencies:
   flutter_test:

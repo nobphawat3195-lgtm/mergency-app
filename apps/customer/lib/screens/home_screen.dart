@@ -14,6 +14,16 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   Future<List<ServiceCategory>>? _categoriesFuture;
 
+  LocationResult? _location;
+  bool _locationLoading = false;
+  String? _locationError;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLocation();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -21,10 +31,30 @@ class _HomeScreenState extends State<HomeScreen> {
     _categoriesFuture ??= AppStateScope.of(context).api.listCategories();
   }
 
+  Future<void> _fetchLocation() async {
+    setState(() {
+      _locationLoading = true;
+      _locationError = null;
+    });
+    try {
+      final result = await LocationService.getCurrentLocation();
+      if (!mounted) return;
+      setState(() => _location = result);
+    } on LocationException catch (error) {
+      if (!mounted) return;
+      setState(() => _locationError = error.message);
+    } finally {
+      if (mounted) setState(() => _locationLoading = false);
+    }
+  }
+
   void _startBooking({ServiceCategory? category}) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => BookingFlow(initialCategory: category),
+        builder: (_) => BookingFlow(
+          initialCategory: category,
+          pickupLocation: _location,
+        ),
       ),
     );
   }
@@ -45,7 +75,12 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView(
             padding: const EdgeInsets.only(bottom: FixGoSpacing.xl),
             children: [
-              const _LocationHeader(),
+              _LocationHeader(
+                location: _location,
+                loading: _locationLoading,
+                error: _locationError,
+                onTap: _fetchLocation,
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: FixGoSpacing.md,
@@ -114,42 +149,78 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _LocationHeader extends StatelessWidget {
-  const _LocationHeader();
+  const _LocationHeader({
+    required this.location,
+    required this.loading,
+    required this.error,
+    required this.onTap,
+  });
+
+  final LocationResult? location;
+  final bool loading;
+  final String? error;
+  final VoidCallback onTap;
+
+  String get _subtitle {
+    if (loading) return 'กำลังค้นหาตำแหน่ง...';
+    if (error != null) return error!;
+    if (location == null) return 'แตะเพื่อค้นหาตำแหน่งของคุณ';
+    return location!.address ??
+        '${location!.latitude.toStringAsFixed(5)}, ${location!.longitude.toStringAsFixed(5)}';
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(FixGoSpacing.md),
-      child: Row(
-        children: [
-          Container(
-            height: 44,
-            width: 44,
-            // BMW ใช้มุมเหลี่ยมคมทุกจุด ไม่มีวงกลม
-            color: FixGoColors.accent,
-            child: const Icon(Icons.location_on, color: Colors.white),
-          ),
-          const SizedBox(width: FixGoSpacing.sm),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'ตำแหน่งของคุณ',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: FixGoColors.textSecondary,
-                  ),
-                ),
-                Text(
-                  'เลือกตำแหน่งของคุณ',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-              ],
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(FixGoSpacing.md),
+        child: Row(
+          children: [
+            Container(
+              height: 44,
+              width: 44,
+              // BMW ใช้มุมเหลี่ยมคมทุกจุด ไม่มีวงกลม
+              color: error != null
+                  ? FixGoColors.error
+                  : FixGoColors.accent,
+              child: loading
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.location_on, color: Colors.white),
             ),
-          ),
-          const Icon(Icons.keyboard_arrow_down),
-        ],
+            const SizedBox(width: FixGoSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'ตำแหน่งของคุณ',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: FixGoColors.textSecondary,
+                    ),
+                  ),
+                  Text(
+                    _subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.refresh),
+          ],
+        ),
       ),
     );
   }
