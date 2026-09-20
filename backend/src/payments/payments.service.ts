@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
-import { PaymentStatus } from '@prisma/client';
+import { OrderStatus, PaymentMethod, PaymentStatus, Role } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
@@ -32,6 +34,11 @@ export class PaymentsService {
    * ตอนต่อของจริงให้แทนที่ด้วยการเรียก API ของ gateway แล้วเก็บ chargeId ที่ได้กลับมา
    */
   async createPromptPayCharge(orderId: string): Promise<PromptPayCharge> {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ServiceUnavailableException(
+        'พร้อมเพย์ออนไลน์ยังไม่เปิดใช้งาน กรุณาเลือกชำระเงินสดกับช่าง',
+      );
+    }
     const payment = await this.prisma.payment.findUnique({
       where: { orderId },
     });
@@ -83,7 +90,48 @@ export class PaymentsService {
     await this.wallet.creditOrderEarning(payment.orderId);
   }
 
+  async confirmCashPayment(orderId: string, providerId: string): Promise<void> {
+    const payment = await this.prisma.payment.findUnique({
+      where: { orderId },
+      include: { order: true },
+    });
+    if (!payment) throw new NotFoundException('ไม่พบรายการชำระเงินนี้');
+    if (payment.order.providerId !== providerId) {
+      throw new ForbiddenException('ยืนยันการรับเงินของงานคนอื่นไม่ได้');
+    }
+    if (payment.order.status !== OrderStatus.COMPLETED) {
+      throw new BadRequestException('ยืนยันรับเงินได้หลังปิดงานแล้วเท่านั้น');
+    }
+    if (payment.status === PaymentStatus.PAID) return;
+
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        method: PaymentMethod.CASH,
+        status: PaymentStatus.PAID,
+        paidAt: new Date(),
+      },
+    });
+    await this.wallet.creditOrderEarning(orderId);
+  }
+
   getPaymentByOrder(orderId: string) {
     return this.prisma.payment.findUnique({ where: { orderId } });
+  }
+
+  async getPaymentForActor(
+    orderId: string,
+    actor: { sub: string; role: Role },
+  ) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { customerId: true, providerId: true },
+    });
+    const allowed =
+      order &&
+      ((actor.role === Role.CUSTOMER && order.customerId === actor.sub) ||
+        (actor.role === Role.PROVIDER && order.providerId === actor.sub));
+    if (!allowed) throw new NotFoundException('ไม่พบรายการชำระเงินนี้');
+    return this.getPaymentByOrder(orderId);
   }
 }

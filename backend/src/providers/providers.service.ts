@@ -28,6 +28,7 @@ export class ProvidersService {
         phone,
         realName: dto.realName,
         nickname: dto.nickname,
+        experienceYears: dto.experienceYears,
         shopName: dto.shopName,
         facebookPage: dto.facebookPage,
         baseLat: dto.baseLat,
@@ -93,6 +94,15 @@ export class ProvidersService {
         lastSeenAt: new Date(),
       },
     });
+  }
+
+  async heartbeat(providerId: string): Promise<{ ok: true }> {
+    await this.requireVerified(providerId);
+    await this.prisma.provider.update({
+      where: { id: providerId },
+      data: { lastSeenAt: new Date() },
+    });
+    return { ok: true };
   }
 
   async updatePayoutInfo(

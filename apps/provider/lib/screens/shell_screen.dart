@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 
@@ -15,18 +17,35 @@ class ProviderShellScreen extends StatefulWidget {
 
 class _ProviderShellScreenState extends State<ProviderShellScreen> {
   int _index = 0;
+  Timer? _heartbeatTimer;
+  late final List<Widget> _pages = const [
+    OffersScreen(),
+    JobsScreen(),
+    WalletScreen(),
+    _ProviderProfileTab(),
+  ];
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+      final state = ProviderAppScope.of(context);
+      if (state.isOnline) {
+        unawaited(state.api.sendProviderHeartbeat());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _heartbeatTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      const OffersScreen(),
-      const JobsScreen(),
-      const WalletScreen(),
-      const _ProviderProfileTab(),
-    ];
-
     return Scaffold(
-      body: pages[_index],
+      body: IndexedStack(index: _index, children: _pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),

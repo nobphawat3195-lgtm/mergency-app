@@ -53,14 +53,10 @@ export class WalletService {
     const net = gross - commission;
     const providerId = order.providerId;
 
-    await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.walletEntry.findFirst({
-        where: { orderId, type: WalletEntryType.ORDER_EARNING },
-      });
-      if (existing) return;
-
-      await tx.walletEntry.create({
+    try {
+      await this.prisma.walletEntry.create({
         data: {
+          idempotencyKey: `order-earning:${orderId}`,
           providerId,
           type: WalletEntryType.ORDER_EARNING,
           amount: net,
@@ -68,7 +64,16 @@ export class WalletService {
           memo: `รายได้งาน ${order.orderNo} (หักค่าธรรมเนียม ${Math.round(order.commissionRate * 100)}%)`,
         },
       });
-    });
+    } catch (error) {
+      // webhook/payment confirmation อาจมาซ้ำหรือชนกัน ให้เครดิตเพียงครั้งเดียว
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return;
+      }
+      throw error;
+    }
   }
 
   /**

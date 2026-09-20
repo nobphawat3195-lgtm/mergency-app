@@ -92,8 +92,8 @@
   <section id="login-view" class="card">
     <h2>เข้าสู่ระบบผู้ดูแล</h2>
     <div class="row">
-      <input id="phone" placeholder="เบอร์โทรศัพท์" inputmode="numeric">
-      <input id="password" type="password" placeholder="รหัสผ่าน">
+      <input id="phone" placeholder="เบอร์โทรศัพท์" inputmode="numeric" autocomplete="username">
+      <input id="password" type="password" placeholder="รหัสผ่าน" autocomplete="current-password">
       <button id="login-btn">เข้าสู่ระบบ</button>
     </div>
     <div id="login-error" class="error"></div>
@@ -132,9 +132,13 @@
 // ตั้งค่า API ปลายทาง — เปลี่ยนเป็น URL จริงตอน deploy
 const API_BASE = localStorage.getItem('fixgo_api_base') || 'http://localhost:3000';
 
-let token = localStorage.getItem('fixgo_admin_token');
+// เก็บโทเคนเฉพาะแท็บปัจจุบัน ลดความเสี่ยงจากโทเคนค้างบนเครื่องสาธารณะ
+let token = sessionStorage.getItem('fixgo_admin_token');
 
 const el = (id) => document.getElementById(id);
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
+})[char]);
 
 const STATUS_LABELS = {
   CREATED: 'สร้างแล้ว', SEARCHING: 'กำลังหาช่าง', MATCHED: 'ช่างรับแล้ว',
@@ -180,7 +184,7 @@ async function login() {
       }),
     });
     token = result.accessToken;
-    localStorage.setItem('fixgo_admin_token', token);
+    sessionStorage.setItem('fixgo_admin_token', token);
     showDashboard();
   } catch (error) {
     el('login-error').textContent = error.message;
@@ -189,7 +193,7 @@ async function login() {
 
 function logout() {
   token = null;
-  localStorage.removeItem('fixgo_admin_token');
+  sessionStorage.removeItem('fixgo_admin_token');
   el('dashboard-view').classList.add('hidden');
   el('login-view').classList.remove('hidden');
   el('logout').classList.add('hidden');
@@ -210,7 +214,7 @@ async function loadSummary() {
     { label: 'รายได้ค่าธรรมเนียม', value: formatSatang(summary.commissionRevenue) },
     { label: 'ช่างรออนุมัติ', value: summary.pendingProviders },
     { label: 'คำขอเบิกค้าง', value: summary.pendingWithdrawals },
-  ].map((stat) => `<div class="stat"><div class="value">${stat.value}</div><div class="label">${stat.label}</div></div>`).join('');
+  ].map((stat) => `<div class="stat"><div class="value">${escapeHtml(stat.value)}</div><div class="label">${escapeHtml(stat.label)}</div></div>`).join('');
 }
 
 async function loadProviders() {
@@ -219,11 +223,11 @@ async function loadProviders() {
     ? '<tr><td colspan="6">ไม่มีช่างรออนุมัติ</td></tr>'
     : providers.map((provider) => `
       <tr>
-        <td>${provider.realName} (${provider.nickname})</td>
-        <td>${provider.phone}</td>
-        <td>${provider.shopName || '-'}</td>
-        <td>${provider.facebookPage || '-'}</td>
-        <td>${formatMinute(provider.openMinute)}-${formatMinute(provider.closeMinute)}</td>
+        <td>${escapeHtml(provider.realName)} (${escapeHtml(provider.nickname)})<br><small>ประสบการณ์ ${escapeHtml(provider.experienceYears)} ปี</small></td>
+        <td>${escapeHtml(provider.phone)}</td>
+        <td>${escapeHtml(provider.shopName || '-')}</td>
+        <td>${escapeHtml(provider.facebookPage || '-')}</td>
+        <td>${escapeHtml(formatMinute(provider.openMinute))}-${escapeHtml(formatMinute(provider.closeMinute))}</td>
         <td>
           <button onclick="setProviderStatus('${provider.id}','VERIFIED')">อนุมัติ</button>
           <button class="danger" onclick="setProviderStatus('${provider.id}','SUSPENDED')">ปฏิเสธ</button>
@@ -245,10 +249,10 @@ async function loadWithdrawals() {
     ? '<tr><td colspan="5">ไม่มีคำขอเบิกเงิน</td></tr>'
     : withdrawals.map((withdrawal) => `
       <tr>
-        <td>${withdrawal.provider.realName} (${withdrawal.provider.nickname})<br><small>${withdrawal.provider.phone}</small></td>
-        <td><strong>${formatSatang(withdrawal.amount)}</strong></td>
-        <td>${withdrawal.promptPayId ? 'พร้อมเพย์ ' + withdrawal.promptPayId : (withdrawal.bankName || '') + ' ' + (withdrawal.bankAccountNumber || '')}<br><small>${withdrawal.bankAccountName || ''}</small></td>
-        <td>${new Date(withdrawal.requestedAt).toLocaleString('th-TH')}</td>
+        <td>${escapeHtml(withdrawal.provider.realName)} (${escapeHtml(withdrawal.provider.nickname)})<br><small>${escapeHtml(withdrawal.provider.phone)}</small></td>
+        <td><strong>${escapeHtml(formatSatang(withdrawal.amount))}</strong></td>
+        <td>${escapeHtml(withdrawal.promptPayId ? 'พร้อมเพย์ ' + withdrawal.promptPayId : (withdrawal.bankName || '') + ' ' + (withdrawal.bankAccountNumber || ''))}<br><small>${escapeHtml(withdrawal.bankAccountName || '')}</small></td>
+        <td>${escapeHtml(new Date(withdrawal.requestedAt).toLocaleString('th-TH'))}</td>
         <td>
           <button onclick="resolveWithdrawal('${withdrawal.id}','transferred')">โอนแล้ว</button>
           <button class="danger" onclick="resolveWithdrawal('${withdrawal.id}','reject')">ปฏิเสธ</button>
@@ -270,12 +274,12 @@ async function loadOrders() {
   const orders = await api('/admin/orders');
   el('orders-body').innerHTML = orders.slice(0, 30).map((order) => `
     <tr>
-      <td>${order.orderNo}</td>
-      <td>${order.subService?.name || order.category?.name || '-'}</td>
-      <td>${order.customer?.phone || '-'}</td>
-      <td>${order.provider ? order.provider.nickname : '-'}</td>
-      <td>${STATUS_LABELS[order.status] || order.status}</td>
-      <td>${formatSatang(order.priceFinal ?? order.priceEstimated)}</td>
+      <td>${escapeHtml(order.orderNo)}</td>
+      <td>${escapeHtml(order.subService?.name || order.category?.name || '-')}</td>
+      <td>${escapeHtml(order.customer?.phone || '-')}</td>
+      <td>${escapeHtml(order.provider ? order.provider.nickname : '-')}</td>
+      <td>${escapeHtml(STATUS_LABELS[order.status] || order.status)}</td>
+      <td>${escapeHtml(formatSatang(order.priceFinal ?? order.priceEstimated))}</td>
     </tr>`).join('') || '<tr><td colspan="6">ยังไม่มีออเดอร์</td></tr>';
 }
 

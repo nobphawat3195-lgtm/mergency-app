@@ -43,11 +43,16 @@ export class CreateOrderDto {
   photoUrls?: string[];
 }
 
-export class CompleteOrderDto {
-  /** ราคาสุดท้ายหน่วยสตางค์ ช่างกรอกตอนปิดงาน */
+export class ProposeQuoteDto {
+  /** ราคาที่ช่างเสนอ หน่วยสตางค์ ลูกค้าต้องยืนยันก่อนเริ่มงาน */
   @IsInt()
   @Min(0)
-  priceFinal!: number;
+  priceProposed!: number;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 500)
+  note?: string;
 }
 
 export class RateOrderDto {

@@ -10,7 +10,9 @@ import { WalletModule } from '../wallet/wallet.module';
     WalletModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'dev-jwt-secret',
-      signOptions: { expiresIn: process.env.JWT_EXPIRES_IN ?? '30d' },
+      signOptions: {
+        expiresIn: Number(process.env.JWT_EXPIRES_SECONDS ?? 2_592_000),
+      },
     }),
   ],
   providers: [AdminService],

@@ -73,7 +73,7 @@ class _StepDot extends StatelessWidget {
           Container(
             height: 32,
             width: 32,
-            // BMW ใช้มุมเหลี่ยมคมทุกจุด ไม่มีวงกลม
+            // ตัวเลขขั้นตอนต้องมองเห็นและแตะย้อนกลับได้ง่ายบนมือถือ
             color: isActive ? FixGoColors.accent : FixGoColors.hairline,
             alignment: Alignment.center,
             child: isDone

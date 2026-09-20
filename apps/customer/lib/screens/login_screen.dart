@@ -81,13 +81,19 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: FixGoSpacing.xl),
-              const Text(
-                'FixGo',
-                style: TextStyle(
-                  fontSize: 44,
-                  fontWeight: FontWeight.w900,
-                  color: FixGoColors.accent,
-                ),
+              const Row(
+                children: [
+                  _BrandMark(icon: Icons.near_me_rounded),
+                  SizedBox(width: FixGoSpacing.md),
+                  Text(
+                    'FixGo',
+                    style: TextStyle(
+                      fontSize: 44,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: FixGoSpacing.sm),
               const Text(
@@ -101,9 +107,18 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: FixGoSpacing.xl),
               Container(
-                // BMW ใช้มุมเหลี่ยมคมทุกจุด ไม่มีมุมมน
                 padding: const EdgeInsets.all(FixGoSpacing.lg),
-                color: Colors.white,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.18),
+                      blurRadius: 32,
+                      offset: const Offset(0, 14),
+                    ),
+                  ],
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -172,6 +187,25 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _BrandMark extends StatelessWidget {
+  const _BrandMark({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: FixGoColors.accent,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Icon(icon, color: Colors.white, size: 30),
     );
   }
 }

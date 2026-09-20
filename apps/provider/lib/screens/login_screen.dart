@@ -87,7 +87,7 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                     style: TextStyle(
                       fontSize: 40,
                       fontWeight: FontWeight.w900,
-                      color: FixGoColors.accent,
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(width: FixGoSpacing.sm),
@@ -97,12 +97,13 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      border: Border.all(color: FixGoColors.accent),
+                      color: FixGoColors.accent,
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Text(
                       'FIXER',
                       style: TextStyle(
-                        color: FixGoColors.accent,
+                        color: Colors.white,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -122,7 +123,17 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
               const SizedBox(height: FixGoSpacing.xl),
               Container(
                 padding: const EdgeInsets.all(FixGoSpacing.lg),
-                color: Colors.white,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.18),
+                      blurRadius: 32,
+                      offset: const Offset(0, 14),
+                    ),
+                  ],
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

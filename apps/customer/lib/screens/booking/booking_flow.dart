@@ -1,5 +1,7 @@
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_state.dart';
 import '../order_tracking_screen.dart';
@@ -27,6 +29,9 @@ class _BookingFlowState extends State<BookingFlow> {
   VehicleType? _vehicleType;
   bool _submitting = false;
   LocationResult? _pickupLocation;
+  String _note = '';
+  final List<String> _photoUrls = [];
+  bool _uploadingPhotos = false;
 
   @override
   void initState() {
@@ -44,6 +49,57 @@ class _BookingFlowState extends State<BookingFlow> {
       return;
     }
     setState(() => _step -= 1);
+  }
+
+  String _contentTypeFor(XFile file) {
+    final mimeType = file.mimeType;
+    if (mimeType == 'image/png' ||
+        mimeType == 'image/webp' ||
+        mimeType == 'image/jpeg') {
+      return mimeType!;
+    }
+    return file.name.toLowerCase().endsWith('.png')
+        ? 'image/png'
+        : file.name.toLowerCase().endsWith('.webp')
+            ? 'image/webp'
+            : 'image/jpeg';
+  }
+
+  Future<void> _pickPhotos() async {
+    final remaining = 5 - _photoUrls.length;
+    if (remaining <= 0) return;
+    final picked = await ImagePicker().pickMultiImage(
+      imageQuality: 82,
+      maxWidth: 1920,
+    );
+    if (picked.isEmpty || !mounted) return;
+
+    setState(() => _uploadingPhotos = true);
+    try {
+      final api = AppStateScope.of(context).api;
+      for (final file in picked.take(remaining)) {
+        final bytes = await file.readAsBytes();
+        final url = await api.uploadImage(
+          bytes: bytes,
+          fileName: file.name,
+          contentType: _contentTypeFor(file),
+          scope: 'ORDER',
+        );
+        if (!mounted) return;
+        setState(() => _photoUrls.add(url));
+      }
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('อ่านหรืออัปโหลดรูปไม่สำเร็จ')),
+      );
+    } finally {
+      if (mounted) setState(() => _uploadingPhotos = false);
+    }
   }
 
   Future<void> _submit() async {
@@ -69,6 +125,8 @@ class _BookingFlowState extends State<BookingFlow> {
         pickupLat: location.latitude,
         pickupLng: location.longitude,
         pickupAddress: location.address,
+        note: _note.trim().isEmpty ? null : _note.trim(),
+        photoUrls: _photoUrls,
       );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
@@ -144,6 +202,12 @@ class _BookingFlowState extends State<BookingFlow> {
           submitting: _submitting,
           onConfirm: _submit,
           pickupLocation: _pickupLocation,
+          initialNote: _note,
+          onNoteChanged: (value) => _note = value,
+          photoUrls: _photoUrls,
+          uploadingPhotos: _uploadingPhotos,
+          onAddPhotos: _pickPhotos,
+          onRemovePhoto: (url) => setState(() => _photoUrls.remove(url)),
         );
     }
   }
@@ -404,6 +468,12 @@ class _ConfirmStep extends StatefulWidget {
     required this.submitting,
     required this.onConfirm,
     required this.pickupLocation,
+    required this.initialNote,
+    required this.onNoteChanged,
+    required this.photoUrls,
+    required this.uploadingPhotos,
+    required this.onAddPhotos,
+    required this.onRemovePhoto,
   });
 
   final ServiceCategory category;
@@ -412,6 +482,12 @@ class _ConfirmStep extends StatefulWidget {
   final bool submitting;
   final VoidCallback onConfirm;
   final LocationResult? pickupLocation;
+  final String initialNote;
+  final ValueChanged<String> onNoteChanged;
+  final List<String> photoUrls;
+  final bool uploadingPhotos;
+  final VoidCallback onAddPhotos;
+  final ValueChanged<String> onRemovePhoto;
 
   @override
   State<_ConfirmStep> createState() => _ConfirmStepState();
@@ -419,6 +495,29 @@ class _ConfirmStep extends StatefulWidget {
 
 class _ConfirmStepState extends State<_ConfirmStep> {
   Future<int>? _quoteFuture;
+  late final TextEditingController _noteController = TextEditingController(
+    text: widget.initialNote,
+  );
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openPickupInMaps() async {
+    final location = widget.pickupLocation;
+    if (location == null) return;
+    final uri = Uri.https('www.google.com', '/maps/search/', {
+      'api': '1',
+      'query': '${location.latitude},${location.longitude}',
+    });
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ไม่สามารถเปิด Google Maps ได้')),
+      );
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -469,7 +568,123 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                 ),
               ),
               const SizedBox(height: FixGoSpacing.md),
-              // TODO: เพิ่มปุ่มแนบรูปปัญหารถ และช่องกรอกหมายเหตุ
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(FixGoSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'รูปอาการรถ (ไม่เกิน 5 รูป)',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: widget.uploadingPhotos ||
+                                    widget.photoUrls.length >= 5
+                                ? null
+                                : widget.onAddPhotos,
+                            icon: widget.uploadingPhotos
+                                ? const SizedBox(
+                                    height: 16,
+                                    width: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.add_a_photo_outlined),
+                            label: Text(
+                              widget.uploadingPhotos ? 'กำลังอัปโหลด' : 'เพิ่มรูป',
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (widget.photoUrls.isEmpty)
+                        Text(
+                          'ช่วยให้ช่างเตรียมเครื่องมือและอะไหล่ได้ตรงจุด',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        )
+                      else
+                        Wrap(
+                          spacing: FixGoSpacing.sm,
+                          runSpacing: FixGoSpacing.sm,
+                          children: [
+                            for (final url in widget.photoUrls)
+                              Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(
+                                      url,
+                                      height: 78,
+                                      width: 78,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    right: -7,
+                                    top: -7,
+                                    child: InkWell(
+                                      onTap: () => widget.onRemovePhoto(url),
+                                      child: const CircleAvatar(
+                                        radius: 11,
+                                        backgroundColor: FixGoColors.error,
+                                        child: Icon(
+                                          Icons.close,
+                                          size: 14,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: FixGoSpacing.md),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(FixGoSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'รายละเอียดจุดนัดหมายและอาการรถ',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: FixGoSpacing.sm),
+                      TextField(
+                        controller: _noteController,
+                        onChanged: widget.onNoteChanged,
+                        maxLines: 4,
+                        maxLength: 1000,
+                        decoration: const InputDecoration(
+                          hintText:
+                              'เช่น อยู่ชั้น B2 เสา C12 / รถสตาร์ทไม่ติด มีเสียงแชะ',
+                        ),
+                      ),
+                      const SizedBox(height: FixGoSpacing.sm),
+                      FixGoSecondaryButton(
+                        label: widget.pickupLocation == null
+                            ? 'จะตรวจตำแหน่งเมื่อยืนยัน'
+                            : 'เปิดตรวจสอบจุดนัดหมายใน Google Maps',
+                        onPressed: widget.pickupLocation == null
+                            ? null
+                            : _openPickupInMaps,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: FixGoSpacing.md),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(FixGoSpacing.md),

@@ -1,22 +1,20 @@
 import 'package:flutter/material.dart';
 
-/// สีแบรนด์ FixGo — อิงจาก BMW corporate design system เต็มรูปแบบ
-/// (น้ำเงิน BMW #1c69d4 + พื้นขาว/ครีม + มุมเหลี่ยมคมทั้งหมด ไม่มีมุมมนเลย)
-/// ชื่อตัวแปร `navy`/`accent` เก็บไว้ตามเดิมเพื่อไม่ต้องแก้ทุกไฟล์ที่อ้างอิง
-/// แต่ตอนนี้ `navy` คือพื้นหลังเข้ม (BMW surface-dark) และ `accent` คือ
-/// น้ำเงินหลักของ BMW (ใช้กับปุ่ม action ทุกจุด)
+/// Design tokens ของ FixGo: น้ำเงินเข้มสร้างความน่าเชื่อถือ และส้มใช้กับการกระทำ
+/// ที่ต้องเห็นได้ทันทีในสถานการณ์ฉุกเฉิน เป็นภาพจำของแบรนด์เองไม่อิงแบรนด์รถใด
 abstract final class FixGoColors {
-  static const navy = Color(0xFF1A2129);
-  static const accent = Color(0xFF1C69D4);
-  static const accentActive = Color(0xFF0653B6);
-  static const background = Color(0xFFFFFFFF);
-  static const surface = Color(0xFFF7F7F7);
-  static const textPrimary = Color(0xFF262626);
-  static const textSecondary = Color(0xFF6B6B6B);
-  static const success = Color(0xFF22C55E);
+  static const navy = Color(0xFF0B1F3A);
+  static const brandBlue = Color(0xFF2563EB);
+  static const accent = Color(0xFFFF6B35);
+  static const accentActive = Color(0xFFE84F1C);
+  static const background = Color(0xFFF8FAFC);
+  static const surface = Color(0xFFF1F5F9);
+  static const textPrimary = Color(0xFF0F172A);
+  static const textSecondary = Color(0xFF64748B);
+  static const success = Color(0xFF16A36A);
   static const warning = Color(0xFFF59E0B);
-  static const error = Color(0xFFDC2626);
-  static const hairline = Color(0xFFE6E6E6);
+  static const error = Color(0xFFDC3545);
+  static const hairline = Color(0xFFE2E8F0);
 }
 
 // ฟอนต์ประกาศอยู่ใน package fixgo_core เอง แต่ web build (CanvasKit) ต้องการชื่อ
@@ -35,9 +33,9 @@ abstract final class FixGoSpacing {
 
 ThemeData buildFixGoTheme() {
   const colorScheme = ColorScheme.light(
-    primary: FixGoColors.navy,
+    primary: FixGoColors.accent,
     onPrimary: Colors.white,
-    secondary: FixGoColors.accent,
+    secondary: FixGoColors.brandBlue,
     onSecondary: Colors.white,
     surface: FixGoColors.background,
     onSurface: FixGoColors.textPrimary,
@@ -53,9 +51,11 @@ ThemeData buildFixGoTheme() {
     // แบบเต็มมี prefix "packages/<pkg>/" เสมอ ไม่งั้นจะ fallback ไปหาฟอนต์จากอินเทอร์เน็ต
     fontFamily: fixGoFontFamily,
     appBarTheme: const AppBarTheme(
-      backgroundColor: FixGoColors.background,
+      backgroundColor: Colors.white,
       foregroundColor: FixGoColors.textPrimary,
       elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
       centerTitle: true,
       titleTextStyle: TextStyle(
         fontFamily: fixGoFontFamily,
@@ -64,16 +64,16 @@ ThemeData buildFixGoTheme() {
         fontWeight: FontWeight.w700,
       ),
     ),
-    // BMW ใช้มุมเหลี่ยมคมทุกจุด (rounded.none) ไม่มีมุมมนเลยทั้งระบบ
-    cardTheme: const CardThemeData(
-      color: FixGoColors.background,
-      elevation: 0,
+    cardTheme: CardThemeData(
+      color: Colors.white,
+      elevation: 1,
+      shadowColor: FixGoColors.navy.withValues(alpha: 0.08),
       shape: RoundedRectangleBorder(
-        side: BorderSide(color: FixGoColors.hairline),
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: FixGoColors.hairline),
       ),
       margin: EdgeInsets.zero,
     ),
-    // ปุ่ม action ใช้สีน้ำเงิน BMW อย่างเดียวทั้งแอป ผู้ใช้จะไม่สับสนว่าต้องกดอะไรต่อ
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: FixGoColors.accent,
@@ -81,43 +81,80 @@ ThemeData buildFixGoTheme() {
         disabledBackgroundColor: const Color(0xFFD6D6D6),
         disabledForegroundColor: FixGoColors.textSecondary,
         minimumSize: const Size.fromHeight(56),
-        elevation: 0,
+        elevation: 1,
+        shadowColor: FixGoColors.accent.withValues(alpha: 0.28),
         textStyle: const TextStyle(
           fontFamily: fixGoFontFamily,
           fontSize: 17,
           fontWeight: FontWeight.w700,
         ),
-        shape: const RoundedRectangleBorder(),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     ),
-    inputDecorationTheme: const InputDecorationTheme(
+    inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: FixGoColors.surface,
-      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide: BorderSide.none,
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: FixGoColors.hairline),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide: BorderSide.none,
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: FixGoColors.hairline),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: FixGoColors.accent, width: 1.5),
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: FixGoColors.brandBlue, width: 1.5),
+      ),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      height: 72,
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      indicatorColor: FixGoColors.accent.withValues(alpha: 0.14),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => TextStyle(
+          fontFamily: fixGoFontFamily,
+          fontSize: 12,
+          fontWeight:
+              states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
+          color: states.contains(WidgetState.selected)
+              ? FixGoColors.navy
+              : FixGoColors.textSecondary,
+        ),
+      ),
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(
+          color: states.contains(WidgetState.selected)
+              ? FixGoColors.accent
+              : FixGoColors.textSecondary,
+        ),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
     ),
     textTheme: const TextTheme(
       headlineSmall: TextStyle(
         fontFamily: fixGoFontFamily,
         fontSize: 24,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w900,
         color: FixGoColors.textPrimary,
       ),
       titleMedium: TextStyle(
         fontFamily: fixGoFontFamily,
         fontSize: 17,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w800,
         color: FixGoColors.textPrimary,
       ),
       bodyMedium: TextStyle(

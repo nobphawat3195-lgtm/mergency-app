@@ -14,22 +14,21 @@ class ShellScreen extends StatefulWidget {
 
 class _ShellScreenState extends State<ShellScreen> {
   int _index = 0;
+  late final List<Widget> _pages = const [
+    HomeScreen(),
+    OrdersScreen(),
+    _ComingSoonTab(
+      icon: Icons.chat_bubble_outline,
+      title: 'ผู้ช่วย AI',
+      subtitle: 'ถาม-ตอบปัญหารถ เร็วๆ นี้',
+    ),
+    _ProfileTab(),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      const HomeScreen(),
-      const OrdersScreen(),
-      const _ComingSoonTab(
-        icon: Icons.chat_bubble_outline,
-        title: 'ผู้ช่วย AI',
-        subtitle: 'ถาม-ตอบปัญหารถ เร็วๆ นี้',
-      ),
-      const _ProfileTab(),
-    ];
-
     return Scaffold(
-      body: pages[_index],
+      body: IndexedStack(index: _index, children: _pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),

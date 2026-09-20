@@ -53,6 +53,7 @@ model Provider {
   phone    String @unique
   realName String
   nickname String
+  experienceYears Int
 
   shopName     String?
   facebookPage String?
@@ -152,6 +153,7 @@ model SubService {
   name        String
   description String?
   basePrice   Int // หน่วยเป็นสตางค์ เก็บเป็น integer กัน floating point error
+  fixedPrice  Boolean   @default(false) // true = ไม่คูณตามประเภทรถ เช่น ตรวจรถ 1,490 บาททุกกรณี
   priceType   PriceType
   infoNote    String? // เนื้อหาใน bottom sheet ปุ่ม (i)
   sortOrder   Int       @default(0)
@@ -188,6 +190,13 @@ enum OrderStatus {
   NO_MATCH // ไล่ครบทุกคนแล้วไม่มีใครรับ -> escalate ให้แอดมิน
 }
 
+enum QuoteStatus {
+  NOT_REQUESTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model Order {
   id         String @id @default(uuid())
   orderNo    String @unique
@@ -207,8 +216,14 @@ model Order {
   note          String?
 
   priceEstimated Int // สตางค์
+  priceProposed  Int? // ราคาที่ช่างเสนอและต้องรอลูกค้ายืนยันก่อนเริ่มงาน
   priceFinal     Int? // สตางค์ ใส่ตอนปิดงาน
   commissionRate Float // บันทึกเรตคอมมิชชัน ณ เวลาที่สร้างออเดอร์ (ค่าเริ่มต้น 0.35)
+
+  quoteStatus      QuoteStatus @default(NOT_REQUESTED)
+  quoteNote        String?
+  quoteProposedAt  DateTime?
+  quoteRespondedAt DateTime?
 
   createdAt   DateTime  @default(now())
   matchedAt   DateTime?
@@ -260,7 +275,7 @@ model DispatchAttempt {
   distanceKm  Float
   status      DispatchStatus @default(OFFERED)
   offeredAt   DateTime       @default(now())
-  expiresAt   DateTime // offeredAt + 5 นาที
+  expiresAt   DateTime // offeredAt + 90 วินาที (ดูค่าจริงที่ common/constants.ts)
   respondedAt DateTime?
 
   order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -282,6 +297,7 @@ enum PaymentStatus {
 enum PaymentMethod {
   PROMPTPAY
   CARD
+  CASH
 }
 
 model Payment {
@@ -311,7 +327,8 @@ enum WalletEntryType {
 
 // Ledger แบบ append-only ยอดคงเหลือ = ผลรวม amount ทั้งหมดของช่างคนนั้น
 model WalletEntry {
-  id           String          @id @default(uuid())
+  id             String          @id @default(uuid())
+  idempotencyKey String?         @unique
   providerId   String
   type         WalletEntryType
   amount       Int // สตางค์ บวก = เงินเข้า ลบ = เงินออก

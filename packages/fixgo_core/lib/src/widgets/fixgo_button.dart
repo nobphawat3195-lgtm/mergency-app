@@ -59,7 +59,6 @@ class FixGoSecondaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // BMW button-secondary: ตัวหนังสือ/ขอบสี ink (ดำเข้ม) พื้นขาว มุมเหลี่ยมคม
     final color = destructive ? FixGoColors.error : FixGoColors.textPrimary;
     return OutlinedButton(
       onPressed: onPressed,
@@ -67,7 +66,7 @@ class FixGoSecondaryButton extends StatelessWidget {
         foregroundColor: color,
         minimumSize: const Size.fromHeight(56),
         side: BorderSide(color: color.withValues(alpha: 0.6)),
-        shape: const RoundedRectangleBorder(),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         textStyle: const TextStyle(
           fontFamily: fixGoFontFamily,
           fontSize: 16,
