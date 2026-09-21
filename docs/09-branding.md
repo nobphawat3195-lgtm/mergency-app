@@ -1,9 +1,9 @@
-# 9. Branding — FixGo
+# 9. Branding — MechNow
 
 ## ชื่อแบรนด์
 
-**FixGo** — ชื่อแอปที่จะขึ้น App Store / Play Store
-- Tagline แนะนำ: "รถเสีย ไม่ต้องรอ — FixGo ไปหาคุณ"
+**MechNow** — ชื่อแอปที่จะขึ้น App Store / Play Store
+- Tagline แนะนำ: "เรียกช่างทันที ช่างใกล้คุณพร้อมช่วย"
 - Package/Bundle ID แนะนำ: `com.fixgo.customer`, `com.fixgo.provider`, `com.fixgo.admin`
 
 ## Design Direction (อ้างอิงจากภาพ Antixor Taxi ที่เลือก)
@@ -51,6 +51,6 @@
 - ✅ สถาปัตยกรรมระบบ (Flutter + NestJS + PostgreSQL)
 - ✅ Business logic (dispatch, commission, payment, withdrawal)
 - ✅ แบบฟอร์มลงทะเบียนช่าง (ของจริง)
-- ✅ ชื่อแบรนด์ (FixGo) + Design direction
+- ✅ ชื่อแบรนด์ (MechNow) + Design direction
 
 **พร้อมเริ่ม scaffold โครงสร้างโปรเจกต์แล้ว**

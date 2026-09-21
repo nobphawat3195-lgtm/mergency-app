@@ -1,6 +1,6 @@
 {
-    "name": "FixGo — ช่วยเหลือรถฉุกเฉิน",
-    "short_name": "FixGo",
+    "name": "MechNow — เรียกช่างใกล้คุณ",
+    "short_name": "MechNow",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#F8FAFC",

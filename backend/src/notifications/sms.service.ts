@@ -35,7 +35,7 @@ export class SmsService {
     const body = new URLSearchParams({
       To: toThaiE164(phone),
       From: from,
-      Body: `รหัส FixGo OTP ของคุณคือ ${code} ใช้ได้ 5 นาที ห้ามบอกรหัสนี้กับผู้อื่น`,
+      Body: `รหัส MechNow OTP ของคุณคือ ${code} ใช้ได้ 5 นาที ห้ามบอกรหัสนี้กับผู้อื่น`,
     });
     const response = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,

@@ -255,10 +255,9 @@ class _CategoryStepState extends State<_CategoryStep> {
                   horizontal: FixGoSpacing.md,
                   vertical: FixGoSpacing.sm,
                 ),
-                leading: Image.asset(
-                  categoryIconAsset(category.iconKey),
-                  height: 40,
-                  width: 40,
+                leading: CategoryIconArt(
+                  iconKey: category.iconKey,
+                  size: 40,
                 ),
                 title: Text(
                   category.name,

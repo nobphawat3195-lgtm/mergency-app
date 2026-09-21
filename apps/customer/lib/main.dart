@@ -37,7 +37,7 @@ class _FixGoCustomerAppState extends State<FixGoCustomerApp> {
     return AppStateScope(
       state: _appState,
       child: MaterialApp(
-        title: 'FixGo',
+        title: 'MechNow',
         debugShowCheckedModeBanner: false,
         theme: buildFixGoTheme(),
         home: AnimatedBuilder(

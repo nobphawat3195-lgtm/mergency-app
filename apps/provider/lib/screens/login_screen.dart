@@ -83,7 +83,7 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
               Row(
                 children: [
                   const Text(
-                    'FixGo',
+                    'MechNow',
                     style: TextStyle(
                       fontSize: 40,
                       fontWeight: FontWeight.w900,

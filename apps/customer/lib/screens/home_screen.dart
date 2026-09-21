@@ -219,7 +219,7 @@ class _BrandHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'FixGo',
+                'MechNow',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w900,
@@ -529,7 +529,7 @@ class _CategoryTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(17),
                 ),
                 padding: const EdgeInsets.all(7),
-                child: Image.asset(categoryIconAsset(category.iconKey)),
+                child: CategoryIconArt(iconKey: category.iconKey),
               ),
               Row(
                 children: [

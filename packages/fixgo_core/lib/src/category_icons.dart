@@ -1,26 +1,56 @@
-/// ไอคอนหมวดบริการแบบ 3D — จาก Microsoft Fluent Emoji (MIT License)
-/// ที่มา: https://github.com/microsoft/fluentui-emoji
-/// สัญญาอนุญาตเต็มอยู่ที่ assets/icons/licenses/fluentui-emoji-LICENSE.txt
-///
-/// map จาก iconKey ที่ backend ส่งมา เป็น path รูปภายในแพ็กเกจ ใช้กับ Image.asset
-/// เสมอ (ไม่ใช่ AssetImage เฉยๆ) เพราะต้องมี prefix "packages/fixgo_core/" ให้ถูกต้อง
-String categoryIconAsset(String iconKey) {
-  switch (iconKey) {
-    case 'mechanic':
-      return 'packages/fixgo_core/assets/icons/mechanic.png';
-    case 'electrical':
-      return 'packages/fixgo_core/assets/icons/electrical.png';
-    case 'battery':
-      return 'packages/fixgo_core/assets/icons/battery.png';
-    case 'tire':
-      return 'packages/fixgo_core/assets/icons/tire.png';
-    case 'key':
-      return 'packages/fixgo_core/assets/icons/key.png';
-    case 'tow':
-      return 'packages/fixgo_core/assets/icons/tow.png';
-    case 'inspection':
-      return 'packages/fixgo_core/assets/icons/inspection.png';
-    default:
-      return 'packages/fixgo_core/assets/icons/default.png';
+import 'package:flutter/material.dart';
+
+const _spriteAsset =
+    'packages/fixgo_core/assets/icons/mechnow-service-icons.jpeg';
+
+/// ไอคอนบริการ MechNow ชุดน้ำเงิน–ส้มจากภาพต้นแบบเดียวกัน
+/// เพื่อให้ทุกหมวดมีสัดส่วน แสง และสไตล์ภาพที่สม่ำเสมอ
+class CategoryIconArt extends StatelessWidget {
+  const CategoryIconArt({
+    super.key,
+    required this.iconKey,
+    this.size = 58,
+  });
+
+  final String iconKey;
+  final double size;
+
+  (int, int) get _cell => switch (iconKey) {
+        'mechanic' => (2, 2),
+        'electrical' => (1, 2),
+        'battery' => (1, 0),
+        'tire' => (2, 0),
+        'key' => (3, 0),
+        'tow' => (0, 2),
+        'inspection' => (0, 0),
+        _ => (3, 2),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final (column, row) = _cell;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.22),
+      child: SizedBox.square(
+        dimension: size,
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Positioned(
+              left: -column * size,
+              top: -row * size,
+              width: size * 4,
+              height: size * 3,
+              child: Image.asset(
+                _spriteAsset,
+                fit: BoxFit.fill,
+                filterQuality: FilterQuality.high,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

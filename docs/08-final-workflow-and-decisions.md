@@ -119,8 +119,8 @@ created → searching → matched → en_route → in_progress → completed
 ## สิ่งที่ยังไม่ตัดสินใจ / ต้องคุยต่อก่อนเขียนโค้ด (Frontier ที่ยังเปิดอยู่)
 
 - โครงสร้างโฟลเดอร์ repo แบบละเอียด (monorepo: apps/customer, apps/provider, backend, admin-dashboard)
-- ~~Design system/สีหลักของแบรนด์~~ ✅ ตัดสินใจแล้ว → ดู `docs/09-branding.md` (FixGo, navy+เหลือง)
-- ~~ชื่อแอปสุดท้าย~~ ✅ **FixGo**
+- ~~Design system/สีหลักของแบรนด์~~ ✅ ตัดสินใจแล้ว → ดู `docs/09-branding.md` (MechNow, navy+ส้ม)
+- ~~ชื่อแอปสุดท้าย~~ ✅ **MechNow**
 - Data ของช่าง 10 คนจริง (ชื่อ/เบอร์/พื้นที่) — ต้องเตรียมไว้ให้พร้อม seed เข้าระบบตอน launch
 
 ## ขั้นตอนถัดไปที่แนะนำ

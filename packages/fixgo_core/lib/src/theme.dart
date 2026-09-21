@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Design tokens ของ FixGo: น้ำเงินเข้มสร้างความน่าเชื่อถือ และส้มใช้กับการกระทำ
+/// Design tokens ของ MechNow: น้ำเงินเข้มสร้างความน่าเชื่อถือ และส้มใช้กับการกระทำ
 /// ที่ต้องเห็นได้ทันทีในสถานการณ์ฉุกเฉิน เป็นภาพจำของแบรนด์เองไม่อิงแบรนด์รถใด
 abstract final class FixGoColors {
   static const navy = Color(0xFF0B1F3A);

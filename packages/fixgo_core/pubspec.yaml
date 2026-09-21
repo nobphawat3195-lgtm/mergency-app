@@ -1,5 +1,5 @@
 name: fixgo_core
-description: ธีม โมเดล และ API client ที่ใช้ร่วมกันระหว่างแอปลูกค้าและแอปช่าง FixGo
+description: ธีม โมเดล และ API client ที่ใช้ร่วมกันระหว่างแอปลูกค้าและแอปช่าง MechNow
 version: 0.1.0
 publish_to: none
 

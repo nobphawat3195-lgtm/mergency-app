@@ -86,7 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   _BrandMark(icon: Icons.near_me_rounded),
                   SizedBox(width: FixGoSpacing.md),
                   Text(
-                    'FixGo',
+                    'MechNow',
                     style: TextStyle(
                       fontSize: 44,
                       fontWeight: FontWeight.w900,
