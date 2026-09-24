@@ -584,7 +584,7 @@ class _ProgressHeader extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF2A3242), FixGoColors.navy],
+          colors: [Color(0xFF1D3F33), FixGoColors.navy],
         ),
       ),
       child: Row(
@@ -607,7 +607,7 @@ class _ProgressHeader extends StatelessWidget {
                   Text(
                     'นัดตรวจ ${formatThaiDateTime(report.appointmentAt!)}',
                     style:
-                        const TextStyle(color: Color(0xFFD5DAE3), fontSize: 12),
+                        const TextStyle(color: Color(0xFFC9DDD4), fontSize: 12),
                   ),
                 const SizedBox(height: FixGoSpacing.sm),
                 ClipRRect(

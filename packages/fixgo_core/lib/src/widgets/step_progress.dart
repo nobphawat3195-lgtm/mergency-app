@@ -83,7 +83,7 @@ class _StepDot extends StatelessWidget {
               boxShadow: isCurrent
                   ? const [
                       BoxShadow(
-                        color: Color(0x40F26B1D),
+                        color: Color(0x400B5F45),
                         blurRadius: 10,
                         offset: Offset(0, 3),
                       ),

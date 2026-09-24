@@ -433,3 +433,138 @@ class InspectionBooking {
     };
   }
 }
+
+/// กลุ่มสำหรับอธิบายบริการตรวจรถให้ลูกค้าอ่านง่าย (หน้า "รายละเอียดบริการตรวจรถ")
+///
+/// รายการข้อตรวจมาจาก checklist ของ backend เสมอ ที่นี่แค่จัดกลุ่มใหม่เพื่อการแสดงผล
+/// แต่ละข้ออยู่ได้กลุ่มเดียว จำนวนข้อที่แสดงจึงรวมกันได้เท่ากับ checklist จริง
+class InspectionDisplayGroup {
+  const InspectionDisplayGroup({
+    required this.key,
+    required this.title,
+    required this.description,
+    required this.items,
+  });
+
+  final String key;
+  final String title;
+  final String description;
+  final List<ChecklistItem> items;
+
+  int get criticalCount => items.where((item) => item.critical).length;
+}
+
+/// ข้อที่เกี่ยวกับความปลอดภัยโดยตรง ดึงออกจากหมวดเดิมมารวมไว้กลุ่มเดียว
+const _safetyItemCodes = {
+  'SUS07',
+  'SUS08',
+  'SUS09',
+  'SUS10',
+  'FRM12',
+  'OBD04',
+  'OBD05',
+  'INT13',
+};
+
+const _displayGroupDefs = [
+  (
+    key: 'documents',
+    title: 'เอกสารและเลขตัวรถ',
+    description: 'เทียบเล่มทะเบียนกับเลขตัวถัง เลขเครื่อง ภาษี และภาระไฟแนนซ์',
+  ),
+  (
+    key: 'body',
+    title: 'ตัวถังและสี',
+    description: 'วัดความหนาสีทีละชิ้น หาร่องรอยทำสี โป๊ว หรือเปลี่ยนชิ้นส่วน',
+  ),
+  (
+    key: 'structure',
+    title: 'เสา A/B/C และโครงสร้าง',
+    description: 'ตรวจเสา คานหน้า-หลัง ซุ้มล้อ พื้นรถ และร่องรอยน้ำท่วม',
+  ),
+  (
+    key: 'engine',
+    title: 'เครื่องยนต์และเกียร์',
+    description: 'ห้องเครื่อง ของเหลว การรั่วซึม เกียร์ และระบบไฮบริด/EV ถ้ามี',
+  ),
+  (
+    key: 'obd',
+    title: 'OBD สแกนคอมพิวเตอร์',
+    description: 'อ่านโค้ดปัญหาในกล่อง ECU และเทียบเลขไมล์ในระบบ',
+  ),
+  (
+    key: 'safety',
+    title: 'ระบบความปลอดภัยและเบรก',
+    description: 'ผ้าเบรก จานเบรก เบรกมือ ถุงลมนิรภัย ABS/ESP และเข็มขัดนิรภัย',
+  ),
+  (
+    key: 'suspension',
+    title: 'ช่วงล่างและยาง',
+    description: 'โช้คอัพ ลูกหมาก บูช พวงมาลัย ดอกยาง ปีผลิตยาง และล้อ',
+  ),
+  (
+    key: 'electrical',
+    title: 'ระบบไฟและแอร์',
+    description:
+        'ความเย็นแอร์ ไฟทุกดวง กระจก ล็อก เครื่องเสียง และอุปกรณ์ในห้องโดยสาร',
+  ),
+  (
+    key: 'drive',
+    title: 'ทดลองขับ',
+    description: 'ออกตัว เปลี่ยนเกียร์ เบรก พวงมาลัย และเสียงผิดปกติขณะขับจริง',
+  ),
+];
+
+String _displayGroupKey(String itemCode) {
+  if (_safetyItemCodes.contains(itemCode)) return 'safety';
+  final prefix = itemCode.replaceAll(RegExp(r'\d+$'), '');
+  switch (prefix) {
+    case 'DOC':
+      return 'documents';
+    case 'PNT':
+      return 'body';
+    case 'FRM':
+    case 'FLD':
+      return 'structure';
+    case 'ENG':
+    case 'EV':
+      return 'engine';
+    case 'OBD':
+      return 'obd';
+    case 'SUS':
+    case 'TIR':
+      return 'suspension';
+    case 'DRV':
+      return 'drive';
+    default:
+      return 'electrical';
+  }
+}
+
+extension InspectionChecklistDisplay on InspectionChecklist {
+  /// จัดกลุ่มตามหัวข้อที่ลูกค้าเข้าใจง่าย ตัดกลุ่มว่างออก
+  List<InspectionDisplayGroup> get displayGroups {
+    final buckets = <String, List<ChecklistItem>>{};
+    for (final section in sections) {
+      for (final item in section.items) {
+        buckets.putIfAbsent(_displayGroupKey(item.code), () => []).add(item);
+      }
+    }
+    return [
+      for (final def in _displayGroupDefs)
+        if (buckets[def.key]?.isNotEmpty ?? false)
+          InspectionDisplayGroup(
+            key: def.key,
+            title: def.title,
+            description: def.description,
+            items: buckets[def.key]!,
+          ),
+    ];
+  }
+
+  int get photoRequiredItems => sections.fold(
+        0,
+        (sum, section) =>
+            sum + section.items.where((item) => item.photoOnIssue).length,
+      );
+}

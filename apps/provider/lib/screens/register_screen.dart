@@ -388,10 +388,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
                         TextButton(
-                          onPressed: _uploadingToolPhotos ||
-                                  _toolPhotoUrls.length >= 6
-                              ? null
-                              : _pickToolPhotos,
+                          onPressed:
+                              _uploadingToolPhotos || _toolPhotoUrls.length >= 6
+                                  ? null
+                                  : _pickToolPhotos,
                           child: Text(
                             _uploadingToolPhotos ? 'กำลังอัปโหลด' : 'เพิ่มรูป',
                           ),

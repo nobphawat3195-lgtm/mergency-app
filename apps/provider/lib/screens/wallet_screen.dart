@@ -136,7 +136,7 @@ class _WalletScreenState extends State<WalletScreen> {
                       gradient: const LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [Color(0xFF2A3242), FixGoColors.navy],
+                        colors: [Color(0xFF1D3F33), FixGoColors.navy],
                       ),
                     ),
                     child: Column(
@@ -144,7 +144,7 @@ class _WalletScreenState extends State<WalletScreen> {
                       children: [
                         const Text(
                           'ยอดคงเหลือ',
-                          style: TextStyle(color: Color(0xFFCBD5E1)),
+                          style: TextStyle(color: Color(0xFFC9DDD4)),
                         ),
                         const SizedBox(height: FixGoSpacing.xs),
                         Text(
@@ -152,7 +152,7 @@ class _WalletScreenState extends State<WalletScreen> {
                           style: const TextStyle(
                             fontSize: 36,
                             fontWeight: FontWeight.w800,
-                            color: Color(0xFFFF9A55),
+                            color: Color(0xFFC7EE77),
                           ),
                         ),
                       ],

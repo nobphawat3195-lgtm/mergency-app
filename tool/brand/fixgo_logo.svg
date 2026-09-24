@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    โลโก้ FixGo: รถยนต์ + ประแจเป็นใต้ท้องรถ + เลข 24 (บริการตลอด 24 ชม.)
+    ต้นฉบับที่แก้ไขได้ ไฟล์ไอคอนทุกขนาดสร้างจากไฟล์นี้ด้วย render_icons.mjs
+    สี: พื้น #0B5F45, รถ #FFFFFF, เส้นความเร็ว #C7EE77
+    แอปช่าง (FixGo Fixer) ใช้ fixgo_fixer_logo.svg ซึ่งเปลี่ยนพื้นเป็นสีเข้ม #122821
+  -->
+  <rect id="background" width="1024" height="1024" fill="#0B5F45"/>
+  <g id="mark" transform="translate(-1 26) scale(0.86)">
+    <rect id="speed" x="118" y="494" width="178" height="30" rx="15" fill="#C7EE77"/>
+    <path id="body" fill="#FFFFFF" fill-rule="evenodd" d="
+      M 196 800 L 140 786 Q 102 774 102 738 L 102 700 Q 102 682 120 678 L 150 675
+      Q 175 672 190 650 Q 200 632 176 626 L 125 626 L 125 612 Q 126 597 146 596
+      L 232 592 Q 296 587 346 556 C 416 512 468 490 566 485 L 690 485
+      C 760 489 806 508 866 552 L 902 578 Q 1004 592 1082 612 Q 1150 634 1156 696
+      L 1156 748 Q 1152 792 1068 800 A 104 104 0 1 0 870 745 L 400 745
+      A 104 104 0 1 0 196 800 Z
+      M 345 598 L 568 598 L 552 514 Q 466 516 420 542 Z
+      M 606 598 L 820 598 Q 764 552 704 526 Q 652 514 590 513 Z
+      M 1048 654 Q 1100 659 1128 670 L 1138 700 Q 1100 699 1086 694 Z"/>
+    <path id="rear-wheel" fill="#FFFFFF" fill-rule="evenodd" d="
+      M 298 692 A 78 78 0 1 1 297.9 692 Z M 298 732 A 38 38 0 1 0 298.1 732 Z"/>
+    <path id="front-wheel" fill="#FFFFFF" fill-rule="evenodd" d="
+      M 968 692 A 78 78 0 1 1 967.9 692 Z M 968 732 A 38 38 0 1 0 968.1 732 Z"/>
+    <path id="wrench" fill="#FFFFFF" fill-rule="evenodd" d="
+      M 416 768 L 690 768 Q 716 768 736 750 Q 758 732 786 736 Q 818 742 830 770
+      L 796 773 Q 786 784 796 797 L 830 800 Q 818 830 786 834 Q 758 838 736 818
+      Q 716 800 690 800 L 416 800 Q 400 800 400 784 Q 400 768 416 768 Z"/>
+    <text id="twenty-four" x="1150" y="365" text-anchor="end"
+      font-family="'Noto Sans Thai', 'Arial Black', sans-serif" font-weight="800"
+      font-size="220" fill="#FFFFFF">24</text>
+  </g>
+</svg>

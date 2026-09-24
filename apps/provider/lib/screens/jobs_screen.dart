@@ -244,17 +244,32 @@ class _JobsScreenState extends State<JobsScreen> {
     }
 
     if (order.status == OrderStatus.completed) {
-      if (order.paymentStatus == 'PAID') {
+      if (order.isPaid) {
         return const FixGoButton(
           label: 'รับชำระเงินแล้ว',
           icon: Icons.verified_outlined,
           onPressed: null,
         );
       }
-      return FixGoButton(
-        label: 'ยืนยันว่าได้รับเงินสดแล้ว',
-        icon: Icons.payments_outlined,
-        onPressed: () => _confirmCash(order),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'สถานะเงิน: ${paymentStatusLabel(order.paymentStatus)} '
+            '(ลูกค้าสแกนพร้อมเพย์แล้วต้องรอระบบยืนยันยอด)',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: FixGoColors.warning,
+            ),
+          ),
+          const SizedBox(height: FixGoSpacing.sm),
+          FixGoButton(
+            label: 'ยืนยันว่าได้รับเงินสดแล้ว',
+            icon: Icons.payments_outlined,
+            onPressed: () => _confirmCash(order),
+          ),
+        ],
       );
     }
 

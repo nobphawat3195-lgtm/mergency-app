@@ -18,11 +18,11 @@ class ProviderShellScreen extends StatefulWidget {
 class _ProviderShellScreenState extends State<ProviderShellScreen> {
   int _index = 0;
   Timer? _heartbeatTimer;
-  late final List<Widget> _pages = const [
-    OffersScreen(),
-    JobsScreen(),
-    WalletScreen(),
-    _ProviderProfileTab(),
+  late final List<Widget> _pages = [
+    OffersScreen(onOpenTab: (tab) => setState(() => _index = tab)),
+    const JobsScreen(),
+    const WalletScreen(),
+    const _ProviderProfileTab(),
   ];
 
   @override
@@ -51,31 +51,31 @@ class _ProviderShellScreenState extends State<ProviderShellScreen> {
           border: Border(top: BorderSide(color: FixGoColors.hairline)),
         ),
         child: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.notifications_outlined),
-            selectedIcon: Icon(Icons.notifications),
-            label: 'งานเข้า',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.build_outlined),
-            selectedIcon: Icon(Icons.build),
-            label: 'งานของฉัน',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            selectedIcon: Icon(Icons.account_balance_wallet),
-            label: 'กระเป๋าเงิน',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'โปรไฟล์',
-          ),
-        ],
-      ),
+          selectedIndex: _index,
+          onDestinationSelected: (value) => setState(() => _index = value),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home_rounded),
+              label: 'หน้าหลัก',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.build_outlined),
+              selectedIcon: Icon(Icons.build),
+              label: 'งานของฉัน',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.account_balance_wallet_outlined),
+              selectedIcon: Icon(Icons.account_balance_wallet),
+              label: 'กระเป๋าเงิน',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'โปรไฟล์',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -100,8 +100,8 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
   Future<void> _editPayoutInfo(Map<String, dynamic> profile) async {
     final bankNameController =
         TextEditingController(text: profile['bankName'] as String? ?? '');
-    final accountNameController =
-        TextEditingController(text: profile['bankAccountName'] as String? ?? '');
+    final accountNameController = TextEditingController(
+        text: profile['bankAccountName'] as String? ?? '');
     final accountNumberController = TextEditingController(
       text: profile['bankAccountNumber'] as String? ?? '',
     );

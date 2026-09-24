@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- หน้าเปิดแอป: พื้นขาว + โลโก้ FixGo กลางจอ -->
+<!-- หน้าเปิดแอป: พื้นเขียวแบรนด์ + โลโก้ FixGo กลางจอ -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
+    <item android:drawable="@color/splash_background" />
     <item>
         <bitmap
             android:gravity="center"

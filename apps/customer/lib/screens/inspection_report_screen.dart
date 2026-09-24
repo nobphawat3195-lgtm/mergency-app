@@ -209,7 +209,7 @@ class _VerdictCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF2A3242), FixGoColors.navy],
+          colors: [Color(0xFF1D3F33), FixGoColors.navy],
         ),
       ),
       child: Row(
@@ -243,7 +243,7 @@ class _VerdictCard extends StatelessWidget {
                         '$score/100',
                         style: const TextStyle(
                           fontSize: 12,
-                          color: Color(0xFFD5DAE3),
+                          color: Color(0xFFC9DDD4),
                         ),
                       ),
                     ],
@@ -284,7 +284,7 @@ class _VerdictCard extends StatelessWidget {
                 if (report.mileageKm != null)
                   Text(
                     'เลขไมล์ ${formatThousands(report.mileageKm!)} กม.',
-                    style: const TextStyle(color: Color(0xFFD5DAE3)),
+                    style: const TextStyle(color: Color(0xFFC9DDD4)),
                   ),
               ],
             ),

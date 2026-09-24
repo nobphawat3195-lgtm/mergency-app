@@ -99,6 +99,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              const _PaymentPendingBanner(compact: true),
+              const SizedBox(height: FixGoSpacing.md),
               QrImageView(
                 data: charge.qrPayload,
                 size: 200,
@@ -122,6 +124,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           ],
         ),
       );
+      // ปิด QR แล้วดึงสถานะใหม่ แต่ไม่ถือว่าจ่ายแล้วจนกว่า backend จะตอบ PAID
+      unawaited(_refresh());
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -213,8 +217,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                 ],
                 _PriceCard(order: order),
                 const SizedBox(height: FixGoSpacing.lg),
-                if (order.status == OrderStatus.completed &&
-                    order.paymentStatus == 'PAID')
+                if (order.status == OrderStatus.completed && order.isPaid)
                   const Card(
                     child: Padding(
                       padding: EdgeInsets.all(FixGoSpacing.md),
@@ -234,6 +237,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                     ),
                   )
                 else if (order.status == OrderStatus.completed) ...[
+                  const _PaymentPendingBanner(),
+                  const SizedBox(height: FixGoSpacing.md),
                   FixGoButton(
                     label: 'ชำระเงินผ่านพร้อมเพย์',
                     icon: Icons.qr_code_2,
@@ -243,6 +248,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                   FixGoSecondaryButton(
                     label: 'ชำระเงินสดกับช่าง',
                     onPressed: _showCashInstructions,
+                  ),
+                ],
+                if (order.status == OrderStatus.completed) ...[
+                  const SizedBox(height: FixGoSpacing.md),
+                  _FeedbackCard(
+                    order: order,
+                    onSubmitted: _refresh,
                   ),
                 ],
                 if (order.status == OrderStatus.searching ||
@@ -469,7 +481,7 @@ class _QuoteCard extends StatelessWidget {
     final isApproved = order.quoteStatus == QuoteStatus.approved;
 
     return Card(
-      color: isPending ? const Color(0xFFFFF8E1) : null,
+      color: isPending ? const Color(0xFFFFF4DC) : null,
       child: Padding(
         padding: const EdgeInsets.all(FixGoSpacing.md),
         child: Column(
@@ -657,6 +669,169 @@ class _InspectionCard extends StatelessWidget {
                       )
                   : null,
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// สถานะรอยืนยันยอดเงิน: การแสดง QR หรือการกดปุ่มไม่ถือว่าชำระสำเร็จ
+/// เปลี่ยนเป็น "ชำระแล้ว" ได้เมื่อ backend บันทึก PAID เท่านั้น
+class _PaymentPendingBanner extends StatelessWidget {
+  const _PaymentPendingBanner({this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4DC),
+        borderRadius: BorderRadius.circular(FixGoRadius.md),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.hourglass_top_rounded, color: FixGoColors.warning),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'รอยืนยันยอดเงิน',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: FixGoColors.warning,
+                  ),
+                ),
+                Text(
+                  compact
+                      ? 'หลังโอนแล้ว สถานะจะเปลี่ยนเมื่อระบบได้รับการยืนยันยอดเงินเท่านั้น'
+                      : 'ยังไม่ได้รับการยืนยันการชำระเงิน สถานะจะเปลี่ยนเป็น "ชำระแล้ว" '
+                          'เมื่อผู้ให้บริการรับชำระยืนยันยอด หรือช่างยืนยันรับเงินสด',
+                  style: const TextStyle(fontSize: 13, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ให้คะแนนและความเห็นหลังรับบริการ ส่งได้ครั้งเดียวต่อออเดอร์ (backend บังคับ)
+class _FeedbackCard extends StatefulWidget {
+  const _FeedbackCard({required this.order, required this.onSubmitted});
+
+  final Order order;
+  final Future<void> Function() onSubmitted;
+
+  @override
+  State<_FeedbackCard> createState() => _FeedbackCardState();
+}
+
+class _FeedbackCardState extends State<_FeedbackCard> {
+  int _score = 0;
+  bool _submitting = false;
+  final _comment = TextEditingController();
+
+  @override
+  void dispose() {
+    _comment.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() => _submitting = true);
+    try {
+      final comment = _comment.text.trim();
+      await AppStateScope.of(context).api.rateOrder(
+            widget.order.id,
+            _score,
+            comment: comment.isEmpty ? null : comment,
+          );
+      await widget.onSubmitted();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ขอบคุณสำหรับความเห็นของคุณ')),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Widget _stars(int value, {ValueChanged<int>? onTap}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 1; i <= 5; i++)
+          IconButton(
+            tooltip: '$i ดาว',
+            onPressed: onTap == null ? null : () => onTap(i),
+            iconSize: 36,
+            icon: Icon(
+              i <= value ? Icons.star_rounded : Icons.star_outline_rounded,
+              color: i <= value
+                  ? const Color(0xFFE5A100)
+                  : FixGoColors.textSecondary,
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rated = widget.order.ratingScore;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(FixGoSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              rated == null ? 'ให้คะแนนบริการครั้งนี้' : 'คะแนนที่คุณให้',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+            ),
+            if (rated != null) ...[
+              _stars(rated),
+              if (widget.order.ratingComment != null)
+                Text(
+                  '“${widget.order.ratingComment}”',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+            ] else ...[
+              _stars(_score, onTap: (value) => setState(() => _score = value)),
+              TextField(
+                controller: _comment,
+                maxLines: 3,
+                maxLength: 500,
+                decoration: const InputDecoration(
+                  hintText: 'เล่าให้ฟังหน่อย ช่างมาตรงเวลาไหม งานเรียบร้อยไหม',
+                ),
+              ),
+              const SizedBox(height: FixGoSpacing.sm),
+              ElevatedButton(
+                onPressed: _score == 0 || _submitting ? null : _submit,
+                child: _submitting
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(_score == 0 ? 'แตะดาวเพื่อให้คะแนน' : 'ส่งความเห็น'),
+              ),
+            ],
           ],
         ),
       ),

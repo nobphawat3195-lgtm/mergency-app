@@ -38,7 +38,7 @@ class _FixGoProviderAppState extends State<FixGoProviderApp> {
     return ProviderAppScope(
       state: _appState,
       child: MaterialApp(
-        title: 'FixGo ช่าง',
+        title: 'FixGo Fixer',
         debugShowCheckedModeBanner: false,
         theme: buildFixGoTheme(),
         home: AnimatedBuilder(

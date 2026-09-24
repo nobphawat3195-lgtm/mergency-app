@@ -53,5 +53,12 @@ const emergencyIconAsset = 'packages/fixgo_core/assets/icons/emergency.png';
 /// ภาพช่าง 3D ใช้เป็น avatar ช่างเมื่อยังไม่มีรูปโปรไฟล์จริง
 const technicianIconAsset = 'packages/fixgo_core/assets/icons/technician.png';
 
-/// โลโก้ FixGo (หมุดตำแหน่ง + ประแจ บนพื้นส้ม)
+/// โลโก้ FixGo (รถ + ประแจ + "24" บนพื้นเขียวเข้ม) ต้นฉบับ tool/brand/fixgo_logo.svg
 const brandLogoAsset = 'packages/fixgo_core/assets/brand/logo_mark.png';
+
+/// โลโก้แอปช่าง FixGo Fixer: พื้นหมึกเขียว ประแจสีมะนาว (ต้นฉบับ tool/brand/fixgo_fixer_logo.svg)
+const fixerLogoAsset = 'packages/fixgo_core/assets/brand/logo_mark_fixer.png';
+
+/// สัญลักษณ์รถ+ประแจสีขาวพื้นโปร่ง ใช้วางบนพื้นเขียวเข้ม
+const brandSymbolWhiteAsset =
+    'packages/fixgo_core/assets/brand/logo_symbol_white.png';

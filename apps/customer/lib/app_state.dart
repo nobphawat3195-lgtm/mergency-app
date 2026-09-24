@@ -72,8 +72,7 @@ class AppStateScope extends InheritedNotifier<AppState> {
   }) : super(notifier: state);
 
   static AppState of(BuildContext context) {
-    final scope =
-        context.dependOnInheritedWidgetOfExactType<AppStateScope>();
+    final scope = context.dependOnInheritedWidgetOfExactType<AppStateScope>();
     assert(scope?.notifier != null, 'ไม่พบ AppStateScope ใน widget tree');
     return scope!.notifier!;
   }

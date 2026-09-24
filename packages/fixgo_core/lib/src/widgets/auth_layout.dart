@@ -4,7 +4,7 @@ import '../category_icons.dart';
 import '../theme.dart';
 
 /// โครงหน้าล็อกอินที่ใช้ร่วมกัน 2 แอป: ส่วนหัวไล่สีพร้อมโลโก้ + การ์ดฟอร์มลอยทับ
-/// แอปลูกค้าใช้พื้นส้ม แอปช่างใช้พื้นเข้ม ให้แยกออกทันทีว่ากำลังเปิดแอปไหน
+/// แอปลูกค้าใช้พื้นเขียวเข้ม แอปช่าง (FixGo Fixer) ใช้พื้นหมึกเขียวเกือบดำ + ป้ายสีมะนาว ให้แยกออกทันทีว่ากำลังเปิดแอปไหน
 class FixGoAuthLayout extends StatelessWidget {
   const FixGoAuthLayout({
     super.key,
@@ -24,8 +24,8 @@ class FixGoAuthLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final heroColors = dark
-        ? const [Color(0xFF2A3242), FixGoColors.navy]
-        : const [Color(0xFFFF8A3D), FixGoColors.accent, Color(0xFFE0500C)];
+        ? const [Color(0xFF1D3F33), FixGoColors.navy]
+        : const [FixGoColors.accent, FixGoColors.accentActive];
 
     return Scaffold(
       backgroundColor: FixGoColors.surface,
@@ -66,7 +66,10 @@ class FixGoAuthLayout extends StatelessWidget {
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(16),
-                              child: Image.asset(brandLogoAsset, height: 56),
+                              child: Image.asset(
+                                dark ? fixerLogoAsset : brandLogoAsset,
+                                height: 56,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -88,17 +91,17 @@ class FixGoAuthLayout extends StatelessWidget {
                               ),
                               decoration: BoxDecoration(
                                 color: dark
-                                    ? FixGoColors.accent
+                                    ? FixGoColors.lime
                                     : Colors.white.withValues(alpha: 0.22),
                                 borderRadius:
                                     BorderRadius.circular(FixGoRadius.pill),
                               ),
                               child: Text(
                                 badge!,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  color: dark ? FixGoColors.navy : Colors.white,
                                 ),
                               ),
                             ),
@@ -131,7 +134,7 @@ class FixGoAuthLayout extends StatelessWidget {
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: const [
                       BoxShadow(
-                        color: Color(0x141D2330),
+                        color: Color(0x14122821),
                         blurRadius: 24,
                         offset: Offset(0, 8),
                       ),

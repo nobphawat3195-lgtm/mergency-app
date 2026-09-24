@@ -73,8 +73,8 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
   Widget build(BuildContext context) {
     return FixGoAuthLayout(
       dark: true,
-      badge: 'ช่าง',
-      tagline: 'รับงานซ่อมรถใกล้คุณ\nเงินเข้ากระเป๋าทันทีที่งานจบ',
+      badge: 'Fixer',
+      tagline: 'รับงานซ่อมรถใกล้คุณ\nเงินเข้ากระเป๋าเมื่อยืนยันการชำระแล้ว',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

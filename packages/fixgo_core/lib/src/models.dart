@@ -156,6 +156,21 @@ String orderStatusLabel(OrderStatus status) {
   }
 }
 
+/// ป้ายสถานะชำระเงินที่ใช้ร่วมกันทั้งแอปลูกค้าและแอปช่าง ให้เห็นตรงกันเสมอ
+/// "ชำระแล้ว" มาจาก backend (PAID) เท่านั้น การแสดง QR/กดปุ่มไม่เปลี่ยนสถานะนี้
+String paymentStatusLabel(String? status) {
+  switch (status) {
+    case 'PAID':
+      return 'ชำระแล้ว';
+    case 'FAILED':
+      return 'ชำระไม่สำเร็จ';
+    case 'REFUNDED':
+      return 'คืนเงินแล้ว';
+    default:
+      return 'รอยืนยันยอดเงิน';
+  }
+}
+
 class ProviderSummary {
   const ProviderSummary({
     required this.id,
@@ -211,6 +226,9 @@ class Order {
     this.categorySlug,
     this.categoryIconKey,
     this.inspection,
+    this.ratingScore,
+    this.ratingComment,
+    this.completedAt,
   });
 
   final String id;
@@ -237,13 +255,24 @@ class Order {
   /// สรุปรายงานตรวจรถ (มีเฉพาะงานตรวจรถมือสอง)
   final InspectionReport? inspection;
 
+  /// คะแนนที่ลูกค้าให้ไว้แล้ว (null = ยังไม่ให้คะแนน)
+  final int? ratingScore;
+  final String? ratingComment;
+
+  /// เวลาปิดงานจาก backend ใช้สรุปงานเสร็จวันนี้ในแอปช่าง
+  final DateTime? completedAt;
+
   bool get isInspection => categorySlug == 'used-car-inspection';
+
+  /// ชำระสำเร็จเมื่อ backend ยืนยันแล้วเท่านั้น (webhook ผู้ให้บริการรับชำระ หรือช่างยืนยันรับเงินสด)
+  bool get isPaid => paymentStatus == 'PAID';
 
   factory Order.fromJson(Map<String, dynamic> json) {
     final category = json['category'] as Map<String, dynamic>?;
     final subService = json['subService'] as Map<String, dynamic>?;
     final provider = json['provider'] as Map<String, dynamic>?;
     final payment = json['payment'] as Map<String, dynamic>?;
+    final rating = json['rating'] as Map<String, dynamic>?;
     final photos = (json['photos'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map((photo) => photo['url'] as String)
@@ -276,6 +305,11 @@ class Order {
               'checklistVersion': 0,
               ...json['inspection'] as Map<String, dynamic>,
             })
+          : null,
+      ratingScore: rating?['score'] as int?,
+      ratingComment: rating?['comment'] as String?,
+      completedAt: json['completedAt'] is String
+          ? DateTime.parse(json['completedAt'] as String).toLocal()
           : null,
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../app_state.dart';
 import 'booking/booking_flow.dart';
+import 'inspection_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -73,103 +74,283 @@ class _HomeScreenState extends State<HomeScreen> {
     return null;
   }
 
+  void _startJumpStart(ServiceCategory? battery) {
+    // กฎเดิม: เมนูจั๊มแบตต้องเข้าขั้นจองทันที ไม่ให้ผู้ใช้เลือกบริการย่อยซ้ำ
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BookingFlow(
+          initialCategory: battery,
+          pickupLocation: _location,
+          initialSubServiceKeyword: battery == null ? null : 'จั๊ม',
+        ),
+      ),
+    );
+  }
+
+  void _openInspection(ServiceCategory? inspection) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => InspectionDetailScreen(
+          category: inspection,
+          pickupLocation: _location,
+        ),
+      ),
+    );
+  }
+
+  final _allServicesKey = GlobalKey();
+
+  void _scrollToAllServices() {
+    final target = _allServicesKey.currentContext;
+    if (target == null) return;
+    Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: FixGoColors.surface,
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _refresh,
-          child: FutureBuilder<List<ServiceCategory>>(
-            future: _categoriesFuture,
-            builder: (context, snapshot) {
-              final categories = snapshot.data ?? const <ServiceCategory>[];
-              final tow = _findCategory(categories, 'tow');
-              final battery = _findCategory(categories, 'battery');
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: FutureBuilder<List<ServiceCategory>>(
+          future: _categoriesFuture,
+          builder: (context, snapshot) {
+            final categories = snapshot.data ?? const <ServiceCategory>[];
+            final inspection = _findCategory(categories, 'inspection');
+            final battery = _findCategory(categories, 'battery');
 
-              return ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.only(bottom: FixGoSpacing.xl),
-                children: [
-                  _LocationHeader(
-                    location: _location,
-                    loading: _locationLoading,
-                    error: _locationError,
-                    onTap: _fetchLocation,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: FixGoSpacing.md,
-                    ),
-                    // ปุ่มฉุกเฉินต้องใหญ่ที่สุดและอยู่ตำแหน่งที่นิ้วโป้งกดถึงง่าย
-                    // ผู้ใช้ที่ตกใจไม่ต้องเลือกหมวดก่อน กดแล้วเข้า wizard ได้ทันที
-                    child: SizedBox(
-                      height: 236,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            flex: 11,
-                            child: _EmergencyHeroCard(
-                              onTap: () => _startBooking(),
-                            ),
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: FixGoSpacing.xl),
+              children: [
+                // หัวเขียวเข้ม + การ์ดเรียกช่างด่วนลอยทับ: ปุ่มฉุกเฉินต้องเด่นที่สุดบนจอ
+                Stack(
+                  children: [
+                    const Positioned.fill(
+                      bottom: 120,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: fixGoBrandGradient,
+                          borderRadius: BorderRadius.vertical(
+                            bottom: Radius.circular(28),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 10,
-                            child: Column(
-                              children: [
-                                Expanded(
-                                  child: _QuickServiceCard(
-                                    title: 'รถสไลด์/รถยก',
-                                    subtitle: 'ยกรถไปอู่',
-                                    iconAsset: categoryIconAsset('tow'),
-                                    onTap: () => _startBooking(category: tow),
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Expanded(
-                                  child: _QuickServiceCard(
-                                    title: 'แบตหมด',
-                                    subtitle: 'สตาร์ทไม่ติด',
-                                    iconAsset: categoryIconAsset('battery'),
-                                    onTap: () =>
-                                        _startBooking(category: battery),
-                                  ),
-                                ),
-                              ],
+                        ),
+                      ),
+                    ),
+                    SafeArea(
+                      bottom: false,
+                      child: Column(
+                        children: [
+                          _HomeHeader(
+                            location: _location,
+                            loading: _locationLoading,
+                            error: _locationError,
+                            onTap: _fetchLocation,
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: FixGoSpacing.md,
+                            ),
+                            child: _EmergencyCallCard(
+                              onTap: () => _startBooking(),
                             ),
                           ),
                         ],
                       ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: FixGoSpacing.md),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: FixGoSpacing.md,
                   ),
-                  const SizedBox(height: FixGoSpacing.lg),
-                  const _PromoCarousel(),
-                  const SizedBox(height: FixGoSpacing.lg),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: FixGoSpacing.md,
-                    ),
-                    child: _CategorySection(
-                      snapshot: snapshot,
-                      onRetry: _refresh,
-                      onSelected: (category) =>
-                          _startBooking(category: category),
-                    ),
+                  child: _HeroBanner(
+                    onShowSteps: () => _showHowItWorks(context),
                   ),
-                ],
-              );
-            },
-          ),
+                ),
+                const SizedBox(height: FixGoSpacing.lg),
+                _SectionHeader(
+                  title: 'บริการยอดนิยม',
+                  actionLabel: 'ดูทั้งหมด',
+                  onAction: _scrollToAllServices,
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: FixGoSpacing.md,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final (index, tile) in [
+                        (
+                          key: 'mechanic',
+                          title: 'ช่างซ่อมรถ',
+                          subtitle: 'ซ่อมถึงที่',
+                        ),
+                        (
+                          key: 'battery',
+                          title: 'จั๊มแบต',
+                          subtitle: 'สตาร์ทไม่ติด',
+                        ),
+                        (
+                          key: 'tire',
+                          title: 'ยางรั่ว',
+                          subtitle: 'ปะ/เปลี่ยนยาง',
+                        ),
+                        (
+                          key: 'tow',
+                          title: 'รถยก',
+                          subtitle: 'ยกไปอู่',
+                        ),
+                      ].indexed) ...[
+                        if (index > 0) const SizedBox(width: FixGoSpacing.sm),
+                        Expanded(
+                          child: _PopularServiceTile(
+                            title: tile.title,
+                            subtitle: tile.subtitle,
+                            iconAsset: categoryIconAsset(tile.key),
+                            onTap: tile.key == 'battery'
+                                ? () => _startJumpStart(battery)
+                                : () => _startBooking(
+                                      category:
+                                          _findCategory(categories, tile.key),
+                                    ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: FixGoSpacing.lg),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: FixGoSpacing.md,
+                  ),
+                  child: _InspectionPromoCard(
+                    category: inspection,
+                    onTap: () => _openInspection(inspection),
+                  ),
+                ),
+                const SizedBox(height: FixGoSpacing.lg),
+                Padding(
+                  key: _allServicesKey,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: FixGoSpacing.md,
+                  ),
+                  child: _CategorySection(
+                    snapshot: snapshot,
+                    onRetry: _refresh,
+                    onSelected: (category) {
+                      if (category.iconKey == 'inspection') {
+                        _openInspection(category);
+                      } else if (category.iconKey == 'battery') {
+                        _startJumpStart(category);
+                      } else {
+                        _startBooking(category: category);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _LocationHeader extends StatelessWidget {
-  const _LocationHeader({
+/// ขั้นตอนใช้งานจริงของระบบ (ตรงกับสถานะออเดอร์ใน backend)
+void _showHowItWorks(BuildContext context) {
+  const steps = [
+    (
+      icon: Icons.touch_app_outlined,
+      title: 'เลือกบริการและประเภทรถ',
+      body: 'เห็นราคาประเมินก่อนกดเรียก ระบบใช้ตำแหน่ง GPS ของคุณ',
+    ),
+    (
+      icon: Icons.person_search_outlined,
+      title: 'ระบบหาช่างที่ใกล้ที่สุด',
+      body: 'ช่างที่ออนไลน์และอยู่ใกล้จะได้รับงานก่อน',
+    ),
+    (
+      icon: Icons.request_quote_outlined,
+      title: 'ช่างแจ้งราคาให้คุณยืนยัน',
+      body: 'ช่างเริ่มซ่อมหลังคุณกดยืนยันราคาเท่านั้น',
+    ),
+    (
+      icon: Icons.qr_code_2_rounded,
+      title: 'ซ่อมเสร็จ ชำระเงินและให้คะแนน',
+      body: 'สแกนพร้อมเพย์หรือจ่ายเงินสดกับช่าง แล้วให้คะแนนบริการ',
+    ),
+  ];
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'ขั้นตอนบริการ FixGo',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: FixGoSpacing.md),
+            for (final (index, step) in steps.indexed)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 40,
+                      width: 40,
+                      decoration: const BoxDecoration(
+                        color: FixGoColors.accentSoft,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(step.icon, color: FixGoColors.accent),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${index + 1}. ${step.title}',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            step.body,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// หัวหน้าแรก: โลโก้ FixGo + ตำแหน่งปัจจุบัน (ข้อมูลจริงจาก GPS)
+class _HomeHeader extends StatelessWidget {
+  const _HomeHeader({
     required this.location,
     required this.loading,
     required this.error,
@@ -181,12 +362,12 @@ class _LocationHeader extends StatelessWidget {
   final String? error;
   final VoidCallback onTap;
 
-  String get _subtitle {
-    if (loading) return 'กำลังค้นหาตำแหน่ง...';
-    if (error != null) return error!;
-    if (location == null) return 'แตะเพื่อค้นหาตำแหน่งของคุณ';
+  String get _label {
+    if (loading) return 'กำลังหาตำแหน่ง...';
+    if (error != null) return 'แตะเพื่อเปิดตำแหน่ง';
+    if (location == null) return 'แตะเพื่อหาตำแหน่ง';
     return location!.address ??
-        '${location!.latitude.toStringAsFixed(5)}, ${location!.longitude.toStringAsFixed(5)}';
+        '${location!.latitude.toStringAsFixed(4)}, ${location!.longitude.toStringAsFixed(4)}';
   }
 
   @override
@@ -194,234 +375,372 @@ class _LocationHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         FixGoSpacing.md,
-        FixGoSpacing.sm,
         FixGoSpacing.md,
         FixGoSpacing.md,
+        FixGoSpacing.lg,
       ),
       child: Row(
         children: [
+          Image.asset(brandSymbolWhiteAsset, height: 34),
+          const SizedBox(width: 8),
+          const Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: 'Fix', style: TextStyle(color: Colors.white)),
+                TextSpan(
+                  text: 'Go',
+                  style: TextStyle(color: FixGoColors.lime),
+                ),
+              ],
+            ),
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(width: FixGoSpacing.md),
           Expanded(
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(FixGoRadius.lg),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: FixGoSpacing.xs),
-                child: Row(
-                  children: [
-                    Container(
-                      height: 44,
-                      width: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: error != null
-                            ? FixGoColors.error
-                            : FixGoColors.accent,
-                      ),
-                      child: loading
-                          ? const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(
-                              Icons.location_on_outlined,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Material(
+                color: Colors.white.withValues(alpha: 0.14),
+                shape: const StadiumBorder(
+                  side: BorderSide(color: Color(0x40FFFFFF)),
+                ),
+                child: InkWell(
+                  customBorder: const StadiumBorder(),
+                  onTap: onTap,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (loading)
+                          const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
                               color: Colors.white,
                             ),
-                    ),
-                    const SizedBox(width: 12),
-                    Flexible(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'ตำแหน่งของคุณ',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: FixGoColors.textSecondary,
-                            ),
+                          )
+                        else
+                          Icon(
+                            error != null
+                                ? Icons.location_off_outlined
+                                : Icons.location_on,
+                            size: 18,
+                            color:
+                                error != null ? FixGoColors.lime : Colors.white,
                           ),
-                          Text(
-                            _subtitle,
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            _label,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: error != null
-                                  ? FixGoColors.error
-                                  : FixGoColors.textPrimary,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                        const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: Colors.white,
+                        ),
+                      ],
                     ),
-                    const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: FixGoColors.textSecondary,
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: FixGoSpacing.sm),
-          const _Support24Badge(),
         ],
       ),
     );
   }
 }
 
-/// ป้าย "24 ชม." มุมขวาบน ย้ำว่าเรียกได้ตลอดเวลา
-class _Support24Badge extends StatelessWidget {
-  const _Support24Badge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: FixGoColors.background,
-        borderRadius: BorderRadius.circular(FixGoRadius.pill),
-        boxShadow: fixGoCardShadow,
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.circle, size: 8, color: FixGoColors.success),
-          SizedBox(width: 6),
-          Text(
-            '24 ชม.',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmergencyHeroCard extends StatelessWidget {
-  const _EmergencyHeroCard({required this.onTap});
+/// การ์ดเรียกช่างด่วน — องค์ประกอบที่เด่นที่สุดของหน้าจอ ปุ่มสูง 64 กดง่ายด้วยนิ้วโป้ง
+class _EmergencyCallCard extends StatelessWidget {
+  const _EmergencyCallCard({required this.onTap});
 
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Ink(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(FixGoRadius.lg),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFFF8A3D), FixGoColors.accent, Color(0xFFE0500C)],
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+      decoration: BoxDecoration(
+        color: FixGoColors.background,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x29122821),
+            blurRadius: 24,
+            offset: Offset(0, 10),
           ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x40F26B1D),
-              blurRadius: 18,
-              offset: Offset(0, 8),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'เรียกช่างด่วน',
+            style: TextStyle(
+              fontSize: 32,
+              height: 1.15,
+              fontWeight: FontWeight.w800,
+              color: FixGoColors.navy,
             ),
-          ],
-        ),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(FixGoRadius.lg),
-          child: Stack(
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'รถเสีย สตาร์ทไม่ติด ยางแตก เรียกช่างมาถึงที่',
+            style: TextStyle(fontSize: 15, color: FixGoColors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          const Wrap(
+            spacing: 14,
+            runSpacing: 6,
             children: [
-              Positioned(
-                right: -6,
-                bottom: 34,
-                child: Image.asset(emergencyIconAsset, height: 92),
+              _CheckLabel('ช่างใกล้คุณ'),
+              _CheckLabel('รู้ราคาก่อนซ่อม'),
+              _CheckLabel('เรียกได้ 24 ชม.'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Semantics(
+            button: true,
+            label: 'เรียกช่างด่วน',
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                borderRadius:
+                    BorderRadius.all(Radius.circular(FixGoRadius.pill)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x4D0B5F45),
+                    blurRadius: 16,
+                    offset: Offset(0, 6),
+                  ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.all(FixGoSpacing.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.22),
-                        borderRadius: BorderRadius.circular(FixGoRadius.pill),
-                      ),
-                      child: const Text(
-                        'ด่วน 24 ชม.',
+              child: Material(
+                shape: const StadiumBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: Ink(
+                  height: 64,
+                  decoration: const BoxDecoration(gradient: fixGoBrandGradient),
+                  child: InkWell(
+                    onTap: onTap,
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 8),
+                        Container(
+                          height: 48,
+                          width: 48,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.call_rounded,
+                            color: FixGoColors.accent,
+                            size: 26,
+                          ),
+                        ),
+                        const Expanded(
+                          child: Text(
+                            'เรียกช่างด่วน',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          color: FixGoColors.lime,
+                          size: 30,
+                        ),
+                        const SizedBox(width: 14),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CheckLabel extends StatelessWidget {
+  const _CheckLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.check_circle, size: 18, color: FixGoColors.jade),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+  }
+}
+
+/// แบนเนอร์ภาพจริง: ภาพไม่มีข้อความในตัว ข้อความ/ปุ่มวาดด้วย Flutter บนพื้นเขียวฝั่งซ้าย
+/// ใช้สัดส่วนเท่าภาพต้นฉบับ (1672×941) จึงไม่ถูกครอบ ใบหน้าและตัวรถเห็นครบทุกขนาดจอ
+class _HeroBanner extends StatelessWidget {
+  const _HeroBanner({required this.onShowSteps});
+
+  final VoidCallback onShowSteps;
+
+  static const _aspect = 1672 / 941;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(FixGoRadius.lg),
+      child: AspectRatio(
+        aspectRatio: _aspect,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            // ฝั่งซ้ายของภาพเป็นพื้นเขียวราว 40% ของความกว้าง ให้ข้อความอยู่ในโซนนี้
+            final textWidth = width * 0.47;
+            final scale = (width / 360).clamp(0.85, 1.4);
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  'assets/images/home_hero.jpg',
+                  fit: BoxFit.cover,
+                  alignment: Alignment.centerRight,
+                  semanticLabel: 'ช่าง FixGo ตรวจเครื่องยนต์ให้ลูกค้าข้างทาง',
+                ),
+                Positioned(
+                  left: 16 * scale,
+                  top: 14 * scale,
+                  bottom: 14 * scale,
+                  width: textWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'รถมีปัญหา\nให้ FixGo ช่วย',
                         style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 19 * scale,
+                          height: 1.2,
+                          fontWeight: FontWeight.w800,
                           color: Colors.white,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'เรียกช่าง\nฉุกเฉิน',
-                      style: TextStyle(
-                        fontSize: 24,
-                        height: 1.2,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                      SizedBox(height: 4 * scale),
+                      Text(
+                        'ช่างมาถึงที่ แจ้งราคาก่อนซ่อม',
+                        style: TextStyle(
+                          fontSize: 12 * scale,
+                          height: 1.35,
+                          color: const Color(0xFFDDF3E7),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'ช่างใกล้คุณ\nซ่อมถึงที่',
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.35,
-                        color: Color(0xFFFFE6D6),
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(FixGoRadius.pill),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'เรียกเลย',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: FixGoColors.accentActive,
+                      SizedBox(height: 10 * scale),
+                      Material(
+                        color: FixGoColors.lime,
+                        shape: const StadiumBorder(),
+                        child: InkWell(
+                          customBorder: const StadiumBorder(),
+                          onTap: onShowSteps,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 12 * scale,
+                              vertical: 7 * scale,
+                            ),
+                            child: Text(
+                              'ดูขั้นตอนบริการ',
+                              style: TextStyle(
+                                fontSize: 12.5 * scale,
+                                fontWeight: FontWeight.w800,
+                                color: FixGoColors.navy,
+                              ),
                             ),
                           ),
-                          SizedBox(width: 4),
-                          Icon(
-                            Icons.arrow_forward_rounded,
-                            size: 18,
-                            color: FixGoColors.accentActive,
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _QuickServiceCard extends StatelessWidget {
-  const _QuickServiceCard({
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.title,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final String title;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 8, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
+            ),
+          ),
+          if (actionLabel != null)
+            TextButton(
+              onPressed: onAction,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(actionLabel!),
+                  const Icon(Icons.chevron_right_rounded, size: 20),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PopularServiceTile extends StatelessWidget {
+  const _PopularServiceTile({
     required this.title,
     required this.subtitle,
     required this.iconAsset,
@@ -435,49 +754,42 @@ class _QuickServiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Ink(
-        decoration: BoxDecoration(
-          color: FixGoColors.background,
-          borderRadius: BorderRadius.circular(FixGoRadius.lg),
-          boxShadow: fixGoCardShadow,
-        ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(FixGoRadius.lg),
+        boxShadow: fixGoCardShadow,
+      ),
+      child: Material(
+        color: FixGoColors.background,
+        borderRadius: BorderRadius.circular(FixGoRadius.lg),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(FixGoRadius.lg),
           child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
+            padding: const EdgeInsets.fromLTRB(6, 12, 6, 12),
+            child: Column(
               children: [
                 Image.asset(iconAsset, height: 52, width: 52),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          height: 1.25,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: FixGoColors.textSecondary,
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 8),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: FixGoColors.textSecondary,
                   ),
                 ),
               ],
@@ -489,116 +801,184 @@ class _QuickServiceCard extends StatelessWidget {
   }
 }
 
-/// แบนเนอร์เลื่อนได้ใต้การ์ดด่วน — ใช้สื่อจุดขายหลัก ไม่ใช่โฆษณาภายนอก
-class _PromoCarousel extends StatefulWidget {
-  const _PromoCarousel();
+/// การ์ดตรวจรถมือสอง: ราคาและจำนวนจุดตรวจดึงจากระบบจริง ไม่ใช้ตัวเลขจากภาพ mockup
+class _InspectionPromoCard extends StatefulWidget {
+  const _InspectionPromoCard({required this.category, required this.onTap});
+
+  final ServiceCategory? category;
+  final VoidCallback onTap;
 
   @override
-  State<_PromoCarousel> createState() => _PromoCarouselState();
+  State<_InspectionPromoCard> createState() => _InspectionPromoCardState();
 }
 
-class _PromoCarouselState extends State<_PromoCarousel> {
-  static const _slides = [
-    (
-      title: 'รถเสีย ไม่ต้องรอ',
-      body: 'ช่างใกล้คุณ ไปถึงไว\nบริการทั่วถึง 24 ชั่วโมง',
-      icon: technicianIconAsset,
-    ),
-    (
-      title: 'รู้ราคาก่อนเรียก',
-      body: 'ช่างแจ้งราคาจริงให้ยืนยัน\nก่อนเริ่มซ่อมทุกครั้ง',
-      icon: 'packages/fixgo_core/assets/icons/inspection.png',
-    ),
-  ];
-
-  final _controller = PageController(viewportFraction: 0.92);
-  int _page = 0;
+class _InspectionPromoCardState extends State<_InspectionPromoCard> {
+  Future<({int? price, int points})>? _future;
+  String? _loadedFor;
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _InspectionPromoCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _load();
+  }
+
+  void _load() {
+    final category = widget.category;
+    if (category == null || _loadedFor == category.id) return;
+    _loadedFor = category.id;
+    final api = AppStateScope.of(context).api;
+    _future = () async {
+      final results = await Future.wait([
+        api.listSubServices(category.id),
+        api.getInspectionChecklist(),
+      ]);
+      final subs = results[0] as List<SubService>;
+      final checklist = results[1] as InspectionChecklist;
+      return (
+        price: subs.isEmpty ? null : subs.first.basePrice,
+        points: checklist.totalItems,
+      );
+    }();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 132,
-          child: PageView.builder(
-            controller: _controller,
-            itemCount: _slides.length,
-            onPageChanged: (value) => setState(() => _page = value),
-            itemBuilder: (context, index) {
-              final slide = _slides[index];
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(FixGoRadius.lg),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF2A3242), FixGoColors.navy],
-                    ),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              slide.title,
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFFFF9A55),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              slide.body,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                height: 1.4,
-                                color: Color(0xFFD5DAE3),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Image.asset(slide.icon, height: 92),
-                    ],
-                  ),
-                ),
-              );
-            },
+    return FutureBuilder<({int? price, int points})>(
+      future: _future,
+      builder: (context, snapshot) {
+        final data = snapshot.data;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(FixGoRadius.lg),
+            boxShadow: fixGoCardShadow,
           ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            for (var index = 0; index < _slides.length; index++)
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                height: 6,
-                width: index == _page ? 20 : 6,
-                decoration: BoxDecoration(
-                  color: index == _page
-                      ? FixGoColors.accent
-                      : const Color(0xFFD5D8DE),
-                  borderRadius: BorderRadius.circular(FixGoRadius.pill),
+          child: Material(
+            color: FixGoColors.background,
+            borderRadius: BorderRadius.circular(FixGoRadius.lg),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: widget.onTap,
+              borderRadius: BorderRadius.circular(FixGoRadius.lg),
+              child: Padding(
+                padding: const EdgeInsets.all(FixGoSpacing.md),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: FixGoColors.accentSoft,
+                              borderRadius:
+                                  BorderRadius.circular(FixGoRadius.pill),
+                            ),
+                            child: const Text(
+                              'มั่นใจก่อนซื้อ',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: FixGoColors.accent,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'ตรวจรถมือสอง',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            data == null
+                                ? 'ช่างไปตรวจรถถึงที่ก่อนตัดสินใจซื้อ'
+                                : 'ตรวจ ${data.points} รายการ พร้อมรูปหลักฐานและเกรดสรุป',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              height: 1.4,
+                              color: FixGoColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: widget.onTap,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: FixGoColors.accent,
+                              foregroundColor: Colors.white,
+                              shape: const StadiumBorder(),
+                              textStyle: const TextStyle(
+                                fontFamily: fixGoFontFamily,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            iconAlignment: IconAlignment.end,
+                            icon: const Icon(Icons.chevron_right_rounded),
+                            label: const Text('ดูรายละเอียด'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: FixGoSpacing.sm),
+                    Column(
+                      children: [
+                        if (data?.price != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: FixGoColors.lime,
+                              borderRadius:
+                                  BorderRadius.circular(FixGoRadius.md),
+                            ),
+                            child: Column(
+                              children: [
+                                const Text(
+                                  'ราคาเดียวทุกประเภทรถ',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: FixGoColors.navy,
+                                  ),
+                                ),
+                                Text(
+                                  '฿${formatThousands(data!.price! ~/ 100)}',
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                    color: FixGoColors.navy,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        const SizedBox(height: 8),
+                        Image.asset(categoryIconAsset('inspection'),
+                            height: 84),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-          ],
-        ),
-      ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

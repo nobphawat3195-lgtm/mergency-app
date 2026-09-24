@@ -9,9 +9,18 @@ import 'inspection_booking_card.dart';
 
 /// Booking wizard 4 ขั้นตอน: บริการ -> บริการย่อย -> ประเภทรถ -> ยืนยัน
 class BookingFlow extends StatefulWidget {
-  const BookingFlow({super.key, this.initialCategory, this.pickupLocation});
+  const BookingFlow({
+    super.key,
+    this.initialCategory,
+    this.pickupLocation,
+    this.initialSubServiceKeyword,
+  });
 
   final ServiceCategory? initialCategory;
+
+  /// ทางลัดจากหน้าแรก เช่น "จั๊ม" สำหรับเมนูจั๊มแบต: เลือกบริการย่อยที่ชื่อมีคำนี้ให้เลย
+  /// แล้วข้ามไปขั้นเลือกประเภทรถทันที ผู้ใช้ไม่ต้องเลือกซ้ำ ถ้าหาไม่เจอจะกลับไปขั้นบริการย่อยตามปกติ
+  final String? initialSubServiceKeyword;
 
   /// ตำแหน่งที่ดึงมาจากหน้า Home แล้ว — ถ้า null (เช่น ผู้ใช้ปฏิเสธสิทธิ์ตอนนั้น)
   /// จะลองขอใหม่อีกครั้งตอนยืนยันออเดอร์
@@ -44,6 +53,34 @@ class _BookingFlowState extends State<BookingFlow> {
     if (widget.initialCategory != null) {
       _category = widget.initialCategory;
       _step = 1;
+      if (widget.initialSubServiceKeyword != null) {
+        _preselecting = true;
+        _preselectSubService(widget.initialSubServiceKeyword!);
+      }
+    }
+  }
+
+  bool _preselecting = false;
+
+  Future<void> _preselectSubService(String keyword) async {
+    try {
+      // initState ยังอ่าน InheritedWidget ไม่ได้ รอ frame แรกก่อน
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
+      final subs =
+          await AppStateScope.of(context).api.listSubServices(_category!.id);
+      if (!mounted) return;
+      final match = subs.where((sub) => sub.name.contains(keyword)).firstOrNull;
+      setState(() {
+        if (match != null) {
+          _subService = match;
+          _step = 2;
+        }
+      });
+    } on ApiException {
+      // โหลดไม่สำเร็จ ให้ผู้ใช้เลือกเองในขั้นบริการย่อยซึ่งมีปุ่มลองใหม่อยู่แล้ว
+    } finally {
+      if (mounted) setState(() => _preselecting = false);
     }
   }
 
@@ -182,6 +219,9 @@ class _BookingFlowState extends State<BookingFlow> {
   }
 
   Widget _buildStep() {
+    if (_preselecting) {
+      return const Center(child: CircularProgressIndicator());
+    }
     switch (_step) {
       case 0:
         return _CategoryStep(
