@@ -10,11 +10,18 @@ describe('photo slots', () => {
     }
   });
 
-  it('includes left and right door slots and a captioned defect slot', () => {
+  it('keeps only the key angles, with left/right door sides and a captioned defect slot', () => {
     const labels = PHOTO_SLOTS.map((s) => s.label);
     expect(labels).toEqual(
-      expect.arrayContaining(['ประตูหน้าซ้าย', 'ประตูหน้าขวา', 'รูปตำหนิ']),
+      expect.arrayContaining([
+        'ด้านหน้ารถ',
+        'ด้านหลังรถ',
+        'ด้านซ้ายและประตูซ้าย',
+        'ด้านขวาและประตูขวา',
+        'รูปตำหนิ',
+      ]),
     );
+    expect(PHOTO_SLOTS.length).toBeLessThanOrEqual(12);
     expect(PHOTO_SLOTS.find((s) => s.code === 'DEFECTS')?.captionRequired).toBe(
       true,
     );

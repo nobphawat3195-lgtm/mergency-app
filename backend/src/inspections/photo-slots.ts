@@ -1,5 +1,5 @@
 /**
- * ช่องภาพหลักฐานของงานตรวจรถมือสอง แยกเป็นหัวข้อตามมุมที่ต้องถ่าย
+ * ช่องภาพหลักฐานของงานตรวจรถมือสอง แยกเป็นหัวข้อตามมุมสำคัญที่ต้องถ่าย
  *
  * ช่างถ่ายด้วยกล้องของเครื่องระหว่างเดินตรวจ แล้วเลือกจากคลังรูปมาแนบทีละช่อง
  * ช่อง required ต้องมีรูปอย่างน้อย 1 รูปก่อนส่งรายงาน ช่อง "ตำหนิ" ต้องมีคำอธิบายทุกรูป
@@ -26,72 +26,60 @@ const slot = (
   group,
   label,
   required: true,
-  maxPhotos: 3,
+  maxPhotos: 2,
   ...options,
 });
 
-const EXTERIOR = 'ภายนอกรอบคัน';
-const DOORS = 'ประตูและชิ้นส่วนตัวถัง';
+const AROUND = 'รอบคัน';
 const STRUCTURE = 'เสา A/B/C และโครงสร้าง';
-const ENGINE = 'ห้องเครื่อง';
-const DOCUMENTS = 'เอกสารและเลขตัวรถ';
-const CABIN = 'ห้องโดยสาร';
-const WHEELS = 'ยางและล้อ';
-const SCAN = 'ผลสแกน OBD';
+const ENGINE_DOCS = 'ห้องเครื่องและเลขตัวรถ';
+const CABIN_GROUP = 'ภายในห้องโดยสาร';
 const DEFECT = 'ตำหนิที่พบ';
 
+// เก็บเฉพาะมุมสำคัญ ช่างถ่ายครบได้ในไม่กี่นาที แต่ละช่องมีภาพตัวอย่างมุมถ่ายในแอป
+// (packages/fixgo_core/assets/guides/<code>.png) ให้ช่างเลือกรูปให้ตรงหัวข้อ
 export const PHOTO_SLOTS: PhotoSlot[] = [
-  slot('EXT_FRONT', EXTERIOR, 'ด้านหน้าตรง', { maxPhotos: 2 }),
-  slot('EXT_REAR', EXTERIOR, 'ด้านหลังตรง', { maxPhotos: 2 }),
-  slot('EXT_LEFT', EXTERIOR, 'ด้านซ้ายเต็มคัน', { maxPhotos: 2 }),
-  slot('EXT_RIGHT', EXTERIOR, 'ด้านขวาเต็มคัน', { maxPhotos: 2 }),
-
-  slot('DOOR_FL', DOORS, 'ประตูหน้าซ้าย', {
-    hint: 'ถ่ายด้านนอก และเปิดประตูถ่ายขอบประตู/ยางขอบประตู',
+  slot('EXT_FRONT', AROUND, 'ด้านหน้ารถ', {
+    hint: 'ยืนตรงหน้ารถ ให้เห็นกันชนและไฟหน้าทั้งสองข้าง',
   }),
-  slot('DOOR_RL', DOORS, 'ประตูหลังซ้าย', {
-    required: false,
-    hint: 'ข้ามได้ถ้ารถไม่มีประตูหลัง',
+  slot('EXT_REAR', AROUND, 'ด้านหลังรถ', {
+    hint: 'ยืนตรงท้ายรถ ให้เห็นกันชนหลังและป้ายทะเบียน',
   }),
-  slot('DOOR_FR', DOORS, 'ประตูหน้าขวา', {
-    hint: 'ถ่ายด้านนอก และเปิดประตูถ่ายขอบประตู/ยางขอบประตู',
+  slot('EXT_LEFT', AROUND, 'ด้านซ้ายและประตูซ้าย', {
+    hint: 'ถ่ายเต็มคันจากฝั่งซ้าย ให้เห็นประตูทุกบาน',
   }),
-  slot('DOOR_RR', DOORS, 'ประตูหลังขวา', {
-    required: false,
-    hint: 'ข้ามได้ถ้ารถไม่มีประตูหลัง',
+  slot('EXT_RIGHT', AROUND, 'ด้านขวาและประตูขวา', {
+    hint: 'ถ่ายเต็มคันจากฝั่งขวา ให้เห็นประตูทุกบาน',
   }),
-  slot('HOOD', DOORS, 'ฝากระโปรงหน้า'),
-  slot('TRUNK', DOORS, 'ฝาท้าย/กระบะท้าย'),
-  slot('ROOF', DOORS, 'หลังคา', { required: false, maxPhotos: 2 }),
 
   slot('PILLAR_L', STRUCTURE, 'เสา A/B/C ฝั่งซ้าย', {
-    hint: 'เปิดประตูถ่ายเสาทั้ง 3 ต้น ให้เห็นรอยเชื่อม/ซีลเดิม',
+    maxPhotos: 3,
+    hint: 'เปิดประตู ถ่ายเสาให้เห็นรอยเชื่อม/ซีลเดิม',
   }),
   slot('PILLAR_R', STRUCTURE, 'เสา A/B/C ฝั่งขวา', {
-    hint: 'เปิดประตูถ่ายเสาทั้ง 3 ต้น ให้เห็นรอยเชื่อม/ซีลเดิม',
-  }),
-  slot('FRONT_BEAM', STRUCTURE, 'คานหน้าและแผงหม้อน้ำ'),
-  slot('REAR_FLOOR', STRUCTURE, 'พื้นท้ายและใต้พรมห้องสัมภาระ'),
-
-  slot('ENGINE_BAY', ENGINE, 'ห้องเครื่องภาพรวม', { maxPhotos: 4 }),
-  slot('ENGINE_NO', ENGINE, 'เลขเครื่องยนต์', { maxPhotos: 2 }),
-
-  slot('VIN', DOCUMENTS, 'เลขตัวถังบนตัวรถ', { maxPhotos: 2 }),
-  slot('ODOMETER', DOCUMENTS, 'หน้าปัดเลขไมล์ขณะติดเครื่อง', { maxPhotos: 2 }),
-  slot('REG_BOOK', DOCUMENTS, 'เล่มทะเบียน หน้ารายการจดทะเบียน', {
-    hint: 'บังเลขบัตรประชาชนของเจ้าของเดิมก่อนถ่าย',
+    maxPhotos: 3,
+    hint: 'เปิดประตู ถ่ายเสาให้เห็นรอยเชื่อม/ซีลเดิม',
   }),
 
-  slot('CABIN_FRONT', CABIN, 'คอนโซลหน้าและพวงมาลัย'),
-  slot('CABIN_REAR', CABIN, 'เบาะหลัง', { required: false }),
-  slot('CARPET', CABIN, 'ใต้พรม/ร่องรอยน้ำ', { required: false }),
-
-  slot('TIRES', WHEELS, 'ยางทั้ง 4 ล้อ', {
-    maxPhotos: 5,
-    hint: 'ล้อละ 1 รูป ให้เห็นดอกยางและรหัส DOT ถ้าทำได้',
+  slot('ENGINE_BAY', ENGINE_DOCS, 'ห้องเครื่อง', {
+    hint: 'เปิดฝากระโปรง ถ่ายภาพรวมห้องเครื่อง',
+  }),
+  slot('VIN', ENGINE_DOCS, 'เลขตัวถัง (VIN)', {
+    maxPhotos: 1,
+    hint: 'ถ่ายให้อ่านเลขได้ชัดทุกตัว',
+  }),
+  slot('ODOMETER', ENGINE_DOCS, 'หน้าปัดเลขไมล์', {
+    maxPhotos: 1,
+    hint: 'ติดเครื่องแล้วถ่ายให้เห็นเลขไมล์และไฟเตือน',
   }),
 
-  slot('OBD_SCAN', SCAN, 'หน้าจอผลสแกน OBD', { maxPhotos: 4 }),
+  slot('CABIN', CABIN_GROUP, 'ภายในห้องโดยสาร', {
+    hint: 'คอนโซลหน้า พวงมาลัย และเบาะ',
+  }),
+  slot('CARPET', CABIN_GROUP, 'ใต้พรม/ร่องรอยน้ำ', {
+    required: false,
+    hint: 'ถ่ายเมื่อสงสัยรถจมน้ำ',
+  }),
 
   slot('DEFECTS', DEFECT, 'รูปตำหนิ', {
     required: false,

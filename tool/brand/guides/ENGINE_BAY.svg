@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+  <title>ห้องเครื่อง</title>
+  <rect id="background" width="320" height="200" rx="18" fill="#ECF8F1"/>
+  <g id="car-front">
+    <path d="M62 92 L92 28 L228 28 L258 92" fill="white" stroke="#7F968D" stroke-width="4" stroke-linejoin="round"/>
+    <rect x="104" y="94" width="112" height="44" rx="8" fill="#C7EE77" stroke="#0B5F45" stroke-width="5"/>
+    <path d="M124 94 L124 138 M146 94 L146 138 M168 94 L168 138 M190 94 L190 138" stroke="#0B5F45" stroke-width="3"/>
+    <rect x="52" y="138" width="216" height="12" rx="6" fill="none" stroke="#7F968D" stroke-width="4"/>
+    
+    
+    
+    <rect x="64" y="148" width="32" height="22" rx="6" fill="#33443D"/><rect x="224" y="148" width="32" height="22" rx="6" fill="#33443D"/>
+  </g>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+  <title>ด้านขวาและประตูขวา</title>
+  <rect id="background" width="320" height="200" rx="18" fill="#ECF8F1"/>
+  <g id="car-side" stroke-linejoin="round">
+    <path d="M36 140 L36 118 Q38 106 56 103 L98 97 L128 68 Q136 61 148 61 L206 61 Q220 61 230 70 L258 97 L282 101 Q296 104 296 118 L296 140 Z" fill="white" stroke="#0B5F45" stroke-width="5"/>
+    <path d="M110 97 L110 136 L180 136 L180 97 Z M182 97 L182 136 L252 136 L252 97 Z" fill="#C7EE77" stroke="#0B5F45" stroke-width="3"/>
+    <path d="M114 94 L138 69 L176 69 L176 94 Z" fill="#CFE3DA" stroke="#7F968D" stroke-width="3"/>
+    <path d="M184 69 L212 69 Q221 69 227 76 L248 94 L184 94 Z" fill="#CFE3DA" stroke="#7F968D" stroke-width="3"/>
+    <rect x="283" y="107" width="11" height="9" rx="3" fill="#C7EE77" stroke="#7F968D" stroke-width="2"/>
+    <rect x="38" y="107" width="8" height="11" rx="2" fill="#E57373"/>
+    <circle cx="92" cy="142" r="21" fill="#33443D"/><circle cx="92" cy="142" r="8" fill="#C9D6D0"/>
+    <circle cx="246" cy="142" r="21" fill="#33443D"/><circle cx="246" cy="142" r="8" fill="#C9D6D0"/>
+  </g>
+</svg>

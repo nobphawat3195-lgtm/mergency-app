@@ -1006,7 +1006,7 @@ class _PhotoSlotsCard extends StatelessWidget {
         expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'ถ่ายด้วยกล้องของเครื่องให้ครบก่อน แล้วกด "แนบรูป" เพื่อเลือกจากคลังรูปทีละหัวข้อ',
+            'ถ่ายด้วยกล้องของเครื่องให้ครบก่อน แล้วกด "แนบรูป" เลือกรูปที่มุมตรงกับภาพตัวอย่างของแต่ละหัวข้อ',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           for (final group in checklist.photoGroups) ...[
@@ -1061,50 +1061,75 @@ class _PhotoSlotRow extends StatelessWidget {
     final missing = slot.required && photos.isEmpty;
     final full = photos.length >= slot.maxPhotos;
 
+    final guide = photoGuideAsset(slot.code);
     return Padding(
-      padding: const EdgeInsets.only(top: FixGoSpacing.sm),
+      padding: const EdgeInsets.only(top: FixGoSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ภาพตัวอย่างมุมถ่าย ให้ช่างเลือกรูปจากคลังให้ตรงหัวข้อ
+              if (guide != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(FixGoRadius.sm),
+                  child: Image.asset(guide, width: 104, height: 65),
+                ),
+                const SizedBox(width: FixGoSpacing.sm),
+              ],
               Expanded(
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(text: slot.label),
-                      if (slot.required)
-                        const TextSpan(
-                          text: ' *',
-                          style: TextStyle(color: FixGoColors.error),
-                        ),
-                    ],
-                  ),
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(text: slot.label),
+                          if (slot.required)
+                            const TextSpan(
+                              text: ' *',
+                              style: TextStyle(color: FixGoColors.error),
+                            ),
+                        ],
+                      ),
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (slot.hint != null)
+                      Text(
+                        slot.hint!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    TextButton.icon(
+                      onPressed: readOnly || uploading || full ? null : onAdd,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 36),
+                        foregroundColor:
+                            missing ? FixGoColors.error : FixGoColors.accent,
+                      ),
+                      icon: uploading
+                          ? const SizedBox(
+                              height: 16,
+                              width: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(
+                              Icons.add_photo_alternate_outlined,
+                              size: 18,
+                            ),
+                      label: Text(
+                        'แนบรูป (${photos.length}/${slot.maxPhotos})',
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              TextButton.icon(
-                onPressed: readOnly || uploading || full ? null : onAdd,
-                style: TextButton.styleFrom(
-                  foregroundColor:
-                      missing ? FixGoColors.error : FixGoColors.accent,
-                ),
-                icon: uploading
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.add_photo_alternate_outlined, size: 18),
-                label: Text('แนบรูป (${photos.length}/${slot.maxPhotos})'),
               ),
             ],
           ),
-          if (slot.hint != null)
-            Text(slot.hint!, style: Theme.of(context).textTheme.bodySmall),
           if (photos.isNotEmpty) ...[
             const SizedBox(height: FixGoSpacing.xs),
             if (slot.captionRequired)

@@ -25,6 +25,7 @@ flutter:
   assets:
     - assets/icons/
     - assets/brand/
+    - assets/guides/
   # ต้องมีไฟล์จริงทุกน้ำหนักที่ใช้ ไม่งั้น Flutter จะสังเคราะห์ตัวหนาเอง (faux bold)
   # ทำให้สระ/วรรณยุกต์ไทยหนาไม่เท่ากันและดูแตก
   fonts:

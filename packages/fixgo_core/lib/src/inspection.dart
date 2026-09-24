@@ -233,6 +233,27 @@ class PhotoSlot {
   }
 }
 
+/// ภาพตัวอย่างมุมถ่ายของแต่ละช่อง (ต้นฉบับ tool/brand/guides/<code>.svg)
+const _photoGuideCodes = {
+  'EXT_FRONT',
+  'EXT_REAR',
+  'EXT_LEFT',
+  'EXT_RIGHT',
+  'PILLAR_L',
+  'PILLAR_R',
+  'ENGINE_BAY',
+  'VIN',
+  'ODOMETER',
+  'CABIN',
+  'CARPET',
+  'DEFECTS',
+};
+
+/// null ถ้าช่องนี้ยังไม่มีภาพตัวอย่าง
+String? photoGuideAsset(String slotCode) => _photoGuideCodes.contains(slotCode)
+    ? 'packages/fixgo_core/assets/guides/$slotCode.png'
+    : null;
+
 class InspectionPhoto {
   const InspectionPhoto({
     required this.slotCode,

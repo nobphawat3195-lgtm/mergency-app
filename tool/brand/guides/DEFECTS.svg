@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+  <title>รูปตำหนิ</title>
+  <rect id="background" width="320" height="200" rx="18" fill="#ECF8F1"/>
+  <rect x="30" y="50" width="260" height="110" rx="14" fill="white" stroke="#7F968D" stroke-width="4"/>
+  <path d="M84 118 L104 104 L120 116 L142 98 L160 110" fill="none" stroke="#C62828" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="122" cy="108" r="40" fill="none" stroke="#0B5F45" stroke-width="7"/>
+  <path d="M152 136 L196 172" stroke="#0B5F45" stroke-width="11" stroke-linecap="round"/>
+  <path d="M226 76 l10 -18 l10 18 Z M236 66 l0 7" fill="#FFF4DC" stroke="#9A5B00" stroke-width="3" stroke-linejoin="round"/><circle cx="236" cy="80" r="1" fill="#9A5B00"/>
+</svg>

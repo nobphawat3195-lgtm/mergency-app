@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+  <title>ด้านหน้าตรง</title>
+  <rect id="background" width="320" height="200" rx="18" fill="#ECF8F1"/>
+  <g id="car-front">
+    <path d="M96 92 L118 50 Q122 44 130 44 L190 44 Q198 44 202 50 L224 92 Z" fill="white" stroke="#0B5F45" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M110 88 L128 54 L192 54 L210 88 Z" fill="#CFE3DA"/>
+    <rect x="52" y="90" width="216" height="58" rx="14" fill="white" stroke="#0B5F45" stroke-width="5"/>
+    <ellipse cx="86" cy="112" rx="20" ry="10" fill="#C7EE77" stroke="#7F968D" stroke-width="3"/><ellipse cx="234" cy="112" rx="20" ry="10" fill="#C7EE77" stroke="#7F968D" stroke-width="3"/>
+    <rect x="128" y="104" width="64" height="22" rx="6" fill="#CFE3DA" stroke="#7F968D" stroke-width="3"/>
+    <rect x="142" y="132" width="36" height="11" rx="2" fill="white" stroke="#7F968D" stroke-width="2"/>
+    <rect x="64" y="148" width="32" height="22" rx="6" fill="#33443D"/><rect x="224" y="148" width="32" height="22" rx="6" fill="#33443D"/>
+  </g>
+</svg>

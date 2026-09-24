@@ -143,6 +143,10 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                         'ค่าวัด เช่น ความหนาสีและความลึกดอกยาง ระบบตัดสินผลให้อัตโนมัติ ช่างเปลี่ยนผลเองไม่ได้',
                       ],
                     ),
+                    if (data.checklist.photoSlots.isNotEmpty) ...[
+                      const SizedBox(height: FixGoSpacing.sm),
+                      _PhotoAngles(slots: data.checklist.photoSlots),
+                    ],
                     const SizedBox(height: FixGoSpacing.sm),
                     _InfoCard(
                       number: groups.length + 2,
@@ -471,6 +475,70 @@ class _PrototypeNotice extends StatelessWidget {
             style: TextStyle(fontSize: 13, height: 1.45),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// มุมที่ช่างต้องถ่าย พร้อมภาพตัวอย่าง (ข้อมูลช่องรูปจาก API)
+class _PhotoAngles extends StatelessWidget {
+  const _PhotoAngles({required this.slots});
+
+  final List<PhotoSlot> slots;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(FixGoSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'มุมที่ช่างถ่ายให้ทุกคัน',
+              style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: FixGoSpacing.sm),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                const gap = FixGoSpacing.sm;
+                final width = (constraints.maxWidth - gap * 2) / 3;
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    for (final slot in slots)
+                      if (photoGuideAsset(slot.code) case final guide?)
+                        SizedBox(
+                          width: width,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius:
+                                    BorderRadius.circular(FixGoRadius.sm),
+                                child: Image.asset(guide),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                slot.required
+                                    ? slot.label
+                                    : '${slot.label} (ถ้ามี)',
+                                maxLines: 2,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
