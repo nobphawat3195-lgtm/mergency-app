@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsBoolean,
@@ -67,6 +68,7 @@ export class RegisterProviderDto {
   /** รูปเครื่องมือช่าง ใช้ยืนยันว่าเป็นช่างจริง */
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(6)
   @IsString({ each: true })
   toolPhotoUrls!: string[];
 }

@@ -6,6 +6,7 @@ import {
 import { OrderStatus, Prisma, Role } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { CHECKLIST, CHECKLIST_VERSION, findChecklistItem } from './checklist';
 import { findPhotoSlot, PHOTO_SLOTS, photoProblems } from './photo-slots';
 import {
@@ -32,7 +33,10 @@ type Actor = { sub: string; role: Role };
 
 @Injectable()
 export class InspectionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploads: UploadsService,
+  ) {}
 
   checklist() {
     return {
@@ -132,6 +136,14 @@ export class InspectionsService {
       if (!findChecklistItem(item.itemCode)) {
         throw new BadRequestException(`ไม่รู้จักรายการตรวจ ${item.itemCode}`);
       }
+      this.uploads.assertOwnedUploads(item.photoUrls, providerId, 'INSPECTION');
+    }
+    for (const group of dto.photoSlots ?? []) {
+      this.uploads.assertOwnedUploads(
+        group.photos.map((photo) => photo.url),
+        providerId,
+        'INSPECTION',
+      );
     }
     for (const group of dto.photoSlots ?? []) {
       const def = findPhotoSlot(group.slotCode);

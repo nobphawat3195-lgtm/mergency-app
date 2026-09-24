@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsInt,
   IsLatitude,
@@ -43,6 +44,7 @@ export class CreateOrderDto {
   /** รูปปัญหารถที่ลูกค้าแนบมา ช่วยให้ช่างเตรียมอุปกรณ์ก่อนถึงหน้างาน */
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(5)
   @IsString({ each: true })
   photoUrls?: string[];
 

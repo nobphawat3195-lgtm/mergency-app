@@ -13,6 +13,7 @@ import {
 
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
+import { UploadsService } from '../uploads/uploads.service';
 
 /** งานที่ยังไม่จบ ลบบัญชีระหว่างนี้ไม่ได้ อีกฝ่ายยังต้องติดต่อกันอยู่ */
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
@@ -39,6 +40,7 @@ export class AccountService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly wallet: WalletService,
+    private readonly uploads: UploadsService,
   ) {}
 
   async deleteAccount(userId: string, role: Role): Promise<{ deleted: true }> {
@@ -80,12 +82,16 @@ export class AccountService {
       );
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    const photos = await this.prisma.$transaction(async (tx) => {
       const orders = await tx.order.findMany({
         where: { customerId },
         select: { id: true },
       });
       const orderIds = orders.map((order) => order.id);
+      const orderPhotos = await tx.orderPhoto.findMany({
+        where: { orderId: { in: orderIds } },
+        select: { url: true },
+      });
       await tx.orderPhoto.deleteMany({ where: { orderId: { in: orderIds } } });
       await tx.order.updateMany({
         where: { customerId },
@@ -114,7 +120,10 @@ export class AccountService {
           deletedAt: new Date(),
         },
       });
+      return orderPhotos.map((photo) => photo.url);
     });
+    // ลบไฟล์หลัง commit แล้วเท่านั้น ถ้า transaction ล้มรูปต้องยังอยู่ครบ
+    await this.uploads.deleteUploads(photos);
   }
 
   private async deleteProvider(providerId: string) {
@@ -148,6 +157,10 @@ export class AccountService {
       );
     }
 
+    const toolPhotos = await this.prisma.providerToolPhoto.findMany({
+      where: { providerId },
+      select: { url: true },
+    });
     await this.prisma.$transaction(async (tx) => {
       await tx.providerToolPhoto.deleteMany({ where: { providerId } });
       await tx.dispatchAttempt.deleteMany({
@@ -179,6 +192,7 @@ export class AccountService {
         },
       });
     });
+    await this.uploads.deleteUploads(toolPhotos.map((photo) => photo.url));
   }
 
   /** ใช้ตรวจโทเคนทุกคำขอ: บัญชีที่ลบแล้วใช้โทเคนเก่าต่อไม่ได้ */

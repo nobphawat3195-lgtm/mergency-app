@@ -7,6 +7,7 @@ import {
 import { Provider, ProviderStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { UploadsService } from '../uploads/uploads.service';
 import {
   RegisterProviderDto,
   UpdateLocationDto,
@@ -15,10 +16,25 @@ import {
 
 @Injectable()
 export class ProvidersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploads: UploadsService,
+  ) {}
 
-  async register(phone: string, dto: RegisterProviderDto): Promise<Provider> {
-    const existing = await this.prisma.provider.findUnique({ where: { phone } });
+  /** uploaderId = sub ของโทเคนที่ใช้ขอ presign (ช่างที่ยังไม่สมัครคือ pending:<เบอร์>) */
+  async register(
+    phone: string,
+    dto: RegisterProviderDto,
+    uploaderId: string,
+  ): Promise<Provider> {
+    this.uploads.assertOwnedUploads(
+      dto.toolPhotoUrls,
+      uploaderId,
+      'PROVIDER_TOOL',
+    );
+    const existing = await this.prisma.provider.findUnique({
+      where: { phone },
+    });
     if (existing) {
       throw new BadRequestException('เบอร์นี้ลงทะเบียนเป็นช่างไว้แล้ว');
     }
@@ -40,7 +56,9 @@ export class ProvidersService {
           create: dto.categoryIds.map((categoryId) => ({ categoryId })),
         },
         vehicleTypes: {
-          create: dto.vehicleTypeIds.map((vehicleTypeId) => ({ vehicleTypeId })),
+          create: dto.vehicleTypeIds.map((vehicleTypeId) => ({
+            vehicleTypeId,
+          })),
         },
         toolPhotos: {
           create: dto.toolPhotoUrls.map((url) => ({ url })),

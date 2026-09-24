@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { DispatchService } from '../dispatch/dispatch.service';
 import { PushService } from '../notifications/push.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { DEFAULT_COMMISSION_RATE } from '../common/constants';
 import {
   INSPECTION_CATEGORY_SLUG,
@@ -32,6 +33,7 @@ export class OrdersService {
     private readonly dispatch: DispatchService,
     private readonly inspections: InspectionsService,
     private readonly push: PushService,
+    private readonly uploads: UploadsService,
   ) {}
 
   private generateOrderNo(): string {
@@ -42,6 +44,7 @@ export class OrdersService {
   }
 
   async create(customerId: string, dto: CreateOrderDto) {
+    this.uploads.assertOwnedUploads(dto.photoUrls, customerId, 'ORDER');
     const quote = await this.catalog.quote(dto.subServiceId, dto.vehicleTypeId);
     const subService = await this.prisma.subService.findUniqueOrThrow({
       where: { id: dto.subServiceId },
