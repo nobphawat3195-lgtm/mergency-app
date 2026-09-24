@@ -23,6 +23,36 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run build:scripts
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build -t fixgo-api:ci ./backend
+      - name: Boot image against PostgreSQL and check health
+        run: |
+          docker network create fixgo
+          docker run -d --name db --network fixgo \
+            -e POSTGRES_DB=fixgo -e POSTGRES_USER=fixgo -e POSTGRES_PASSWORD=ci postgres:16-alpine
+          for i in $(seq 1 30); do docker exec db pg_isready -U fixgo -d fixgo && break; sleep 1; done
+          docker run -d --name api --network fixgo -p 3000:3000 \
+            -e DATABASE_URL='postgresql://fixgo:ci@db:5432/fixgo?schema=public' \
+            -e JWT_SECRET=ci-jwt-secret-value -e OTP_SECRET=ci-otp-secret-value \
+            -e PAYMENT_WEBHOOK_SECRET=ci-webhook-secret-value \
+            -e CORS_ORIGIN=https://admin.example.com \
+            -e S3_BUCKET=ci -e S3_ACCESS_KEY_ID=ci -e S3_SECRET_ACCESS_KEY=ci \
+            -e S3_PUBLIC_BASE_URL=https://files.example.com \
+            -e SMS_PROVIDER=twilio -e TWILIO_ACCOUNT_SID=ci -e TWILIO_AUTH_TOKEN=ci -e TWILIO_FROM=+10000000000 \
+            fixgo-api:ci
+          for i in $(seq 1 60); do curl -sf localhost:3000/api/health && break; sleep 2; done
+          curl -sf localhost:3000/api/health
+          docker exec api node dist-scripts/prisma/seed.js
+          curl -sf localhost:3000/api/catalog/categories > /dev/null
+      - name: API logs
+        if: failure()
+        run: docker logs api || true
 
   flutter:
     runs-on: ubuntu-latest

@@ -161,7 +161,13 @@
 
 <script>
 // ตั้งค่า API ปลายทาง — เปลี่ยนเป็น URL จริงตอน deploy
-const API_BASE = localStorage.getItem('fixgo_api_base') || 'http://localhost:3000';
+// production: หน้าแอดมินอยู่ที่ admin.<โดเมน> และ API อยู่ที่ api.<โดเมน> (ดู deploy/Caddyfile)
+// ตั้ง localStorage fixgo_api_base เพื่อชี้ไปที่อื่นได้
+const API_BASE = localStorage.getItem('fixgo_api_base') || (
+  location.hostname.startsWith('admin.')
+    ? `${location.protocol}//api.${location.hostname.slice('admin.'.length)}`
+    : 'http://localhost:3000'
+);
 
 // เก็บโทเคนเฉพาะแท็บปัจจุบัน ลดความเสี่ยงจากโทเคนค้างบนเครื่องสาธารณะ
 let token = sessionStorage.getItem('fixgo_admin_token');

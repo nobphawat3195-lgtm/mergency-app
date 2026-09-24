@@ -2,10 +2,12 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 # Node / backend
 node_modules/
 dist/
+dist-scripts/
 npm-debug.log*
 
 # Prisma migrations เป็นประวัติ schema ที่ต้อง commit เพื่อ deploy ฐานข้อมูลได้ซ้ำ
@@ -32,3 +34,4 @@ npm-debug.log*
 *.swp
 .vscode/
 .idea/
+deploy/backups/

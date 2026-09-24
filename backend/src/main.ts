@@ -18,6 +18,8 @@ async function bootstrap() {
   );
 
   app.setGlobalPrefix('api');
+  // docker stop ส่ง SIGTERM: ปิด connection DB ให้เรียบร้อยก่อนออก
+  app.enableShutdownHooks();
   const corsOrigins = allowedCorsOrigins();
   app.enableCors({
     origin: corsOrigins === true ? true : corsOrigins,

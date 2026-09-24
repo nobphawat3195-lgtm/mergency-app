@@ -86,6 +86,8 @@ npx ts-node prisma/create-admin.ts 0812345678 "แอดมิน" รหัส�
 npm run start:dev
 ```
 
+ขึ้น production ด้วย Docker ดู [docs/DEPLOY.md](docs/DEPLOY.md)
+
 ต้องมี PostgreSQL ก่อน เช่น:
 
 ```bash

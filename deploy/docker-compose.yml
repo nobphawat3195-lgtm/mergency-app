@@ -1,0 +1,58 @@
+# FixGo production บน VPS เครื่องเดียว: API + PostgreSQL + Caddy (HTTPS อัตโนมัติ)
+# วิธีใช้ดู docs/DEPLOY.md
+#   cp deploy/.env.production.example deploy/.env.production   แล้วกรอกค่า
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production up -d --build
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fixgo
+      POSTGRES_USER: fixgo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?ต้องตั้ง POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fixgo -d fixgo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # ไม่เปิดพอร์ต DB ออกนอกเครื่อง
+
+  api:
+    build: ../backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://fixgo:${POSTGRES_PASSWORD}@db:5432/fixgo?schema=public
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?ต้องตั้ง API_DOMAIN เช่น api.fixgo.co.th}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?ต้องตั้ง ADMIN_DOMAIN เช่น admin.fixgo.co.th}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../admin:/srv/admin:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
