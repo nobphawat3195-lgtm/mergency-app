@@ -7,6 +7,7 @@ import { OrderStatus, Prisma, Role } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { CHECKLIST, CHECKLIST_VERSION, findChecklistItem } from './checklist';
+import { findPhotoSlot, PHOTO_SLOTS, photoProblems } from './photo-slots';
 import {
   gradeInspection,
   missingItems,
@@ -34,7 +35,11 @@ export class InspectionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   checklist() {
-    return { version: CHECKLIST_VERSION, sections: CHECKLIST };
+    return {
+      version: CHECKLIST_VERSION,
+      sections: CHECKLIST,
+      photoSlots: PHOTO_SLOTS,
+    };
   }
 
   /** สร้างรายงานเปล่าพร้อมข้อมูลนัดหมาย เรียกตอนลูกค้าสร้างออเดอร์ตรวจรถ */
@@ -85,7 +90,10 @@ export class InspectionsService {
   private async loadReport(orderId: string) {
     const report = await this.prisma.inspectionReport.findUnique({
       where: { orderId },
-      include: { items: { orderBy: { itemCode: 'asc' } } },
+      include: {
+        items: { orderBy: { itemCode: 'asc' } },
+        photos: { orderBy: [{ slotCode: 'asc' }, { sortOrder: 'asc' }] },
+      },
     });
     if (!report)
       throw new NotFoundException('ยังไม่มีรายงานตรวจรถของออเดอร์นี้');
@@ -100,7 +108,7 @@ export class InspectionsService {
     await this.loadOrder(orderId, actor);
     const report = await this.loadReport(orderId);
     if (actor.role === Role.CUSTOMER && !report.submittedAt) {
-      return { ...report, items: [] };
+      return { ...report, items: [], photos: [] };
     }
     return report;
   }
@@ -125,8 +133,19 @@ export class InspectionsService {
         throw new BadRequestException(`ไม่รู้จักรายการตรวจ ${item.itemCode}`);
       }
     }
+    for (const group of dto.photoSlots ?? []) {
+      const def = findPhotoSlot(group.slotCode);
+      if (!def) {
+        throw new BadRequestException(`ไม่รู้จักช่องรูป ${group.slotCode}`);
+      }
+      if (group.photos.length > def.maxPhotos) {
+        throw new BadRequestException(
+          `ช่อง "${def.label}" แนบได้สูงสุด ${def.maxPhotos} รูป`,
+        );
+      }
+    }
 
-    const { items, ...vehicle } = dto;
+    const { items, photoSlots, ...vehicle } = dto;
     await this.prisma.$transaction(async (tx) => {
       await tx.inspectionReport.update({
         where: { id: report.id },
@@ -146,6 +165,22 @@ export class InspectionsService {
           create: { reportId: report.id, itemCode: item.itemCode, ...data },
           update: data,
         });
+      }
+      for (const group of photoSlots ?? []) {
+        await tx.inspectionPhoto.deleteMany({
+          where: { reportId: report.id, slotCode: group.slotCode },
+        });
+        if (group.photos.length > 0) {
+          await tx.inspectionPhoto.createMany({
+            data: group.photos.map((photo, index) => ({
+              reportId: report.id,
+              slotCode: group.slotCode,
+              url: photo.url,
+              caption: photo.caption?.trim() || null,
+              sortOrder: index,
+            })),
+          });
+        }
       }
     });
 
@@ -218,6 +253,18 @@ export class InspectionsService {
     if (missingPhotos.length > 0) {
       throw new BadRequestException(
         `ต้องแนบรูปข้อที่ไม่ผ่าน/ควรระวัง: ${missingPhotos.join(', ')}`,
+      );
+    }
+
+    const photoCheck = photoProblems(report.photos);
+    if (photoCheck.missingSlots.length > 0) {
+      throw new BadRequestException(
+        `ยังขาดภาพหลักฐาน: ${photoCheck.missingSlots.join(', ')}`,
+      );
+    }
+    if (photoCheck.uncaptioned > 0) {
+      throw new BadRequestException(
+        `ระบุตำแหน่งและอาการของรูปตำหนิให้ครบ (ยังขาด ${photoCheck.uncaptioned} รูป)`,
       );
     }
 

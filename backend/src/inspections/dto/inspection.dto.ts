@@ -80,6 +80,31 @@ export class InspectionItemDto {
   photoUrls?: string[];
 }
 
+export class InspectionPhotoDto {
+  // URL จาก /uploads/presign (ตอน dev เป็น localhost ซึ่ง IsUrl ไม่รับ) ใช้แบบเดียวกับ photoUrls
+  @IsString()
+  @Length(1, 1000)
+  url!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 200)
+  caption?: string | null;
+}
+
+/** รูปทั้งหมดของ 1 ช่อง ส่งมาแทนที่ของเดิมทั้งช่อง (ลบรูป = ส่งรายการที่เหลือ) */
+export class InspectionPhotoSlotDto {
+  @IsString()
+  @Length(2, 20)
+  slotCode!: string;
+
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => InspectionPhotoDto)
+  photos!: InspectionPhotoDto[];
+}
+
 /** ช่างบันทึกข้อมูลรถและผลตรวจทีละส่วน (autosave) */
 export class UpdateInspectionDto {
   @IsOptional()
@@ -148,4 +173,11 @@ export class UpdateInspectionDto {
   @ValidateNested({ each: true })
   @Type(() => InspectionItemDto)
   items?: InspectionItemDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(40)
+  @ValidateNested({ each: true })
+  @Type(() => InspectionPhotoSlotDto)
+  photoSlots?: InspectionPhotoSlotDto[];
 }

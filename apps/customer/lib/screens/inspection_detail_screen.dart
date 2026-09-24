@@ -132,6 +132,12 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                       icon: Icons.photo_camera_outlined,
                       title: 'ภาพหลักฐาน',
                       lines: [
+                        if (data.checklist.photoSlots.isNotEmpty)
+                          'ถ่ายตามหัวข้อบังคับ ${data.checklist.photoSlots.where((slot) => slot.required).length} ช่อง: '
+                              '${data.checklist.photoGroups.join(', ')}',
+                        if (data.checklist.photoSlots
+                            .any((slot) => slot.captionRequired))
+                          'รูปตำหนิทุกรูปต้องระบุตำแหน่งและอาการ เช่น "กันชนหน้าขวา รอยถลอก"',
                         'มี ${data.checklist.photoRequiredItems} รายการที่ช่างต้องแนบรูปทุกครั้งเมื่อพบว่า "ไม่ผ่าน" หรือ "ควรระวัง"',
                         'ระบบไม่ยอมให้ส่งรายงานถ้าข้อที่พบปัญหายังไม่มีรูป',
                         'ค่าวัด เช่น ความหนาสีและความลึกดอกยาง ระบบตัดสินผลให้อัตโนมัติ ช่างเปลี่ยนผลเองไม่ได้',

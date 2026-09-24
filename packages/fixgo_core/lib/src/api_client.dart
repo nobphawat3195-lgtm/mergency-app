@@ -183,11 +183,21 @@ class FixGoApiClient {
     String orderId, {
     Map<String, dynamic> vehicle = const {},
     List<InspectionItemResult> items = const [],
+    Map<String, List<InspectionPhoto>> photoSlots = const {},
   }) async {
     final result = await _send('PATCH', '/orders/$orderId/inspection', body: {
       ...vehicle,
       if (items.isNotEmpty)
         'items': items.map((item) => item.toJson()).toList(),
+      // ส่งรูปทั้งช่องแทนของเดิม (ลบรูป = ส่งรายการที่เหลือ)
+      if (photoSlots.isNotEmpty)
+        'photoSlots': [
+          for (final entry in photoSlots.entries)
+            {
+              'slotCode': entry.key,
+              'photos': entry.value.map((photo) => photo.toJson()).toList(),
+            },
+        ],
     }) as Map<String, dynamic>;
     return InspectionReport.fromJson(result);
   }

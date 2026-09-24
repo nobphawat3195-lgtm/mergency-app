@@ -302,8 +302,24 @@ model InspectionReport {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  order Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  items InspectionItemResult[]
+  order  Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items  InspectionItemResult[]
+  photos InspectionPhoto[]
+}
+
+/// ภาพหลักฐานแยกตามช่อง (ดู src/inspections/photo-slots.ts)
+model InspectionPhoto {
+  id        String   @id @default(uuid())
+  reportId  String
+  slotCode  String
+  url       String
+  caption   String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  report InspectionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, slotCode])
 }
 
 model InspectionItemResult {

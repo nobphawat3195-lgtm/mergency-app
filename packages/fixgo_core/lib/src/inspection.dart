@@ -198,11 +198,80 @@ class ChecklistSection {
   }
 }
 
+/// ช่องภาพหลักฐานตามหัวข้อ เช่น "ประตูหน้าซ้าย" (ต้นทาง backend/src/inspections/photo-slots.ts)
+class PhotoSlot {
+  const PhotoSlot({
+    required this.code,
+    required this.group,
+    required this.label,
+    required this.required,
+    required this.maxPhotos,
+    this.hint,
+    this.captionRequired = false,
+  });
+
+  final String code;
+  final String group;
+  final String label;
+  final String? hint;
+  final bool required;
+  final int maxPhotos;
+
+  /// ทุกรูปต้องมีคำอธิบาย (ใช้กับช่องรูปตำหนิ)
+  final bool captionRequired;
+
+  factory PhotoSlot.fromJson(Map<String, dynamic> json) {
+    return PhotoSlot(
+      code: json['code'] as String,
+      group: json['group'] as String,
+      label: json['label'] as String,
+      hint: json['hint'] as String?,
+      required: json['required'] as bool? ?? false,
+      maxPhotos: json['maxPhotos'] as int? ?? 3,
+      captionRequired: json['captionRequired'] as bool? ?? false,
+    );
+  }
+}
+
+class InspectionPhoto {
+  const InspectionPhoto({
+    required this.slotCode,
+    required this.url,
+    this.caption,
+  });
+
+  final String slotCode;
+  final String url;
+  final String? caption;
+
+  InspectionPhoto copyWith({String? caption}) =>
+      InspectionPhoto(slotCode: slotCode, url: url, caption: caption);
+
+  factory InspectionPhoto.fromJson(Map<String, dynamic> json) {
+    return InspectionPhoto(
+      slotCode: json['slotCode'] as String,
+      url: json['url'] as String,
+      caption: json['caption'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'url': url,
+        if (caption != null && caption!.trim().isNotEmpty)
+          'caption': caption!.trim(),
+      };
+}
+
 class InspectionChecklist {
-  const InspectionChecklist({required this.version, required this.sections});
+  const InspectionChecklist({
+    required this.version,
+    required this.sections,
+    this.photoSlots = const [],
+  });
 
   final int version;
   final List<ChecklistSection> sections;
+  final List<PhotoSlot> photoSlots;
 
   factory InspectionChecklist.fromJson(Map<String, dynamic> json) {
     return InspectionChecklist(
@@ -211,7 +280,27 @@ class InspectionChecklist {
           .cast<Map<String, dynamic>>()
           .map(ChecklistSection.fromJson)
           .toList(),
+      photoSlots: (json['photoSlots'] as List<dynamic>? ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map(PhotoSlot.fromJson)
+          .toList(),
     );
+  }
+
+  PhotoSlot? photoSlot(String code) {
+    for (final slot in photoSlots) {
+      if (slot.code == code) return slot;
+    }
+    return null;
+  }
+
+  /// หัวข้อกลุ่มรูปตามลำดับที่ backend กำหนด
+  List<String> get photoGroups {
+    final groups = <String>[];
+    for (final slot in photoSlots) {
+      if (!groups.contains(slot.group)) groups.add(slot.group);
+    }
+    return groups;
   }
 
   ChecklistItem? item(String code) {
@@ -318,6 +407,7 @@ class InspectionReport {
     this.summary,
     this.submittedAt,
     this.items = const [],
+    this.photos = const [],
   });
 
   final String orderId;
@@ -347,6 +437,12 @@ class InspectionReport {
   final String? summary;
   final DateTime? submittedAt;
   final List<InspectionItemResult> items;
+
+  /// ภาพหลักฐานแยกช่อง ลูกค้าเห็นหลังช่างส่งรายงานแล้วเท่านั้น
+  final List<InspectionPhoto> photos;
+
+  List<InspectionPhoto> photosFor(String slotCode) =>
+      photos.where((photo) => photo.slotCode == slotCode).toList();
 
   bool get isSubmitted => submittedAt != null;
 
@@ -393,6 +489,10 @@ class InspectionReport {
       items: (json['items'] as List<dynamic>? ?? const [])
           .cast<Map<String, dynamic>>()
           .map(InspectionItemResult.fromJson)
+          .toList(),
+      photos: (json['photos'] as List<dynamic>? ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map(InspectionPhoto.fromJson)
           .toList(),
     );
   }

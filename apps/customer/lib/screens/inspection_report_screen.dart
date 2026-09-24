@@ -164,6 +164,10 @@ class _ReportView extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: FixGoSpacing.sm),
             child: _IssueCard(item: item, result: result, status: status),
           ),
+        if (report.photos.isNotEmpty) ...[
+          const SizedBox(height: FixGoSpacing.md),
+          _PhotoEvidence(checklist: checklist, report: report),
+        ],
         const SizedBox(height: FixGoSpacing.md),
         const Text(
           'ผลตรวจรายหมวด',
@@ -630,6 +634,178 @@ class _ItemLine extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// ภาพหลักฐานแยกตามหัวข้อที่ช่างถ่าย (ภายนอก, ประตูซ้าย/ขวา, เสา, ห้องเครื่อง, ตำหนิ ฯลฯ)
+class _PhotoEvidence extends StatelessWidget {
+  const _PhotoEvidence({required this.checklist, required this.report});
+
+  final InspectionChecklist checklist;
+  final InspectionReport report;
+
+  void _open(BuildContext context, InspectionPhoto photo, String title) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(FixGoSpacing.md),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Flexible(
+              child: InteractiveViewer(
+                child: Image.network(photo.url, fit: BoxFit.contain),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(FixGoSpacing.md),
+              child: Text(
+                photo.caption == null ? title : '$title · ${photo.caption}',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(FixGoSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'ภาพหลักฐาน ${report.photos.length} รูป',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            for (final group in checklist.photoGroups)
+              if (checklist.photoSlots.any(
+                (slot) =>
+                    slot.group == group &&
+                    report.photosFor(slot.code).isNotEmpty,
+              )) ...[
+                const SizedBox(height: FixGoSpacing.md),
+                Text(
+                  group,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: FixGoColors.accent,
+                  ),
+                ),
+                const SizedBox(height: FixGoSpacing.sm),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    const gap = FixGoSpacing.sm;
+                    final tile = (constraints.maxWidth - gap * 2) / 3;
+                    final slots = checklist.photoSlots.where(
+                      (slot) =>
+                          slot.group == group &&
+                          report.photosFor(slot.code).isNotEmpty,
+                    );
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final slot in slots)
+                          for (final (index, photo)
+                              in report.photosFor(slot.code).indexed)
+                            _PhotoTile(
+                              photo: photo,
+                              // รูปตำหนิแสดงเต็มแถวพร้อมคำอธิบาย
+                              width: slot.captionRequired
+                                  ? constraints.maxWidth
+                                  : tile,
+                              size: tile,
+                              label: slot.captionRequired
+                                  ? (photo.caption ?? slot.label)
+                                  : report.photosFor(slot.code).length > 1
+                                      ? '${slot.label} ${index + 1}'
+                                      : slot.label,
+                              sideLabel: slot.captionRequired,
+                              onTap: () => _open(context, photo, slot.label),
+                            ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoTile extends StatelessWidget {
+  const _PhotoTile({
+    required this.photo,
+    required this.width,
+    required this.size,
+    required this.label,
+    required this.sideLabel,
+    required this.onTap,
+  });
+
+  final InspectionPhoto photo;
+  final double width;
+  final double size;
+  final String label;
+  final bool sideLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final image = ClipRRect(
+      borderRadius: BorderRadius.circular(FixGoRadius.sm),
+      child: Image.network(
+        photo.url,
+        height: size,
+        width: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          height: size,
+          width: size,
+          color: FixGoColors.surface,
+          child: const Icon(Icons.image_outlined),
+        ),
+      ),
+    );
+    final text = Text(
+      label,
+      maxLines: sideLabel ? 4 : 2,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: sideLabel ? 14 : 12,
+        height: 1.3,
+        fontWeight: sideLabel ? FontWeight.w600 : FontWeight.w500,
+      ),
+    );
+    return SizedBox(
+      width: width,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(FixGoRadius.sm),
+        child: sideLabel
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  image,
+                  const SizedBox(width: FixGoSpacing.sm),
+                  Expanded(child: text),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [image, const SizedBox(height: 4), text],
+              ),
       ),
     );
   }

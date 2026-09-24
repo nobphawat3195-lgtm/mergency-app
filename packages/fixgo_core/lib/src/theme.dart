@@ -249,6 +249,14 @@ ThemeData buildFixGoTheme() {
         borderRadius: BorderRadius.all(Radius.circular(FixGoRadius.md)),
         borderSide: BorderSide(color: FixGoColors.accent, width: 1.5),
       ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(FixGoRadius.md)),
+        borderSide: BorderSide(color: FixGoColors.error),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(FixGoRadius.md)),
+        borderSide: BorderSide(color: FixGoColors.error, width: 1.5),
+      ),
     ),
     textTheme: const TextTheme(
       headlineSmall: TextStyle(

@@ -34,6 +34,11 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   bool _submitting = false;
   String? _uploadingItem;
 
+  /// ภาพหลักฐานแยกช่อง เช่น ประตูหน้าซ้าย/ขวา รูปตำหนิ
+  final Map<String, List<InspectionPhoto>> _photos = {};
+  final Set<String> _dirtySlots = {};
+  String? _uploadingSlot;
+
   final _brand = TextEditingController();
   final _model = TextEditingController();
   final _year = TextEditingController();
@@ -89,6 +94,9 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         for (final item in report.items) {
           _results[item.itemCode] = item;
         }
+        for (final photo in report.photos) {
+          _photos.putIfAbsent(photo.slotCode, () => []).add(photo);
+        }
         _brand.text = report.brand ?? '';
         _model.text = report.model ?? '';
         _year.text = report.year?.toString() ?? '';
@@ -132,21 +140,32 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
 
   Future<bool> _saveNow() async {
     _saveTimer?.cancel();
-    if (_dirtyItems.isEmpty && _dirtyVehicle.isEmpty) return true;
+    if (_dirtyItems.isEmpty && _dirtyVehicle.isEmpty && _dirtySlots.isEmpty) {
+      return true;
+    }
     final items = _dirtyItems.map((code) => _results[code]!).toList();
     final vehicle = Map<String, dynamic>.of(_dirtyVehicle);
+    final slots = {
+      for (final code in _dirtySlots)
+        code: List<InspectionPhoto>.of(_photos[code] ?? const []),
+    };
     _dirtyItems.clear();
     _dirtyVehicle.clear();
+    _dirtySlots.clear();
     setState(() => _saving = true);
     try {
-      await ProviderAppScope.of(context)
-          .api
-          .updateInspection(widget.order.id, vehicle: vehicle, items: items);
+      await ProviderAppScope.of(context).api.updateInspection(
+            widget.order.id,
+            vehicle: vehicle,
+            items: items,
+            photoSlots: slots,
+          );
       return true;
     } on ApiException catch (error) {
       // เก็บรายการที่ยังไม่ได้บันทึกกลับเข้าคิว รอบหน้าจะส่งใหม่
       _dirtyItems.addAll(items.map((item) => item.itemCode));
       _dirtyVehicle.addAll(vehicle);
+      _dirtySlots.addAll(slots.keys);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('บันทึกไม่สำเร็จ: ${error.message}')),
@@ -166,6 +185,72 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       _dirtyItems.add(code);
     });
     _scheduleSave();
+  }
+
+  void _updateSlot(
+    String code,
+    List<InspectionPhoto> Function(List<InspectionPhoto>) change,
+  ) {
+    setState(() {
+      _photos[code] = change(List.of(_photos[code] ?? const []));
+      _dirtySlots.add(code);
+    });
+    _scheduleSave();
+  }
+
+  /// เลือกรูปจากคลังรูป (ถ่ายด้วยกล้องของเครื่องไว้แล้ว) มาแนบในช่องที่กำหนด
+  Future<void> _attachSlotPhotos(PhotoSlot slot) async {
+    final remaining = slot.maxPhotos - (_photos[slot.code]?.length ?? 0);
+    if (remaining <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('ช่อง "${slot.label}" แนบได้สูงสุด ${slot.maxPhotos} รูป'),
+        ),
+      );
+      return;
+    }
+    final picked = await ImagePicker().pickMultiImage(
+      imageQuality: 80,
+      maxWidth: 1920,
+    );
+    if (picked.isEmpty || !mounted) return;
+    if (picked.length > remaining) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('แนบเพิ่มได้อีก $remaining รูป ใช้ $remaining รูปแรก'),
+        ),
+      );
+    }
+    setState(() => _uploadingSlot = slot.code);
+    try {
+      for (final file in picked.take(remaining)) {
+        final bytes = await file.readAsBytes();
+        if (!mounted) return;
+        final url = await ProviderAppScope.of(context).api.uploadImage(
+              bytes: bytes,
+              fileName: file.name,
+              contentType: _contentTypeFor(file),
+              scope: 'INSPECTION',
+            );
+        _updateSlot(
+          slot.code,
+          (photos) =>
+              photos..add(InspectionPhoto(slotCode: slot.code, url: url)),
+        );
+      }
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('อ่านหรืออัปโหลดรูปไม่สำเร็จ')),
+      );
+    } finally {
+      if (mounted) setState(() => _uploadingSlot = null);
+    }
   }
 
   void _setVehicleField(String key, dynamic value) {
@@ -362,6 +447,23 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         const SizedBox(height: FixGoSpacing.md),
         _buildVehicleCard(),
         const SizedBox(height: FixGoSpacing.md),
+        if (checklist.photoSlots.isNotEmpty) ...[
+          _PhotoSlotsCard(
+            checklist: checklist,
+            photos: _photos,
+            readOnly: _readOnly,
+            uploadingSlot: _uploadingSlot,
+            onAdd: _attachSlotPhotos,
+            onRemove: (slot, index) =>
+                _updateSlot(slot.code, (photos) => photos..removeAt(index)),
+            onCaption: (slot, index, caption) => _updateSlot(
+              slot.code,
+              (photos) =>
+                  photos..[index] = photos[index].copyWith(caption: caption),
+            ),
+          ),
+          const SizedBox(height: FixGoSpacing.md),
+        ],
         for (final section in checklist.sections)
           if (section.items.any(
             (item) => item.appliesToVehicle(
@@ -845,5 +947,262 @@ Color _statusColor(InspectionItemStatus status) {
       return FixGoColors.error;
     case InspectionItemStatus.notApplicable:
       return FixGoColors.textSecondary;
+  }
+}
+
+/// ภาพหลักฐานแยกหัวข้อ: ช่างเลือกรูปจากคลังรูปมาใส่ทีละช่อง (ประตูหน้าซ้าย, ประตูหน้าขวา, รูปตำหนิ ฯลฯ)
+class _PhotoSlotsCard extends StatelessWidget {
+  const _PhotoSlotsCard({
+    required this.checklist,
+    required this.photos,
+    required this.readOnly,
+    required this.uploadingSlot,
+    required this.onAdd,
+    required this.onRemove,
+    required this.onCaption,
+  });
+
+  final InspectionChecklist checklist;
+  final Map<String, List<InspectionPhoto>> photos;
+  final bool readOnly;
+  final String? uploadingSlot;
+  final ValueChanged<PhotoSlot> onAdd;
+  final void Function(PhotoSlot slot, int index) onRemove;
+  final void Function(PhotoSlot slot, int index, String caption) onCaption;
+
+  @override
+  Widget build(BuildContext context) {
+    final required = checklist.photoSlots.where((slot) => slot.required);
+    final done =
+        required.where((slot) => (photos[slot.code]?.isNotEmpty ?? false));
+    final complete = done.length == required.length;
+
+    return Card(
+      child: ExpansionTile(
+        initiallyExpanded: true,
+        shape: const Border(),
+        collapsedShape: const Border(),
+        leading: Icon(
+          complete ? Icons.check_circle : Icons.photo_library_outlined,
+          color: complete ? FixGoColors.success : FixGoColors.accent,
+        ),
+        title: const Text(
+          'ภาพหลักฐาน',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(
+          'ช่องบังคับครบ ${done.length}/${required.length}',
+          style: TextStyle(
+            fontSize: 12,
+            color: complete ? FixGoColors.success : FixGoColors.warning,
+          ),
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(
+          FixGoSpacing.md,
+          0,
+          FixGoSpacing.md,
+          FixGoSpacing.md,
+        ),
+        expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'ถ่ายด้วยกล้องของเครื่องให้ครบก่อน แล้วกด "แนบรูป" เพื่อเลือกจากคลังรูปทีละหัวข้อ',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          for (final group in checklist.photoGroups) ...[
+            const SizedBox(height: FixGoSpacing.md),
+            Text(
+              group,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: FixGoColors.accent,
+              ),
+            ),
+            for (final slot
+                in checklist.photoSlots.where((slot) => slot.group == group))
+              _PhotoSlotRow(
+                slot: slot,
+                photos: photos[slot.code] ?? const [],
+                readOnly: readOnly,
+                uploading: uploadingSlot == slot.code,
+                onAdd: () => onAdd(slot),
+                onRemove: (index) => onRemove(slot, index),
+                onCaption: (index, caption) => onCaption(slot, index, caption),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PhotoSlotRow extends StatelessWidget {
+  const _PhotoSlotRow({
+    required this.slot,
+    required this.photos,
+    required this.readOnly,
+    required this.uploading,
+    required this.onAdd,
+    required this.onRemove,
+    required this.onCaption,
+  });
+
+  final PhotoSlot slot;
+  final List<InspectionPhoto> photos;
+  final bool readOnly;
+  final bool uploading;
+  final VoidCallback onAdd;
+  final ValueChanged<int> onRemove;
+  final void Function(int index, String caption) onCaption;
+
+  @override
+  Widget build(BuildContext context) {
+    final missing = slot.required && photos.isEmpty;
+    final full = photos.length >= slot.maxPhotos;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: FixGoSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(text: slot.label),
+                      if (slot.required)
+                        const TextSpan(
+                          text: ' *',
+                          style: TextStyle(color: FixGoColors.error),
+                        ),
+                    ],
+                  ),
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: readOnly || uploading || full ? null : onAdd,
+                style: TextButton.styleFrom(
+                  foregroundColor:
+                      missing ? FixGoColors.error : FixGoColors.accent,
+                ),
+                icon: uploading
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.add_photo_alternate_outlined, size: 18),
+                label: Text('แนบรูป (${photos.length}/${slot.maxPhotos})'),
+              ),
+            ],
+          ),
+          if (slot.hint != null)
+            Text(slot.hint!, style: Theme.of(context).textTheme.bodySmall),
+          if (photos.isNotEmpty) ...[
+            const SizedBox(height: FixGoSpacing.xs),
+            if (slot.captionRequired)
+              for (final (index, photo) in photos.indexed)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: FixGoSpacing.sm),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _Thumb(
+                        url: photo.url,
+                        onRemove: readOnly ? null : () => onRemove(index),
+                      ),
+                      const SizedBox(width: FixGoSpacing.sm),
+                      Expanded(
+                        child: TextFormField(
+                          key: ValueKey('${slot.code}-${photo.url}'),
+                          initialValue: photo.caption,
+                          enabled: !readOnly,
+                          maxLength: 200,
+                          maxLines: 2,
+                          decoration: InputDecoration(
+                            labelText: 'ตำแหน่งและอาการ *',
+                            hintText: 'เช่น กันชนหน้าขวา รอยถลอก',
+                            errorText: (photo.caption?.trim().isEmpty ?? true)
+                                ? 'ต้องระบุก่อนส่งรายงาน'
+                                : null,
+                          ),
+                          onChanged: (value) => onCaption(index, value),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+            else
+              Wrap(
+                spacing: FixGoSpacing.sm,
+                runSpacing: FixGoSpacing.sm,
+                children: [
+                  for (final (index, photo) in photos.indexed)
+                    _Thumb(
+                      url: photo.url,
+                      onRemove: readOnly ? null : () => onRemove(index),
+                    ),
+                ],
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Thumb extends StatelessWidget {
+  const _Thumb({required this.url, this.onRemove});
+
+  final String url;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 72,
+      width: 72,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(FixGoRadius.sm),
+              child: Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const ColoredBox(
+                  color: FixGoColors.surface,
+                  child: Icon(Icons.image_outlined),
+                ),
+              ),
+            ),
+          ),
+          if (onRemove != null)
+            Positioned(
+              top: 2,
+              right: 2,
+              child: Material(
+                color: Colors.black54,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: onRemove,
+                  child: const Padding(
+                    padding: EdgeInsets.all(3),
+                    child: Icon(Icons.close, size: 16, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
