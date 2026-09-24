@@ -85,6 +85,19 @@ class FixGoApiClient {
     await _send('DELETE', '/account');
   }
 
+  /// ลงทะเบียนโทเคน push ของเครื่องนี้ให้ผู้ที่ล็อกอินอยู่ (platform: IOS / ANDROID)
+  Future<void> registerDevice(String token, String platform) async {
+    await _send('POST', '/devices', body: {
+      'token': token,
+      'platform': platform,
+    });
+  }
+
+  /// ถอนโทเคน push ตอนล็อกเอาต์ ต้องเรียกก่อนล้าง accessToken
+  Future<void> unregisterDevice(String token) async {
+    await _send('DELETE', '/devices', body: {'token': token});
+  }
+
   /// หน้าเว็บนโยบาย/ข้อตกลง/การลบบัญชี/ติดต่อ ที่ backend ให้บริการแบบสาธารณะ
   Uri legalPageUrl(String page) => Uri.parse('$baseUrl/api/legal/$page');
 

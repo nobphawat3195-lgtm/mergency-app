@@ -63,6 +63,7 @@ LEGAL_UPDATED_AT="..."
 | Other User Content (หมายเหตุ รายงานตรวจรถ) | ✓ | ✓ |
 | Purchase History (ประวัติงานและการชำระ) | ✓ | ✓ |
 | User ID | ✓ | ✓ |
+| Device ID (push token ของ FCM ใช้ส่งแจ้งเตือนสถานะงาน, App Functionality, ไม่ใช้ติดตาม) | ✓ | ✓ |
 | Name | | ✓ |
 | Other Financial Info (บัญชีรับเงิน) | | ✓ |
 

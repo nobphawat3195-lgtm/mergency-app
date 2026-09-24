@@ -103,6 +103,9 @@ export class AccountService {
       await tx.otpCode.deleteMany({
         where: { phone: customer.phone, role: Role.CUSTOMER },
       });
+      await tx.deviceToken.deleteMany({
+        where: { role: Role.CUSTOMER, userId: customerId },
+      });
       await tx.customer.update({
         where: { id: customerId },
         data: {
@@ -152,6 +155,9 @@ export class AccountService {
       });
       await tx.otpCode.deleteMany({
         where: { phone: provider.phone, role: Role.PROVIDER },
+      });
+      await tx.deviceToken.deleteMany({
+        where: { role: Role.PROVIDER, userId: providerId },
       });
       await tx.provider.update({
         where: { id: providerId },

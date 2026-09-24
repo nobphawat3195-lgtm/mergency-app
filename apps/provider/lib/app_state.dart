@@ -30,11 +30,14 @@ class ProviderAppState extends ChangeNotifier {
     api.accessToken = token;
     _hasProfile = hasProfile;
     unawaited(_tokenStore.write(token));
+    if (hasProfile) unawaited(PushNotifications.instance.attach(api));
     notifyListeners();
   }
 
+  /// หลังส่งใบสมัคร backend ออก token ที่มี id ช่างจริงแล้ว จึงลงทะเบียน push ได้
   void markProfileCreated() {
     _hasProfile = true;
+    unawaited(PushNotifications.instance.attach(api));
     notifyListeners();
   }
 
@@ -44,6 +47,8 @@ class ProviderAppState extends ChangeNotifier {
   }
 
   void signOut() {
+    // ต้องถอนโทเคน push ก่อนล้าง accessToken
+    unawaited(PushNotifications.instance.detach(api));
     api.accessToken = null;
     _hasProfile = false;
     _isOnline = false;
@@ -66,6 +71,7 @@ class ProviderAppState extends ChangeNotifier {
       final profile = await api.getProviderProfile();
       _hasProfile = true;
       _isOnline = profile['isOnline'] as bool? ?? false;
+      unawaited(PushNotifications.instance.attach(api));
     } on ApiException catch (error) {
       if (error.statusCode == 404) {
         _hasProfile = false;

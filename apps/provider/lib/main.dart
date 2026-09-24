@@ -8,6 +8,7 @@ import 'screens/shell_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await PushNotifications.instance.init();
   final appState = ProviderAppState(
     api: FixGoApiClient(baseUrl: AppConfig.apiBaseUrl),
   );

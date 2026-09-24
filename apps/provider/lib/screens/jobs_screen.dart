@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 
@@ -14,11 +16,24 @@ class JobsScreen extends StatefulWidget {
 
 class _JobsScreenState extends State<JobsScreen> {
   Future<List<Order>>? _future;
+  StreamSubscription<PushEvent>? _pushSub;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _future ??= ProviderAppScope.of(context).api.listAssignedOrders();
+    final push = PushNotifications.instance;
+    _pushSub ??= push.onAny
+        .where((event) => event.type != 'OFFER')
+        .listen((_) {
+      if (mounted) unawaited(_reload());
+    });
+  }
+
+  @override
+  void dispose() {
+    _pushSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _reload() async {

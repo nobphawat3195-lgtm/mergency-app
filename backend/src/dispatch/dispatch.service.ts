@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { DispatchStatus, OrderStatus, ProviderStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../notifications/push.service';
 import { distanceKm } from '../common/geo';
 import {
   DISPATCH_MAX_CANDIDATES,
@@ -40,7 +41,10 @@ export function isWithinWorkingHours(
 export class DispatchService {
   private readonly logger = new Logger(DispatchService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly push: PushService,
+  ) {}
 
   /** เริ่มกระจายงาน: หาช่างที่เข้าเงื่อนไข เรียงตามระยะทาง แล้วเสนอให้คนใกล้สุดก่อน */
   async startDispatch(orderId: string): Promise<void> {
@@ -55,7 +59,10 @@ export class DispatchService {
   private async offerToNextBatch(orderId: string): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { dispatchAttempts: true },
+      include: {
+        dispatchAttempts: true,
+        subService: { select: { name: true } },
+      },
     });
 
     if (!order) return;
@@ -150,16 +157,33 @@ export class DispatchService {
 
     this.logger.log(`เสนองาน ${order.orderNo} ให้ช่าง ${batch.length} คน`);
 
-    // TODO: ส่ง push notification ให้ช่างทุกคนใน batch
+    void this.push.offerToProviders(
+      batch.map((entry) => ({
+        id: entry.provider.id,
+        distanceKm: entry.distance,
+      })),
+      {
+        id: order.id,
+        orderNo: order.orderNo,
+        serviceName: order.subService.name,
+      },
+      Math.round(DISPATCH_OFFER_TIMEOUT_MS / 1000),
+    );
   }
 
   private async markNoMatch(orderId: string): Promise<void> {
-    await this.prisma.order.updateMany({
+    const updated = await this.prisma.order.updateMany({
       where: { id: orderId, status: OrderStatus.SEARCHING },
       data: { status: OrderStatus.NO_MATCH },
     });
     this.logger.warn(`ออเดอร์ ${orderId} ไม่มีช่างรับ ส่งต่อให้แอดมิน`);
     // TODO: แจ้งเตือนแอดมิน
+    if (updated.count === 0) return;
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, orderNo: true, customerId: true },
+    });
+    if (order) void this.push.noMatch(order.customerId, order);
   }
 
   /** ช่างกดรับงาน */
@@ -170,7 +194,9 @@ export class DispatchService {
     });
 
     if (!attempt || attempt.status !== DispatchStatus.OFFERED) {
-      throw new BadRequestException('งานนี้ไม่ได้ถูกเสนอให้คุณ หรือหมดเวลาแล้ว');
+      throw new BadRequestException(
+        'งานนี้ไม่ได้ถูกเสนอให้คุณ หรือหมดเวลาแล้ว',
+      );
     }
     if (attempt.expiresAt.getTime() < Date.now()) {
       throw new BadRequestException('หมดเวลากดรับงานแล้ว');
@@ -228,6 +254,16 @@ export class DispatchService {
         });
       },
       { isolationLevel: 'Serializable' },
+    );
+
+    const provider = await this.prisma.provider.findUnique({
+      where: { id: providerId },
+      select: { nickname: true },
+    });
+    void this.push.matched(
+      attempt.order.customerId,
+      attempt.order,
+      provider?.nickname ? `ช่าง${provider.nickname}` : 'ช่าง',
     );
   }
 

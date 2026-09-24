@@ -16,6 +16,7 @@ import {
 
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
+import { PushService } from '../notifications/push.service';
 import {
   ConfirmedPayment,
   PAYMENT_GATEWAY,
@@ -39,6 +40,7 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly wallet: WalletService,
     @Inject(PAYMENT_GATEWAY) private readonly gateway: PaymentGateway,
+    private readonly push: PushService,
   ) {}
 
   get provider(): PaymentGateway['name'] {
@@ -143,8 +145,10 @@ export class PaymentsService {
         paidAt: new Date(),
       },
     });
-    if (updated.count > 0)
+    if (updated.count > 0) {
       await this.wallet.creditOrderEarning(payment.orderId);
+      void this.notifyPaid(payment.orderId, payment.amount, 'PROMPTPAY');
+    }
     return 'paid';
   }
 
@@ -188,6 +192,28 @@ export class PaymentsService {
       },
     });
     await this.wallet.creditOrderEarning(orderId);
+    void this.notifyPaid(orderId, payment.amount, 'CASH');
+  }
+
+  private async notifyPaid(
+    orderId: string,
+    amount: number,
+    method: 'PROMPTPAY' | 'CASH',
+  ): Promise<void> {
+    const order = await this.prisma.order
+      .findUnique({
+        where: { id: orderId },
+        select: { id: true, orderNo: true, customerId: true, providerId: true },
+      })
+      .catch(() => null);
+    if (!order) return;
+    await this.push.paid(
+      order.customerId,
+      order.providerId,
+      order,
+      amount,
+      method,
+    );
   }
 
   getPaymentByOrder(orderId: string) {

@@ -10,6 +10,7 @@ import { randomInt } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { DispatchService } from '../dispatch/dispatch.service';
+import { PushService } from '../notifications/push.service';
 import { DEFAULT_COMMISSION_RATE } from '../common/constants';
 import {
   INSPECTION_CATEGORY_SLUG,
@@ -30,6 +31,7 @@ export class OrdersService {
     private readonly catalog: CatalogService,
     private readonly dispatch: DispatchService,
     private readonly inspections: InspectionsService,
+    private readonly push: PushService,
   ) {}
 
   private generateOrderNo(): string {
@@ -199,10 +201,12 @@ export class OrdersService {
       throw new BadRequestException('ออเดอร์นี้ยกเลิกไม่ได้แล้ว');
     }
 
-    return this.prisma.order.update({
+    const cancelled = await this.prisma.order.update({
       where: { id: orderId },
       data: { status: OrderStatus.CANCELLED, cancelledAt: new Date() },
     });
+    void this.push.cancelledByCustomer(order.providerId, order);
+    return cancelled;
   }
 
   async updateStatusByProvider(
@@ -230,10 +234,16 @@ export class OrdersService {
       throw new BadRequestException('ต้องให้ลูกค้ายืนยันราคาก่อนเริ่มงาน');
     }
 
-    return this.prisma.order.update({
+    const updated = await this.prisma.order.update({
       where: { id: orderId },
       data: { status: next },
     });
+    if (next === OrderStatus.EN_ROUTE) {
+      void this.push.enRoute(order.customerId, order);
+    } else if (next === OrderStatus.IN_PROGRESS) {
+      void this.push.inProgress(order.customerId, order);
+    }
+    return updated;
   }
 
   async proposeQuote(
@@ -252,7 +262,7 @@ export class OrdersService {
       throw new BadRequestException('เสนอราคาได้เมื่อเดินทางถึงขั้นตอนหน้างาน');
     }
 
-    return this.prisma.order.update({
+    const proposed = await this.prisma.order.update({
       where: { id: orderId },
       data: {
         priceProposed: dto.priceProposed,
@@ -262,6 +272,8 @@ export class OrdersService {
         quoteRespondedAt: null,
       },
     });
+    void this.push.quoteProposed(order.customerId, order, dto.priceProposed);
+    return proposed;
   }
 
   async respondToQuote(customerId: string, orderId: string, approved: boolean) {
@@ -280,13 +292,15 @@ export class OrdersService {
       throw new BadRequestException('ไม่มีราคาที่กำลังรอการยืนยัน');
     }
 
-    return this.prisma.order.update({
+    const answered = await this.prisma.order.update({
       where: { id: orderId },
       data: {
         quoteStatus: approved ? QuoteStatus.APPROVED : QuoteStatus.REJECTED,
         quoteRespondedAt: new Date(),
       },
     });
+    void this.push.quoteAnswered(order.providerId, order, approved);
+    return answered;
   }
 
   /** ช่างปิดงานด้วยราคาที่ลูกค้ายืนยันแล้ว ระบบสร้างรายการชำระเงินรอลูกค้าจ่าย */
@@ -338,6 +352,7 @@ export class OrdersService {
       });
     });
 
+    void this.push.completed(order.customerId, order, order.priceProposed);
     return this.findById(orderId);
   }
 

@@ -6,6 +6,7 @@ export 'src/format.dart';
 export 'src/inspection.dart';
 export 'src/location_service.dart';
 export 'src/models.dart';
+export 'src/push_notifications.dart';
 export 'src/money.dart';
 export 'src/theme.dart';
 export 'src/widgets/account_widgets.dart';

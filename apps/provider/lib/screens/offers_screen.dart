@@ -29,12 +29,17 @@ class _OffersScreenState extends State<OffersScreen> {
   bool _restoredTrackingStarted = false;
   _TodaySummary? _summary;
   Order? _activeJob;
+  StreamSubscription<PushEvent>? _pushSub;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_timer != null) return;
     unawaited(_syncOnlineStatus());
+    // มีงานใหม่หรือสถานะงานเปลี่ยน: ดึงทันทีไม่ต้องรอรอบ 10 วิ
+    final push = PushNotifications.instance;
+    _pushSub = push.onAny
+        .listen((_) => unawaited(_refresh()));
     // ดึงงานใหม่ทุก 10 วิ และให้ countdown เดินด้วย
     _timer = Timer.periodic(const Duration(seconds: 10), (_) {
       unawaited(_refresh());
@@ -64,6 +69,7 @@ class _OffersScreenState extends State<OffersScreen> {
   void dispose() {
     _timer?.cancel();
     _positionSub?.cancel();
+    _pushSub?.cancel();
     super.dispose();
   }
 

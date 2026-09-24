@@ -24,10 +24,13 @@ class AppState extends ChangeNotifier {
   void signIn(String token) {
     api.accessToken = token;
     unawaited(_tokenStore.write(token));
+    unawaited(PushNotifications.instance.attach(api));
     notifyListeners();
   }
 
   void signOut() {
+    // ต้องถอนโทเคน push ก่อนล้าง accessToken
+    unawaited(PushNotifications.instance.detach(api));
     api.accessToken = null;
     unawaited(_tokenStore.clear());
     notifyListeners();
@@ -47,6 +50,7 @@ class AppState extends ChangeNotifier {
     try {
       // ตรวจว่า token ยังใช้ได้และเป็นบัญชีที่เข้าถึงข้อมูลของตัวเองได้
       await api.listMyOrders();
+      unawaited(PushNotifications.instance.attach(api));
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
         api.accessToken = null;

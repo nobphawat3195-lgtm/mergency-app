@@ -18,12 +18,49 @@ class ProviderShellScreen extends StatefulWidget {
 class _ProviderShellScreenState extends State<ProviderShellScreen> {
   int _index = 0;
   Timer? _heartbeatTimer;
+  StreamSubscription<PushEvent>? _pushOpened;
+  StreamSubscription<PushEvent>? _pushReceived;
   late final List<Widget> _pages = [
     OffersScreen(onOpenTab: (tab) => setState(() => _index = tab)),
     const JobsScreen(),
     const WalletScreen(),
     const _ProviderProfileTab(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    final push = PushNotifications.instance;
+    _pushOpened = push.onOpened.listen(_openFromPush);
+    _pushReceived = push.onReceived.listen(_showPushBanner);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final launch = push.takeLaunchEvent();
+      if (launch != null && mounted) _openFromPush(launch);
+    });
+  }
+
+  /// งานใหม่อยู่หน้าหลัก สถานะงานที่รับแล้ว/การชำระเงินอยู่หน้างานของฉัน
+  int _tabFor(PushEvent event) => event.type == 'OFFER' ? 0 : 1;
+
+  void _openFromPush(PushEvent event) {
+    setState(() => _index = _tabFor(event));
+  }
+
+  void _showPushBanner(PushEvent event) {
+    if (!mounted || event.title == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          [event.title, if (event.body != null) event.body].join('\n'),
+        ),
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+          label: 'ดู',
+          onPressed: () => _openFromPush(event),
+        ),
+      ),
+    );
+  }
 
   @override
   void didChangeDependencies() {
@@ -39,6 +76,8 @@ class _ProviderShellScreenState extends State<ProviderShellScreen> {
   @override
   void dispose() {
     _heartbeatTimer?.cancel();
+    _pushOpened?.cancel();
+    _pushReceived?.cancel();
     super.dispose();
   }
 

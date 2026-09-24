@@ -22,12 +22,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   String? _error;
   Timer? _pollTimer;
   bool _respondingToQuote = false;
+  StreamSubscription<PushEvent>? _pushSub;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_pollTimer != null) return;
     unawaited(_refresh());
+    _pushSub = PushNotifications.instance.onAny
+        .where((event) => event.orderId == widget.orderId)
+        .listen((_) => unawaited(_refresh()));
     // TODO: เปลี่ยนเป็น WebSocket เมื่อต่อ real-time tracking ตอนนี้ poll ไปก่อน
     _pollTimer = Timer.periodic(
       const Duration(seconds: 5),
@@ -38,6 +42,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _pushSub?.cancel();
     super.dispose();
   }
 

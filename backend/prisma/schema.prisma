@@ -489,3 +489,23 @@ model AdminUser {
   passwordHash String
   createdAt    DateTime @default(now())
 }
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+/// โทเคน push (FCM) ของเครื่องที่ล็อกอินอยู่ หนึ่งผู้ใช้มีได้หลายเครื่อง
+/// โทเคนเดียวผูกได้ผู้ใช้เดียว เปลี่ยนบัญชีบนเครื่องเดิมจะย้ายเจ้าของให้อัตโนมัติ
+model DeviceToken {
+  id         String         @id @default(uuid())
+  token      String         @unique
+  platform   DevicePlatform
+  role       Role
+  /// id ของ Customer หรือ Provider ตาม role
+  userId     String
+  createdAt  DateTime       @default(now())
+  lastSeenAt DateTime       @default(now())
+
+  @@index([role, userId])
+}
