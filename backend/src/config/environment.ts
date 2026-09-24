@@ -63,7 +63,30 @@ export function validateEnvironment(
     }
   }
 
+  const reviewPhones = String(config.REVIEW_LOGIN_PHONES ?? '').trim();
+  if (reviewPhones && !/^\d{6}$/.test(String(config.REVIEW_LOGIN_CODE ?? ''))) {
+    throw new Error(
+      'REVIEW_LOGIN_CODE must be 6 digits when REVIEW_LOGIN_PHONES is set',
+    );
+  }
+
   return config;
+}
+
+/**
+ * บัญชีทดสอบสำหรับทีมรีวิวของ Apple/Google ซึ่งรับ SMS ไม่ได้
+ *
+ * ตั้ง REVIEW_LOGIN_PHONES (คั่นด้วยจุลภาค) และ REVIEW_LOGIN_CODE (6 หลัก) แล้วเบอร์เหล่านี้
+ * จะใช้รหัสตายตัวโดยไม่ส่ง SMS ใช้เฉพาะเบอร์ที่ไม่มีเจ้าของจริง และลบออกหลังรีวิวผ่าน
+ */
+export function reviewLoginCodeFor(phone: string): string | null {
+  const phones = (process.env.REVIEW_LOGIN_PHONES ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const code = process.env.REVIEW_LOGIN_CODE?.trim() ?? '';
+  if (!phones.includes(phone) || !/^\d{6}$/.test(code)) return null;
+  return code;
 }
 
 export function allowedCorsOrigins(): string[] | true {

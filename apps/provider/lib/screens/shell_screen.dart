@@ -214,8 +214,13 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
                 ),
                 const Divider(),
               ],
+              AccountSettingsTiles(
+                api: ProviderAppScope.of(context).api,
+                onDeleted: ProviderAppScope.of(context).signOut,
+              ),
+              const Divider(),
               ListTile(
-                leading: const Icon(Icons.logout, color: FixGoColors.error),
+                leading: const Icon(Icons.logout),
                 title: const Text('ออกจากระบบ'),
                 onTap: () => ProviderAppScope.of(context).signOut(),
               ),

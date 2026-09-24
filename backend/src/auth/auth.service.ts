@@ -11,7 +11,7 @@ import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { OTP_MAX_ATTEMPTS, OTP_TTL_MS } from '../common/constants';
-import { readSecret } from '../config/environment';
+import { readSecret, reviewLoginCodeFor } from '../config/environment';
 import { SmsService } from '../notifications/sms.service';
 
 const OTP_REQUEST_COOLDOWN_MS = 60_000;
@@ -42,12 +42,14 @@ export class AuthService {
     phone: string,
     role: Role,
   ): Promise<{ sent: true; devCode?: string }> {
+    const reviewCode = reviewLoginCodeFor(phone);
     const latest = await this.prisma.otpCode.findFirst({
       where: { phone, role },
       orderBy: { createdAt: 'desc' },
       select: { createdAt: true },
     });
     if (
+      !reviewCode &&
       latest &&
       Date.now() - latest.createdAt.getTime() < OTP_REQUEST_COOLDOWN_MS
     ) {
@@ -57,7 +59,8 @@ export class AuthService {
       );
     }
 
-    const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
+    const code =
+      reviewCode ?? randomInt(0, 1_000_000).toString().padStart(6, '0');
 
     await this.prisma.$transaction([
       this.prisma.otpCode.updateMany({
@@ -75,7 +78,8 @@ export class AuthService {
     ]);
 
     try {
-      await this.sms.sendOtp(phone, code);
+      // เบอร์ทดสอบสำหรับทีมรีวิวใช้รหัสตายตัว ไม่ส่ง SMS
+      if (!reviewCode) await this.sms.sendOtp(phone, code);
     } catch (error) {
       // รหัสที่ส่งไม่สำเร็จต้องใช้ต่อไม่ได้
       await this.prisma.otpCode.updateMany({

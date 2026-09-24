@@ -124,6 +124,8 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
             loading: _loading,
             onPressed: _otpSent ? _verifyOtp : _requestOtp,
           ),
+          const SizedBox(height: FixGoSpacing.md),
+          LegalConsentText(api: ProviderAppScope.of(context).api),
         ],
       ),
     );

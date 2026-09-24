@@ -80,6 +80,14 @@ class FixGoApiClient {
     return result['devCode'] as String?;
   }
 
+  /// ลบบัญชีของผู้ที่ล็อกอินอยู่ (ลูกค้าหรือช่าง) กู้คืนไม่ได้
+  Future<void> deleteAccount() async {
+    await _send('DELETE', '/account');
+  }
+
+  /// หน้าเว็บนโยบาย/ข้อตกลง/การลบบัญชี/ติดต่อ ที่ backend ให้บริการแบบสาธารณะ
+  Uri legalPageUrl(String page) => Uri.parse('$baseUrl/api/legal/$page');
+
   Future<({String accessToken, bool hasProfile})> verifyOtp(
     String phone,
     ApiRole role,

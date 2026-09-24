@@ -130,6 +130,8 @@ class _LoginScreenState extends State<LoginScreen> {
             loading: _loading,
             onPressed: _otpSent ? _verifyOtp : _requestOtp,
           ),
+          const SizedBox(height: FixGoSpacing.md),
+          LegalConsentText(api: AppStateScope.of(context).api),
           if (_otpSent) ...[
             const SizedBox(height: FixGoSpacing.sm),
             TextButton(

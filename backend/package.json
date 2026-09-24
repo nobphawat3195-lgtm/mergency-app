@@ -10,6 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "seed:review": "ts-node prisma/seed-review.ts",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
     "test:ci": "jest --runInBand --coverage"

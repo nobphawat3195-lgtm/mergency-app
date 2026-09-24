@@ -31,11 +31,13 @@ model OtpCode {
 // ---------- Customer ----------
 
 model Customer {
-  id        String   @id @default(uuid())
-  phone     String   @unique
+  id        String    @id @default(uuid())
+  phone     String    @unique
   name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  /// ลบบัญชีแล้ว: ข้อมูลส่วนตัวถูกลบ/ปิดบัง เก็บเฉพาะประวัติธุรกรรมตามกฎหมายบัญชี
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   orders Order[]
 }
@@ -80,6 +82,9 @@ model Provider {
 
   ratingAvg   Float @default(0)
   ratingCount Int   @default(0)
+
+  /// ลบบัญชีแล้ว: ข้อมูลส่วนตัวถูกลบ/ปิดบัง เก็บเฉพาะประวัติงานและกระเป๋าเงินตามกฎหมายบัญชี
+  deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

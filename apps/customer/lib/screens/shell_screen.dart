@@ -103,8 +103,13 @@ class _ProfileTab extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(FixGoSpacing.md),
         children: [
+          AccountSettingsTiles(
+            api: AppStateScope.of(context).api,
+            onDeleted: AppStateScope.of(context).signOut,
+          ),
+          const Divider(),
           ListTile(
-            leading: const Icon(Icons.logout, color: FixGoColors.error),
+            leading: const Icon(Icons.logout),
             title: const Text('ออกจากระบบ'),
             onTap: () => AppStateScope.of(context).signOut(),
           ),
