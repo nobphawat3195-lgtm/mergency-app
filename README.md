@@ -92,12 +92,14 @@ localStorage.setItem('fixgo_api_base', 'https://api-ของคุณ')
 | เวลาให้ช่างกดรับงาน | 5 นาที/คน | `backend/src/common/constants.ts` |
 | รัศมีค้นหาช่าง | 25 กม. | `backend/src/common/constants.ts` |
 | จำนวนช่างสูงสุดต่อออเดอร์ | 10 คน | `backend/src/common/constants.ts` |
-| สีแบรนด์ | น้ำเงิน BMW `#1C69D4` + พื้นเข้ม `#1A2129` มุมเหลี่ยมคมทุกจุด | `packages/fixgo_core/lib/src/theme.dart` |
+| สีแบรนด์ | ส้ม FixGo `#F26B1D` + หมึก `#1D2330` พื้นเทาอ่อน การ์ดมุมโค้ง | `packages/fixgo_core/lib/src/theme.dart` |
 
 จำนวนเงินทุกจุดเก็บเป็น **สตางค์ (integer)** ไม่ใช่ทศนิยม เพื่อไม่ให้เกิดเศษเพี้ยนจาก floating point
 
 รายละเอียด spec และเหตุผลเบื้องหลังการตัดสินใจอยู่ใน `docs/` และ `DESIGN.md`
 
-## ที่มาของไอคอน (Third-party Attribution)
+## ที่มาของไอคอนและฟอนต์ (Third-party Attribution)
 
-ไอคอนหมวดบริการ 3D ในหน้า Home/booking wizard มาจาก **Microsoft Fluent Emoji** ([github.com/microsoft/fluentui-emoji](https://github.com/microsoft/fluentui-emoji)) สัญญาอนุญาต **MIT License** — เก็บไฟล์ต้นฉบับไว้ที่ `packages/fixgo_core/assets/icons/licenses/fluentui-emoji-LICENSE.txt` ให้เครดิตครบตาม license ก่อน publish ขึ้น store จริง
+- ไอคอนหมวดบริการ 3D ส่วนใหญ่มาจาก **Microsoft Fluent Emoji** ([github.com/microsoft/fluentui-emoji](https://github.com/microsoft/fluentui-emoji)) สัญญาอนุญาต **MIT License** เก็บไฟล์ต้นฉบับไว้ที่ `packages/fixgo_core/assets/icons/licenses/fluentui-emoji-LICENSE.txt` ต้องให้เครดิตครบตาม license ก่อน publish ขึ้น store จริง
+- `tow.png`, `tire.png` และโลโก้ FixGo วาดขึ้นใหม่สำหรับโปรเจกต์นี้
+- ฟอนต์ **Noto Sans Thai** สัญญาอนุญาต SIL Open Font License อยู่ที่ `packages/fixgo_core/assets/fonts/OFL.txt`

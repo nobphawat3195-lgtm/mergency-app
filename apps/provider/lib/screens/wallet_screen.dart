@@ -131,7 +131,14 @@ class _WalletScreenState extends State<WalletScreen> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(FixGoSpacing.lg),
-                    color: FixGoColors.navy,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(FixGoRadius.lg),
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF2A3242), FixGoColors.navy],
+                      ),
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -144,8 +151,8 @@ class _WalletScreenState extends State<WalletScreen> {
                           formatSatang(_balance ?? 0),
                           style: const TextStyle(
                             fontSize: 36,
-                            fontWeight: FontWeight.w900,
-                            color: FixGoColors.accent,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFFFF9A55),
                           ),
                         ),
                       ],

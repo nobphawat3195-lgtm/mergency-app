@@ -23,7 +23,20 @@ dev_dependencies:
 flutter:
   assets:
     - assets/icons/
+    - assets/brand/
+  # ต้องมีไฟล์จริงทุกน้ำหนักที่ใช้ ไม่งั้น Flutter จะสังเคราะห์ตัวหนาเอง (faux bold)
+  # ทำให้สระ/วรรณยุกต์ไทยหนาไม่เท่ากันและดูแตก
   fonts:
     - family: NotoSansThai
       fonts:
         - asset: assets/fonts/NotoSansThai-Regular.ttf
+        - asset: assets/fonts/NotoSansThai-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansThai-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansThai-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/NotoSansThai-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/NotoSansThai-ExtraBold.ttf
+          weight: 900

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 
-/// ปุ่มหลักของแอป — สีเหลืองเสมอ ห้ามมีปุ่มสีอื่นแข่งความสนใจในหน้าเดียวกัน
+/// ปุ่มหลักของแอป — สีส้มเสมอ ห้ามมีปุ่มสีอื่นแข่งความสนใจในหน้าเดียวกัน
 class FixGoButton extends StatelessWidget {
   const FixGoButton({
     super.key,
@@ -59,20 +59,14 @@ class FixGoSecondaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // BMW button-secondary: ตัวหนังสือ/ขอบสี ink (ดำเข้ม) พื้นขาว มุมเหลี่ยมคม
+    // ปุ่มรอง: พื้นขาว ขอบบาง ตัวหนังสือสีหมึก (หรือแดงถ้าเป็นการกระทำที่ย้อนไม่ได้)
     final color = destructive ? FixGoColors.error : FixGoColors.textPrimary;
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
         foregroundColor: color,
-        minimumSize: const Size.fromHeight(56),
-        side: BorderSide(color: color.withValues(alpha: 0.6)),
-        shape: const RoundedRectangleBorder(),
-        textStyle: const TextStyle(
-          fontFamily: fixGoFontFamily,
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-        ),
+        backgroundColor: FixGoColors.background,
+        side: BorderSide(color: color.withValues(alpha: 0.35)),
       ),
       child: Text(label),
     );

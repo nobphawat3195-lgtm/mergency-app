@@ -29,11 +29,14 @@ class StepProgress extends StatelessWidget {
             if (index > 0)
               Expanded(
                 child: Container(
-                  height: 2,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  color: index <= currentIndex
-                      ? FixGoColors.accent
-                      : FixGoColors.hairline,
+                  height: 3,
+                  margin: const EdgeInsets.only(bottom: 22),
+                  decoration: BoxDecoration(
+                    color: index <= currentIndex
+                        ? FixGoColors.accent
+                        : FixGoColors.hairline,
+                    borderRadius: BorderRadius.circular(FixGoRadius.pill),
+                  ),
                 ),
               ),
             _StepDot(
@@ -70,11 +73,23 @@ class _StepDot extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
             height: 32,
             width: 32,
-            // BMW ใช้มุมเหลี่ยมคมทุกจุด ไม่มีวงกลม
-            color: isActive ? FixGoColors.accent : FixGoColors.hairline,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isActive ? FixGoColors.accent : FixGoColors.hairline,
+              boxShadow: isCurrent
+                  ? const [
+                      BoxShadow(
+                        color: Color(0x40F26B1D),
+                        blurRadius: 10,
+                        offset: Offset(0, 3),
+                      ),
+                    ]
+                  : null,
+            ),
             alignment: Alignment.center,
             child: isDone
                 ? const Icon(Icons.check, size: 18, color: Colors.white)
@@ -82,7 +97,8 @@ class _StepDot extends StatelessWidget {
                     '${index + 1}',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      color: isActive ? Colors.white : FixGoColors.textSecondary,
+                      color:
+                          isActive ? Colors.white : FixGoColors.textSecondary,
                     ),
                   ),
           ),

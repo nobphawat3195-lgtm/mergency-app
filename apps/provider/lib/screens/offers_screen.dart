@@ -264,9 +264,8 @@ class _OfferCardState extends State<_OfferCard> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: expired
-                        ? const Color(0xFFE5E7EB)
-                        : FixGoColors.accent,
+                    color: expired ? FixGoColors.hairline : FixGoColors.accent,
+                    borderRadius: BorderRadius.circular(FixGoRadius.pill),
                   ),
                   child: Text(
                     expired
@@ -286,7 +285,8 @@ class _OfferCardState extends State<_OfferCard> {
                 const Icon(Icons.near_me_outlined,
                     size: 18, color: FixGoColors.textSecondary),
                 const SizedBox(width: 4),
-                Text('ห่างจากคุณ ${widget.offer.distanceKm.toStringAsFixed(1)} กม.'),
+                Text(
+                    'ห่างจากคุณ ${widget.offer.distanceKm.toStringAsFixed(1)} กม.'),
               ],
             ),
             if (widget.offer.pickupAddress != null) ...[

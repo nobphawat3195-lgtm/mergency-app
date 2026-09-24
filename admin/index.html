@@ -3,78 +3,106 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700;800&display=swap" rel="stylesheet">
 <title>FixGo Admin</title>
 <style>
+  /* โทนเดียวกับแอป: พื้นเทาอ่อน การ์ดขาวมุมโค้ง ส้ม FixGo เป็นสีปุ่ม action */
   :root {
-    --navy: #0B1B2B;
-    --accent: #FFC72C;
+    --navy: #1D2330;
+    --accent: #F26B1D;
+    --accent-active: #D9560A;
+    --accent-soft: #FFF1E7;
     --surface: #F5F6F8;
     --text-secondary: #6B7280;
-    --border: #E5E7EB;
-    --success: #22C55E;
-    --error: #EF4444;
+    --border: #E8EAEE;
+    --success: #16A34A;
+    --error: #DC2626;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: "Noto Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif;
     background: var(--surface);
     color: var(--navy);
   }
   header {
-    background: var(--navy);
-    color: #fff;
-    padding: 16px 24px;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
     display: flex;
     align-items: center;
     gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
   }
-  header h1 { margin: 0; font-size: 20px; color: var(--accent); }
+  header .logo {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, #FF8A2B, #E8480C);
+    display: grid; place-items: center; color: #fff;
+  }
+  header h1 { margin: 0; font-size: 20px; font-weight: 800; }
+  header .sub {
+    font-size: 13px; color: var(--text-secondary);
+    background: var(--surface); padding: 4px 10px; border-radius: 999px;
+  }
   main { padding: 24px; max-width: 1100px; margin: 0 auto; }
   .card {
     background: #fff;
     border: 1px solid var(--border);
-    border-radius: 16px;
+    border-radius: 20px;
     padding: 20px;
     margin-bottom: 20px;
+    box-shadow: 0 4px 16px rgba(29, 35, 48, 0.06);
   }
   h2 { font-size: 17px; margin: 0 0 16px; }
   input {
-    padding: 12px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
+    padding: 12px 14px;
+    border: 1px solid transparent;
+    background: var(--surface);
+    border-radius: 14px;
     font-size: 15px;
     width: 100%;
     max-width: 280px;
+    font-family: inherit;
   }
+  input:focus { outline: none; border-color: var(--accent); background: #fff; }
   button {
     background: var(--accent);
-    color: var(--navy);
+    color: #fff;
     border: none;
-    border-radius: 999px;
-    padding: 10px 20px;
+    border-radius: 12px;
+    padding: 10px 18px;
     font-weight: 700;
     font-size: 14px;
+    font-family: inherit;
     cursor: pointer;
   }
+  button:hover { background: var(--accent-active); }
   button.ghost {
     background: transparent;
+    color: var(--navy);
     border: 1px solid var(--border);
   }
-  button.danger { background: var(--error); color: #fff; }
+  button.ghost:hover { background: var(--surface); }
+  button.danger { background: #fff; color: var(--error); border: 1px solid rgba(220, 38, 38, 0.35); }
+  button.danger:hover { background: #FEF2F2; }
+  .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+  th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--border); }
+  tbody tr:hover { background: #FAFAFB; }
   th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
-  .stats { display: flex; gap: 16px; flex-wrap: wrap; }
+  .stats { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
   .stat {
-    flex: 1 1 160px;
-    background: var(--navy);
-    color: #fff;
+    background: var(--surface);
     border-radius: 16px;
     padding: 16px;
   }
-  .stat .value { font-size: 26px; font-weight: 800; color: var(--accent); }
-  .stat .label { font-size: 13px; color: #CBD5E1; }
+  .stat:first-child { background: linear-gradient(135deg, #FF8A3D, #E0500C); }
+  .stat:first-child .value, .stat:first-child .label { color: #fff; }
+  .stat .value { font-size: 26px; font-weight: 800; color: var(--navy); }
+  .stat .label { font-size: 13px; color: var(--text-secondary); }
   .hidden { display: none; }
   .error { color: var(--error); margin-top: 12px; }
   .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -82,10 +110,13 @@
 </head>
 <body>
 <header>
+  <div class="logo" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M12 2C7.6 2 4 5.4 4 9.7 4 15 11 21.4 11.3 21.7a1 1 0 0 0 1.4 0C13 21.4 20 15 20 9.7 20 5.4 16.4 2 12 2Z"/></svg>
+  </div>
   <h1>FixGo</h1>
-  <span>ระบบหลังบ้าน</span>
+  <span class="sub">ระบบหลังบ้าน</span>
   <span style="flex:1"></span>
-  <button id="logout" class="ghost hidden" style="color:#fff">ออกจากระบบ</button>
+  <button id="logout" class="ghost hidden">ออกจากระบบ</button>
 </header>
 
 <main>
@@ -107,23 +138,23 @@
 
     <div class="card">
       <h2>ช่างรออนุมัติ</h2>
-      <table><thead><tr>
+      <div class="table-wrap"><table><thead><tr>
         <th>ชื่อ</th><th>เบอร์</th><th>ร้าน/อู่</th><th>เฟซบุ๊ก</th><th>เวลาทำงาน</th><th></th>
-      </tr></thead><tbody id="providers-body"></tbody></table>
+      </tr></thead><tbody id="providers-body"></tbody></table></div>
     </div>
 
     <div class="card">
       <h2>คำขอเบิกเงิน</h2>
-      <table><thead><tr>
+      <div class="table-wrap"><table><thead><tr>
         <th>ช่าง</th><th>จำนวน</th><th>บัญชีรับเงิน</th><th>ขอเมื่อ</th><th></th>
-      </tr></thead><tbody id="withdrawals-body"></tbody></table>
+      </tr></thead><tbody id="withdrawals-body"></tbody></table></div>
     </div>
 
     <div class="card">
       <h2>ออเดอร์ล่าสุด</h2>
-      <table><thead><tr>
+      <div class="table-wrap"><table><thead><tr>
         <th>เลขที่</th><th>บริการ</th><th>ลูกค้า</th><th>ช่าง</th><th>สถานะ</th><th>ราคา</th>
-      </tr></thead><tbody id="orders-body"></tbody></table>
+      </tr></thead><tbody id="orders-body"></tbody></table></div>
     </div>
   </div>
 </main>

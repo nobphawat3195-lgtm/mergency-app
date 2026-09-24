@@ -72,105 +72,77 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: FixGoColors.navy,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(FixGoSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: FixGoSpacing.xl),
-              const Text(
-                'FixGo',
-                style: TextStyle(
-                  fontSize: 44,
-                  fontWeight: FontWeight.w900,
-                  color: FixGoColors.accent,
-                ),
-              ),
-              const SizedBox(height: FixGoSpacing.sm),
-              const Text(
-                'รถเสีย ไม่ต้องรอ\nเรียกช่างใกล้คุณได้ 24 ชม.',
-                style: TextStyle(
-                  fontSize: 20,
-                  height: 1.4,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: FixGoSpacing.xl),
-              Container(
-                // BMW ใช้มุมเหลี่ยมคมทุกจุด ไม่มีมุมมน
-                padding: const EdgeInsets.all(FixGoSpacing.lg),
-                color: Colors.white,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      _otpSent ? 'ใส่รหัส OTP' : 'เข้าสู่ระบบด้วยเบอร์โทร',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: FixGoSpacing.md),
-                    TextField(
-                      controller: _phoneController,
-                      enabled: !_otpSent,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(10),
-                      ],
-                      decoration: const InputDecoration(
-                        hintText: 'เบอร์โทรศัพท์ เช่น 0812345678',
-                        prefixIcon: Icon(Icons.phone_outlined),
-                      ),
-                    ),
-                    if (_otpSent) ...[
-                      const SizedBox(height: FixGoSpacing.md),
-                      TextField(
-                        controller: _codeController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(6),
-                        ],
-                        decoration: const InputDecoration(
-                          hintText: 'รหัส 6 หลัก',
-                          prefixIcon: Icon(Icons.lock_outline),
-                        ),
-                      ),
-                    ],
-                    if (_error != null) ...[
-                      const SizedBox(height: FixGoSpacing.md),
-                      Text(
-                        _error!,
-                        style: const TextStyle(color: FixGoColors.error),
-                      ),
-                    ],
-                    const SizedBox(height: FixGoSpacing.lg),
-                    FixGoButton(
-                      label: _otpSent ? 'ยืนยันรหัส' : 'ขอรหัส OTP',
-                      loading: _loading,
-                      onPressed: _otpSent ? _verifyOtp : _requestOtp,
-                    ),
-                    if (_otpSent) ...[
-                      const SizedBox(height: FixGoSpacing.sm),
-                      TextButton(
-                        onPressed: _loading
-                            ? null
-                            : () => setState(() {
-                                  _otpSent = false;
-                                  _codeController.clear();
-                                }),
-                        child: const Text('เปลี่ยนเบอร์โทร'),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+    return FixGoAuthLayout(
+      tagline: 'รถเสีย ไม่ต้องรอ\nเรียกช่างใกล้คุณได้ 24 ชม.',
+      footer: const FixGoTrustRow(
+        items: [
+          (icon: Icons.near_me_outlined, label: 'ช่างใกล้คุณ\nไปถึงไว'),
+          (icon: Icons.receipt_long_outlined, label: 'รู้ราคา\nก่อนซ่อม'),
+          (icon: Icons.verified_user_outlined, label: 'ช่างผ่าน\nการตรวจสอบ'),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _otpSent ? 'ใส่รหัส OTP' : 'เข้าสู่ระบบด้วยเบอร์โทร',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
-        ),
+          const SizedBox(height: FixGoSpacing.md),
+          TextField(
+            controller: _phoneController,
+            enabled: !_otpSent,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(10),
+            ],
+            decoration: const InputDecoration(
+              hintText: 'เบอร์โทรศัพท์ เช่น 0812345678',
+              prefixIcon: Icon(Icons.phone_outlined),
+            ),
+          ),
+          if (_otpSent) ...[
+            const SizedBox(height: FixGoSpacing.md),
+            TextField(
+              controller: _codeController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
+              ],
+              decoration: const InputDecoration(
+                hintText: 'รหัส 6 หลัก',
+                prefixIcon: Icon(Icons.lock_outline),
+              ),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: FixGoSpacing.md),
+            Text(
+              _error!,
+              style: const TextStyle(color: FixGoColors.error),
+            ),
+          ],
+          const SizedBox(height: FixGoSpacing.lg),
+          FixGoButton(
+            label: _otpSent ? 'ยืนยันรหัส' : 'ขอรหัส OTP',
+            loading: _loading,
+            onPressed: _otpSent ? _verifyOtp : _requestOtp,
+          ),
+          if (_otpSent) ...[
+            const SizedBox(height: FixGoSpacing.sm),
+            TextButton(
+              onPressed: _loading
+                  ? null
+                  : () => setState(() {
+                        _otpSent = false;
+                        _codeController.clear();
+                      }),
+              child: const Text('เปลี่ยนเบอร์โทร'),
+            ),
+          ],
+        ],
       ),
     );
   }

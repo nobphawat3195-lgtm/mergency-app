@@ -197,8 +197,8 @@ class _StatusCard extends StatelessWidget {
               orderStatusLabel(order.status),
               style: const TextStyle(
                 fontSize: 22,
-                fontWeight: FontWeight.w900,
-                color: FixGoColors.navy,
+                fontWeight: FontWeight.w800,
+                color: FixGoColors.accent,
               ),
             ),
             if (order.status == OrderStatus.noMatch) ...[
@@ -242,9 +242,12 @@ class _TimelineRow extends StatelessWidget {
           Column(
             children: [
               Container(
-                height: 20,
-                width: 20,
-                color: done ? FixGoColors.accent : const Color(0xFFE5E7EB),
+                height: 22,
+                width: 22,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: done ? FixGoColors.accent : FixGoColors.hairline,
+                ),
                 child: done
                     ? const Icon(Icons.check, size: 14, color: Colors.white)
                     : null,
@@ -253,7 +256,7 @@ class _TimelineRow extends StatelessWidget {
                 Expanded(
                   child: Container(
                     width: 2,
-                    color: done ? FixGoColors.accent : const Color(0xFFE5E7EB),
+                    color: done ? FixGoColors.accent : FixGoColors.hairline,
                   ),
                 ),
             ],
@@ -292,8 +295,12 @@ class _ProviderCard extends StatelessWidget {
             Container(
               height: 56,
               width: 56,
-              color: FixGoColors.navy,
-              child: const Icon(Icons.engineering, color: FixGoColors.accent),
+              padding: const EdgeInsets.all(6),
+              decoration: const BoxDecoration(
+                color: FixGoColors.accentSoft,
+                shape: BoxShape.circle,
+              ),
+              child: Image.asset(technicianIconAsset),
             ),
             const SizedBox(width: FixGoSpacing.md),
             Expanded(
@@ -311,7 +318,7 @@ class _ProviderCard extends StatelessWidget {
                   Row(
                     children: [
                       const Icon(Icons.star,
-                          size: 16, color: FixGoColors.accent),
+                          size: 16, color: FixGoColors.warning),
                       const SizedBox(width: 4),
                       Text(
                         provider.ratingAvg > 0
@@ -330,8 +337,8 @@ class _ProviderCard extends StatelessWidget {
               },
               icon: const Icon(Icons.phone),
               style: IconButton.styleFrom(
-                backgroundColor: FixGoColors.accent,
-                foregroundColor: FixGoColors.navy,
+                backgroundColor: FixGoColors.success,
+                foregroundColor: Colors.white,
               ),
             ),
           ],

@@ -27,33 +27,36 @@ class _ProviderShellScreenState extends State<ProviderShellScreen> {
 
     return Scaffold(
       body: pages[_index],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
-        backgroundColor: Colors.white,
-        indicatorColor: FixGoColors.accent.withValues(alpha: 0.3),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.notifications_outlined),
-            selectedIcon: Icon(Icons.notifications),
-            label: 'งานเข้า',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.build_outlined),
-            selectedIcon: Icon(Icons.build),
-            label: 'งานของฉัน',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            selectedIcon: Icon(Icons.account_balance_wallet),
-            label: 'กระเป๋าเงิน',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'โปรไฟล์',
-          ),
-        ],
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: FixGoColors.hairline)),
+        ),
+        child: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (value) => setState(() => _index = value),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.notifications_outlined),
+              selectedIcon: Icon(Icons.notifications),
+              label: 'งานเข้า',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.build_outlined),
+              selectedIcon: Icon(Icons.build),
+              label: 'งานของฉัน',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.account_balance_wallet_outlined),
+              selectedIcon: Icon(Icons.account_balance_wallet),
+              label: 'กระเป๋าเงิน',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'โปรไฟล์',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -78,8 +81,8 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
   Future<void> _editPayoutInfo(Map<String, dynamic> profile) async {
     final bankNameController =
         TextEditingController(text: profile['bankName'] as String? ?? '');
-    final accountNameController =
-        TextEditingController(text: profile['bankAccountName'] as String? ?? '');
+    final accountNameController = TextEditingController(
+        text: profile['bankAccountName'] as String? ?? '');
     final accountNumberController = TextEditingController(
       text: profile['bankAccountNumber'] as String? ?? '',
     );

@@ -279,7 +279,7 @@ class _SubServiceStepState extends State<_SubServiceStep> {
             final subService = subServices[index];
             return Card(
               child: InkWell(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(FixGoRadius.lg),
                 onTap: () => widget.onSelected(subService),
                 child: Padding(
                   padding: const EdgeInsets.all(FixGoSpacing.md),
@@ -300,8 +300,7 @@ class _SubServiceStepState extends State<_SubServiceStep> {
                               const SizedBox(height: FixGoSpacing.xs),
                               Text(
                                 subService.description!,
-                                style:
-                                    Theme.of(context).textTheme.bodySmall,
+                                style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],
                           ],
@@ -369,23 +368,39 @@ class _VehicleTypeStepState extends State<_VehicleTypeStep> {
             crossAxisCount: 2,
             mainAxisSpacing: FixGoSpacing.sm,
             crossAxisSpacing: FixGoSpacing.sm,
-            childAspectRatio: 1.6,
+            childAspectRatio: 1.35,
           ),
           itemCount: vehicleTypes.length,
           itemBuilder: (context, index) {
             final vehicleType = vehicleTypes[index];
             return Card(
               child: InkWell(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(FixGoRadius.lg),
                 onTap: () => widget.onSelected(vehicleType),
-                child: Center(
-                  child: Text(
-                    vehicleType.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      height: 44,
+                      width: 44,
+                      decoration: const BoxDecoration(
+                        color: FixGoColors.accentSoft,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _vehicleIcon(vehicleType.slug),
+                        color: FixGoColors.accent,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: FixGoSpacing.sm),
+                    Text(
+                      vehicleType.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -393,6 +408,25 @@ class _VehicleTypeStepState extends State<_VehicleTypeStep> {
         );
       },
     );
+  }
+}
+
+/// ไอคอนประกอบประเภทรถ (slug มาจาก seed ของ backend)
+IconData _vehicleIcon(String slug) {
+  switch (slug) {
+    case 'motorcycle':
+      return Icons.two_wheeler;
+    case 'van':
+      return Icons.airport_shuttle;
+    case 'pickup':
+    case 'truck':
+      return Icons.local_shipping;
+    case 'ev':
+      return Icons.electric_car;
+    case 'machinery':
+      return Icons.agriculture;
+    default:
+      return Icons.directions_car;
   }
 }
 
