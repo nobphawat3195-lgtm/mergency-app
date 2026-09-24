@@ -286,7 +286,7 @@ void _showHowItWorks(BuildContext context) {
     (
       icon: Icons.qr_code_2_rounded,
       title: 'ซ่อมเสร็จ ชำระเงินและให้คะแนน',
-      body: 'สแกนพร้อมเพย์หรือจ่ายเงินสดกับช่าง แล้วให้คะแนนบริการ',
+      body: 'สแกนพร้อมเพย์ รอระบบยืนยันยอด แล้วให้คะแนนบริการ',
     ),
   ];
   showModalBottomSheet<void>(

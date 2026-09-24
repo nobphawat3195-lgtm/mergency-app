@@ -71,17 +71,6 @@ export class PaymentsController {
     return this.payments.getPaymentForActor(orderId, user);
   }
 
-  @Post('orders/:orderId/cash/confirm')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PROVIDER)
-  async confirmCash(
-    @CurrentUser() user: JwtPayload,
-    @Param('orderId') orderId: string,
-  ) {
-    await this.payments.confirmCashPayment(orderId, user.sub);
-    return { ok: true };
-  }
-
   /**
    * Webhook สำหรับ payment gateway เรียกเข้ามาเมื่อชำระเงินสำเร็จ
    *
