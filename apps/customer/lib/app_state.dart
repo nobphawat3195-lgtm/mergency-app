@@ -33,8 +33,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// เรียกก่อน runApp ห้าม throw เด็ดขาด ไม่งั้นแอปค้างจอขาวตั้งแต่เปิด
   Future<void> restoreSession() async {
-    final token = await _tokenStore.read();
+    final String? token;
+    try {
+      token = await _tokenStore.read();
+    } catch (_) {
+      // อ่าน secure storage ไม่ได้ (เช่น เบราว์เซอร์บล็อก) ให้เริ่มแบบยังไม่ล็อกอิน
+      return;
+    }
     if (token == null || token.isEmpty) return;
     api.accessToken = token;
     try {
@@ -45,6 +52,8 @@ class AppState extends ChangeNotifier {
         api.accessToken = null;
         await _tokenStore.clear();
       }
+    } catch (_) {
+      // ออฟไลน์ตอนเปิดแอป: ใช้ token เดิมไปก่อน หน้าจอจะโหลดใหม่เมื่อมีสัญญาณ
     }
   }
 

@@ -51,11 +51,18 @@ export class UploadsService {
       );
     }
 
-    if (dto.scope === 'PROVIDER_TOOL' && role !== 'PROVIDER') {
+    if (
+      (dto.scope === 'PROVIDER_TOOL' || dto.scope === 'INSPECTION') &&
+      role !== 'PROVIDER'
+    ) {
       throw new ForbiddenException('บัญชีนี้แนบรูปเครื่องมือช่างไม่ได้');
     }
 
-    const directory = dto.scope === 'ORDER' ? 'orders' : 'provider-tools';
+    const directory = {
+      ORDER: 'orders',
+      PROVIDER_TOOL: 'provider-tools',
+      INSPECTION: 'inspections',
+    }[dto.scope];
     const key = `${directory}/${userId}/${randomUUID()}.${EXTENSIONS[dto.contentType]}`;
     const command = new PutObjectCommand({
       Bucket: this.bucket,

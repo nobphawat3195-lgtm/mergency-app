@@ -2,6 +2,7 @@ import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import 'inspection_form_screen.dart';
 
 /// งานที่ช่างรับไว้แล้ว พร้อมปุ่มอัปเดตสถานะทีละขั้น
 class JobsScreen extends StatefulWidget {
@@ -160,6 +161,15 @@ class _JobsScreenState extends State<JobsScreen> {
     );
   }
 
+  Future<void> _openInspection(Order order) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<bool>(
+        builder: (_) => InspectionFormScreen(order: order),
+      ),
+    );
+    if (mounted) await _reload();
+  }
+
   Widget _buildAction(Order order) {
     if (order.status == OrderStatus.matched) {
       return FixGoButton(
@@ -197,6 +207,32 @@ class _JobsScreenState extends State<JobsScreen> {
             ),
           );
       }
+    }
+
+    // งานตรวจรถ: ราคาเดียวยืนยันตั้งแต่ตอนจอง ต้องส่งรายงานก่อนปิดงาน
+    if (order.isInspection && order.status == OrderStatus.inProgress) {
+      if (order.inspection?.isSubmitted != true) {
+        return FixGoButton(
+          label: 'ทำรายงานตรวจรถ 134 จุด',
+          icon: Icons.fact_check_outlined,
+          onPressed: () => _openInspection(order),
+        );
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FixGoButton(
+            label: 'ส่งรายงานแล้ว ปิดงาน',
+            icon: Icons.check_circle_outline,
+            onPressed: () => _complete(order),
+          ),
+          const SizedBox(height: FixGoSpacing.sm),
+          FixGoSecondaryButton(
+            label: 'ดูรายงานที่ส่ง',
+            onPressed: () => _openInspection(order),
+          ),
+        ],
+      );
     }
 
     if (order.status == OrderStatus.inProgress) {
@@ -302,6 +338,10 @@ class _JobsScreenState extends State<JobsScreen> {
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
+                        if (order.isInspection && order.inspection != null) ...[
+                          const SizedBox(height: FixGoSpacing.sm),
+                          _InspectionInfo(report: order.inspection!),
+                        ],
                         if (order.note != null && order.note!.isNotEmpty) ...[
                           const SizedBox(height: FixGoSpacing.sm),
                           Text('หมายเหตุ: ${order.note!}'),
@@ -323,6 +363,47 @@ class _JobsScreenState extends State<JobsScreen> {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _InspectionInfo extends StatelessWidget {
+  const _InspectionInfo({required this.report});
+
+  final InspectionReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(FixGoSpacing.sm),
+      decoration: BoxDecoration(
+        color: FixGoColors.accentSoft,
+        borderRadius: BorderRadius.circular(FixGoRadius.md),
+      ),
+      child: Row(
+        children: [
+          Image.asset(categoryIconAsset('inspection'), height: 44),
+          const SizedBox(width: FixGoSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  report.vehicleTitle,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                if (report.appointmentAt != null)
+                  Text('นัด ${formatThaiDateTime(report.appointmentAt!)}'),
+                if (report.sellerName != null || report.sellerPhone != null)
+                  Text(
+                    'ผู้ขาย ${report.sellerName ?? ''} ${report.sellerPhone ?? ''}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

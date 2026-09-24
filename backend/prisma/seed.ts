@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { PrismaClient, PriceType } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -162,15 +163,53 @@ const CATEGORIES = [
       },
     ],
   },
+  // ราคา 2 หมวดนี้เป็นราคาชั่วคราวตามตลาด รอเทียบกับ 24CarFix แล้วปรับในหลังบ้าน
+  {
+    slug: 'fuel-delivery',
+    name: 'น้ำมันหมด ส่งน้ำมันถึงที่',
+    iconKey: 'fuel',
+    sortOrder: 7,
+    subServices: [
+      {
+        name: 'ส่งน้ำมันฉุกเฉิน',
+        description: 'ค่าบริการส่งถึงที่ ไม่รวมค่าน้ำมัน (สูงสุด 10 ลิตร)',
+        basePrice: baht(590),
+        priceType: PriceType.FULL_SERVICE,
+      },
+    ],
+  },
+  {
+    slug: 'ev-assist',
+    name: 'รถ EV แบตหมด',
+    iconKey: 'ev',
+    sortOrder: 8,
+    subServices: [
+      {
+        name: 'ชาร์จไฟฉุกเฉินนอกสถานที่',
+        description: 'ชาร์จพอให้ขับไปสถานีชาร์จใกล้สุดได้ (ประมาณ 20–30 กม.)',
+        basePrice: baht(1290),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'ยกรถ EV ด้วยรถสไลด์พื้นเรียบ',
+        description: 'รถ EV ห้ามลากล้อแตะพื้น ค่าบริการเริ่มต้น ระยะทางเพิ่มคิดตามจริง',
+        basePrice: baht(1800),
+        priceType: PriceType.FULL_SERVICE,
+      },
+    ],
+  },
   {
     slug: 'used-car-inspection',
     name: 'ตรวจรถมือสองนอกสถานที่',
     iconKey: 'inspection',
-    sortOrder: 7,
+    sortOrder: 9,
     subServices: [
       {
         name: 'ตรวจรถมือสองนอกสถานที่',
-        description: 'ตรวจสภาพก่อนซื้อถึงสถานที่ พร้อมรายงานอิเล็กทรอนิกส์ ราคาเดียวทุกประเภทรถ',
+        description:
+          'ตรวจ 134 จุดถึงที่ เช็กรถจมน้ำ ชนหนัก กรอไมล์ วัดความหนาสี สแกน OBD2 พร้อมรายงานในแอป ราคาเดียวทุกประเภทรถ',
+        infoNote:
+          'ช่างตรวจเอกสาร โครงสร้างตัวถัง สีทุกชิ้น ร่องรอยน้ำท่วม ห้องเครื่อง คอมพิวเตอร์รถ ช่วงล่าง ยาง ระบบไฟฟ้า และทดลองขับ ใช้เวลาประมาณ 60–90 นาที ผลเป็นเกรด A–E พร้อมคำแนะนำว่าควรซื้อหรือไม่',
         basePrice: baht(1990),
         fixedPrice: true,
         priceType: PriceType.FULL_SERVICE,

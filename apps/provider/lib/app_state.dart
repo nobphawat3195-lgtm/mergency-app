@@ -51,8 +51,15 @@ class ProviderAppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// เรียกก่อน runApp ห้าม throw เด็ดขาด ไม่งั้นแอปค้างจอขาวตั้งแต่เปิด
   Future<void> restoreSession() async {
-    final token = await _tokenStore.read();
+    final String? token;
+    try {
+      token = await _tokenStore.read();
+    } catch (_) {
+      // อ่าน secure storage ไม่ได้ (เช่น เบราว์เซอร์บล็อก) ให้เริ่มแบบยังไม่ล็อกอิน
+      return;
+    }
     if (token == null || token.isEmpty) return;
     api.accessToken = token;
     try {
@@ -68,6 +75,10 @@ class ProviderAppState extends ChangeNotifier {
         api.accessToken = null;
         await _tokenStore.clear();
       }
+    } catch (_) {
+      // ออฟไลน์ตอนเปิดแอป: ช่างที่มี token แล้วเคยสมัครมาก่อนแน่นอน
+      // ให้เข้าหน้าหลักได้เลย ไม่บังคับไปหน้าสมัครซ้ำ
+      _hasProfile = true;
     }
   }
 

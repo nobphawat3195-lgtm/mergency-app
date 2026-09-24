@@ -24,7 +24,8 @@ docs/                     Product/UX specification
 - ดูสถานะงานและราคาประเมินแบบอัปเดตต่อเนื่อง
 - อนุมัติหรือปฏิเสธราคาที่ช่างเสนอ ก่อนเริ่มซ่อม
 - ชำระเงินสด หรือแสดง PromptPay QR เมื่อเชื่อม payment gateway
-- บริการตรวจรถมือสองแบบราคาเดียว 1,990 บาทใน catalog
+- จองตรวจรถมือสองราคาเดียว 1,990 บาท: กรอกยี่ห้อ/รุ่น/ปี ลิงก์ประกาศ ข้อมูลผู้ขาย และวันเวลานัด
+- ดูรายงานตรวจรถ: เกรด A–E, คำแนะนำควรซื้อหรือไม่, ธงความเสี่ยงรถจมน้ำ/ชนหนัก/กรอไมล์/เอกสาร, จุดที่พบพร้อมรูป และคะแนนรายหมวด
 
 ### ช่าง
 
@@ -35,6 +36,8 @@ docs/                     Product/UX specification
 - เสนอราคาและหมายเหตุ รอลูกค้ายืนยันก่อนเริ่มงาน
 - อัปเดตสถานะ เดินทาง/กำลังซ่อม/เสร็จสิ้น และยืนยันรับเงินสด
 - กระเป๋ารายได้แบบ ledger และคำขอถอนเงิน
+
+- ทำรายงานตรวจรถมือสอง 134 จุด 11 หมวด บันทึกอัตโนมัติ กรอกค่าวัด (ความหนาสี ดอกยาง ผ้าเบรก แบต ฯลฯ) แล้วระบบตัดสินผ่าน/ไม่ผ่านให้ ข้อที่ไม่ผ่านต้องถ่ายรูปประกอบ และต้องส่งรายงานก่อนปิดงาน
 
 ### ผู้ดูแลและเซิร์ฟเวอร์
 
@@ -48,6 +51,14 @@ docs/                     Product/UX specification
 - Presigned upload สำหรับ S3-compatible storage
 - SMS จริงผ่าน Twilio หรือ console ใน development
 - Migration เริ่มต้น, unit tests และ GitHub Actions CI
+
+## โหมดตรวจรถมือสอง
+
+- รายการตรวจอยู่ที่ `backend/src/inspections/checklist.ts` เป็นแหล่งข้อมูลเดียว แอปดึงผ่าน `GET /api/inspections/checklist` ไม่ hardcode ในแอป
+- หมวด: เอกสารและตัวตนรถ, โครงสร้างตัวถัง, สีและตัวถัง (วัดความหนาสี 11 ชิ้น), ร่องรอยรถจมน้ำ, ห้องเครื่อง, สแกน OBD2, ระบบไฮบริด/EV, ช่วงล่างและเบรก, ยางและล้อ, ห้องโดยสารและไฟฟ้า, ทดลองขับ
+- การให้คะแนน (`grading.ts`): ข้อสำคัญมีน้ำหนัก 3 เท่า ข้อสำคัญไม่ผ่านแม้ข้อเดียว, สงสัยรถจมน้ำ หรือเอกสารไม่ตรง = ไม่แนะนำให้ซื้อ
+- API: `GET/PATCH /api/orders/:id/inspection`, `POST /api/orders/:id/inspection/submit` ลูกค้าเห็นผลรายข้อเฉพาะหลังช่างส่งรายงาน
+- ถ้าแก้ความหมายของรายการตรวจ ให้เพิ่ม `CHECKLIST_VERSION`
 
 ## ส่วนที่ต้องเชื่อมก่อนเปิด production
 
@@ -130,4 +141,6 @@ localStorage.setItem('fixgo_api_base', 'https://api.example.com')
 
 ## Attribution
 
-ไอคอนหมวดบริการ 3D มาจาก [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) ภายใต้ MIT License โดยเก็บ license ไว้ที่ `packages/fixgo_core/assets/icons/licenses/fluentui-emoji-LICENSE.txt`
+- ไอคอนหมวดบริการ 3D ชุดหลัก (ซ่อมรถ แบตเตอรี่ ยาง กุญแจ น้ำมัน รถยก รถ EV ตรวจรถ) จัดทำโดยเจ้าของโปรเจกต์
+- ไอคอนสายฟ้า ไซเรน และช่าง มาจาก [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT License) เก็บ license ไว้ที่ `packages/fixgo_core/assets/icons/licenses/fluentui-emoji-LICENSE.txt`
+- ฟอนต์ Noto Sans Thai สัญญาอนุญาต SIL Open Font License อยู่ที่ `packages/fixgo_core/assets/fonts/OFL.txt`

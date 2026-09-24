@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsInt,
@@ -8,7 +9,10 @@ import {
   Length,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
+
+import { InspectionBookingDto } from '../../inspections/dto/inspection.dto';
 
 export class CreateOrderDto {
   @IsString()
@@ -41,6 +45,12 @@ export class CreateOrderDto {
   @IsArray()
   @IsString({ each: true })
   photoUrls?: string[];
+
+  /** ข้อมูลนัดตรวจรถมือสอง ใช้เฉพาะหมวดตรวจรถ */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => InspectionBookingDto)
+  inspection?: InspectionBookingDto;
 }
 
 export class ProposeQuoteDto {

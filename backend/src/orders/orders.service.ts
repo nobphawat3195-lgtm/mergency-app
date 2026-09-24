@@ -11,6 +11,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { DispatchService } from '../dispatch/dispatch.service';
 import { DEFAULT_COMMISSION_RATE } from '../common/constants';
+import {
+  INSPECTION_CATEGORY_SLUG,
+  InspectionsService,
+} from '../inspections/inspections.service';
 import { CreateOrderDto, ProposeQuoteDto, RateOrderDto } from './dto/order.dto';
 
 /** สถานะที่ช่างเปลี่ยนเองได้ และสถานะก่อนหน้าที่อนุญาต */
@@ -25,6 +29,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly catalog: CatalogService,
     private readonly dispatch: DispatchService,
+    private readonly inspections: InspectionsService,
   ) {}
 
   private generateOrderNo(): string {
@@ -36,25 +41,48 @@ export class OrdersService {
 
   async create(customerId: string, dto: CreateOrderDto) {
     const quote = await this.catalog.quote(dto.subServiceId, dto.vehicleTypeId);
+    const subService = await this.prisma.subService.findUniqueOrThrow({
+      where: { id: dto.subServiceId },
+      include: { category: { select: { slug: true } } },
+    });
+    if (subService.categoryId !== dto.categoryId) {
+      throw new BadRequestException('บริการย่อยไม่ตรงกับหมวดบริการที่เลือก');
+    }
+    const isInspection = subService.category.slug === INSPECTION_CATEGORY_SLUG;
 
-    const order = await this.prisma.order.create({
-      data: {
-        orderNo: this.generateOrderNo(),
-        customerId,
-        categoryId: dto.categoryId,
-        subServiceId: dto.subServiceId,
-        vehicleTypeId: dto.vehicleTypeId,
-        pickupLat: dto.pickupLat,
-        pickupLng: dto.pickupLng,
-        pickupAddress: dto.pickupAddress,
-        note: dto.note,
-        priceEstimated: quote.price,
-        commissionRate: DEFAULT_COMMISSION_RATE,
-        status: OrderStatus.CREATED,
-        photos: dto.photoUrls?.length
-          ? { create: dto.photoUrls.map((url) => ({ url })) }
-          : undefined,
-      },
+    const order = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.order.create({
+        data: {
+          orderNo: this.generateOrderNo(),
+          customerId,
+          categoryId: dto.categoryId,
+          subServiceId: dto.subServiceId,
+          vehicleTypeId: dto.vehicleTypeId,
+          pickupLat: dto.pickupLat,
+          pickupLng: dto.pickupLng,
+          pickupAddress: dto.pickupAddress,
+          note: dto.note,
+          priceEstimated: quote.price,
+          commissionRate: DEFAULT_COMMISSION_RATE,
+          status: OrderStatus.CREATED,
+          // บริการราคาเดียว (เช่น ตรวจรถ 1,990) ลูกค้ายอมรับราคาแล้วตอนจอง
+          // ไม่ต้องรอช่างเสนอราคาหน้างาน
+          ...(subService.fixedPrice
+            ? {
+                priceProposed: quote.price,
+                quoteStatus: QuoteStatus.APPROVED,
+                quoteRespondedAt: new Date(),
+              }
+            : {}),
+          photos: dto.photoUrls?.length
+            ? { create: dto.photoUrls.map((url) => ({ url })) }
+            : undefined,
+        },
+      });
+      if (isInspection) {
+        await this.inspections.createForOrder(tx, created.id, dto.inspection);
+      }
+      return created;
     });
 
     await this.dispatch.startDispatch(order.id);
@@ -72,6 +100,21 @@ export class OrdersService {
         photos: true,
         payment: true,
         rating: true,
+        inspection: {
+          select: {
+            brand: true,
+            model: true,
+            year: true,
+            appointmentAt: true,
+            sellerName: true,
+            sellerPhone: true,
+            listingUrl: true,
+            score: true,
+            grade: true,
+            verdict: true,
+            submittedAt: true,
+          },
+        },
         provider: {
           select: {
             id: true,
@@ -121,13 +164,26 @@ export class OrdersService {
         subService: true,
         photos: true,
         payment: true,
+        inspection: {
+          select: {
+            brand: true,
+            model: true,
+            year: true,
+            appointmentAt: true,
+            sellerName: true,
+            sellerPhone: true,
+            submittedAt: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async cancelByCustomer(customerId: string, orderId: string) {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
     if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
     if (order.customerId !== customerId) {
       throw new ForbiddenException('ยกเลิกออเดอร์ของคนอื่นไม่ได้');
@@ -154,7 +210,9 @@ export class OrdersService {
     orderId: string,
     next: OrderStatus,
   ) {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
     if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
     if (order.providerId !== providerId) {
       throw new ForbiddenException('ออเดอร์นี้ไม่ใช่ของคุณ');
@@ -183,7 +241,9 @@ export class OrdersService {
     orderId: string,
     dto: ProposeQuoteDto,
   ) {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
     if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
     if (order.providerId !== providerId) {
       throw new ForbiddenException('ออเดอร์นี้ไม่ใช่ของคุณ');
@@ -204,12 +264,10 @@ export class OrdersService {
     });
   }
 
-  async respondToQuote(
-    customerId: string,
-    orderId: string,
-    approved: boolean,
-  ) {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+  async respondToQuote(customerId: string, orderId: string, approved: boolean) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
     if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
     if (order.customerId !== customerId) {
       throw new ForbiddenException('ยืนยันราคาของออเดอร์คนอื่นไม่ได้');
@@ -233,7 +291,9 @@ export class OrdersService {
 
   /** ช่างปิดงานด้วยราคาที่ลูกค้ายืนยันแล้ว ระบบสร้างรายการชำระเงินรอลูกค้าจ่าย */
   async completeByProvider(providerId: string, orderId: string) {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
     if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
     if (order.providerId !== providerId) {
       throw new ForbiddenException('ออเดอร์นี้ไม่ใช่ของคุณ');
@@ -247,6 +307,7 @@ export class OrdersService {
     ) {
       throw new BadRequestException('ไม่พบราคาที่ลูกค้ายืนยันแล้ว');
     }
+    await this.inspections.assertSubmittedIfRequired(orderId);
 
     await this.prisma.$transaction(async (tx) => {
       const completed = await tx.order.updateMany({

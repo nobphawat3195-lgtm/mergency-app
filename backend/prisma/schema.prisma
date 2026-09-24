@@ -49,10 +49,10 @@ enum ProviderStatus {
 }
 
 model Provider {
-  id       String @id @default(uuid())
-  phone    String @unique
-  realName String
-  nickname String
+  id              String @id @default(uuid())
+  phone           String @unique
+  realName        String
+  nickname        String
   experienceYears Int
 
   shopName     String?
@@ -241,10 +241,84 @@ model Order {
   payment          Payment?
   walletEntries    WalletEntry[]
   rating           Rating?
+  inspection       InspectionReport?
 
   @@index([customerId])
   @@index([providerId])
   @@index([status])
+}
+
+// ---------- ตรวจรถมือสองนอกสถานที่ ----------
+
+enum InspectionItemStatus {
+  PASS
+  ATTENTION
+  FAIL
+  NOT_APPLICABLE
+}
+
+enum InspectionVerdict {
+  RECOMMENDED // แนะนำให้ซื้อ
+  CAUTION // ซื้อได้แต่ควรต่อรอง/ซ่อมบางจุด
+  NOT_RECOMMENDED // ไม่แนะนำ (โครงสร้าง/น้ำท่วม/เอกสารมีปัญหา)
+}
+
+/// รายงานตรวจรถ 1 ใบต่อ 1 ออเดอร์ รายการตรวจอยู่ใน src/inspections/checklist.ts
+model InspectionReport {
+  id               String @id @default(uuid())
+  orderId          String @unique
+  checklistVersion Int
+
+  // ข้อมูลนัดหมายที่ลูกค้ากรอกตอนจอง
+  listingUrl    String?
+  sellerName    String?
+  sellerPhone   String?
+  appointmentAt DateTime?
+
+  // ข้อมูลรถที่ช่างบันทึกหน้างาน
+  brand         String?
+  model         String?
+  year          Int?
+  color         String?
+  plateNo       String?
+  plateProvince String?
+  vin           String?
+  engineNo      String?
+  mileageKm     Int?
+  powertrain    String? // combustion | electrified | hybrid
+  transmission  String? // manual | automatic
+
+  // ผลสรุป คำนวณตอนช่างกดส่งรายงาน
+  score             Int?
+  grade             String?
+  verdict           InspectionVerdict?
+  floodSuspected    Boolean            @default(false)
+  accidentSuspected Boolean            @default(false)
+  odometerSuspected Boolean            @default(false)
+  legalIssue        Boolean            @default(false)
+  summary           String?
+  submittedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items InspectionItemResult[]
+}
+
+model InspectionItemResult {
+  id          String                @id @default(uuid())
+  reportId    String
+  itemCode    String
+  status      InspectionItemStatus?
+  measurement Float?
+  note        String?
+  photoUrls   String[]
+  updatedAt   DateTime              @updatedAt
+
+  report InspectionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, itemCode])
 }
 
 model OrderPhoto {
@@ -329,13 +403,13 @@ enum WalletEntryType {
 model WalletEntry {
   id             String          @id @default(uuid())
   idempotencyKey String?         @unique
-  providerId   String
-  type         WalletEntryType
-  amount       Int // สตางค์ บวก = เงินเข้า ลบ = เงินออก
-  orderId      String?
-  withdrawalId String?
-  memo         String?
-  createdAt    DateTime        @default(now())
+  providerId     String
+  type           WalletEntryType
+  amount         Int // สตางค์ บวก = เงินเข้า ลบ = เงินออก
+  orderId        String?
+  withdrawalId   String?
+  memo           String?
+  createdAt      DateTime        @default(now())
 
   provider   Provider           @relation(fields: [providerId], references: [id], onDelete: Cascade)
   order      Order?             @relation(fields: [orderId], references: [id])

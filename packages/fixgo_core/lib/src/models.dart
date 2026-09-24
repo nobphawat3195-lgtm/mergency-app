@@ -1,5 +1,7 @@
 // โมเดลข้อมูลที่ตรงกับ response ของ backend
 
+import 'inspection.dart';
+
 class ServiceCategory {
   const ServiceCategory({
     required this.id,
@@ -206,6 +208,9 @@ class Order {
     this.photoUrls = const [],
     this.paymentStatus,
     this.paymentMethod,
+    this.categorySlug,
+    this.categoryIconKey,
+    this.inspection,
   });
 
   final String id;
@@ -226,6 +231,13 @@ class Order {
   final List<String> photoUrls;
   final String? paymentStatus;
   final String? paymentMethod;
+  final String? categorySlug;
+  final String? categoryIconKey;
+
+  /// สรุปรายงานตรวจรถ (มีเฉพาะงานตรวจรถมือสอง)
+  final InspectionReport? inspection;
+
+  bool get isInspection => categorySlug == 'used-car-inspection';
 
   factory Order.fromJson(Map<String, dynamic> json) {
     final category = json['category'] as Map<String, dynamic>?;
@@ -256,6 +268,15 @@ class Order {
       photoUrls: photos,
       paymentStatus: payment?['status'] as String?,
       paymentMethod: payment?['method'] as String?,
+      categorySlug: category?['slug'] as String?,
+      categoryIconKey: category?['iconKey'] as String?,
+      inspection: json['inspection'] is Map<String, dynamic>
+          ? InspectionReport.fromJson({
+              'orderId': json['id'],
+              'checklistVersion': 0,
+              ...json['inspection'] as Map<String, dynamic>,
+            })
+          : null,
     );
   }
 }

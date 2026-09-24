@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import 'inspection.dart';
 import 'models.dart';
 
 class ApiException implements Exception {
@@ -113,11 +114,15 @@ class FixGoApiClient {
       'GET',
       '/catalog/categories/$categoryId/sub-services',
     ) as List<dynamic>;
-    return result.cast<Map<String, dynamic>>().map(SubService.fromJson).toList();
+    return result
+        .cast<Map<String, dynamic>>()
+        .map(SubService.fromJson)
+        .toList();
   }
 
   Future<List<VehicleType>> listVehicleTypes() async {
-    final result = await _send('GET', '/catalog/vehicle-types') as List<dynamic>;
+    final result =
+        await _send('GET', '/catalog/vehicle-types') as List<dynamic>;
     return result
         .cast<Map<String, dynamic>>()
         .map(VehicleType.fromJson)
@@ -143,6 +148,7 @@ class FixGoApiClient {
     String? pickupAddress,
     String? note,
     List<String>? photoUrls,
+    InspectionBooking? inspection,
   }) async {
     final result = await _send('POST', '/orders', body: {
       'categoryId': categoryId,
@@ -153,12 +159,48 @@ class FixGoApiClient {
       if (pickupAddress != null) 'pickupAddress': pickupAddress,
       if (note != null) 'note': note,
       if (photoUrls != null && photoUrls.isNotEmpty) 'photoUrls': photoUrls,
+      if (inspection != null) 'inspection': inspection.toJson(),
     }) as Map<String, dynamic>;
     return Order.fromJson(result);
   }
 
+  // ---------- ตรวจรถมือสอง ----------
+
+  Future<InspectionChecklist> getInspectionChecklist() async {
+    final result =
+        await _send('GET', '/inspections/checklist') as Map<String, dynamic>;
+    return InspectionChecklist.fromJson(result);
+  }
+
+  Future<InspectionReport> getInspection(String orderId) async {
+    final result = await _send('GET', '/orders/$orderId/inspection')
+        as Map<String, dynamic>;
+    return InspectionReport.fromJson(result);
+  }
+
+  /// บันทึกข้อมูลรถและ/หรือผลตรวจบางข้อ (ส่งเฉพาะที่เปลี่ยน)
+  Future<InspectionReport> updateInspection(
+    String orderId, {
+    Map<String, dynamic> vehicle = const {},
+    List<InspectionItemResult> items = const [],
+  }) async {
+    final result = await _send('PATCH', '/orders/$orderId/inspection', body: {
+      ...vehicle,
+      if (items.isNotEmpty)
+        'items': items.map((item) => item.toJson()).toList(),
+    }) as Map<String, dynamic>;
+    return InspectionReport.fromJson(result);
+  }
+
+  Future<InspectionReport> submitInspection(String orderId) async {
+    final result = await _send('POST', '/orders/$orderId/inspection/submit')
+        as Map<String, dynamic>;
+    return InspectionReport.fromJson(result);
+  }
+
   Future<Order> getOrder(String orderId) async {
-    final result = await _send('GET', '/orders/$orderId') as Map<String, dynamic>;
+    final result =
+        await _send('GET', '/orders/$orderId') as Map<String, dynamic>;
     return Order.fromJson(result);
   }
 
@@ -230,8 +272,9 @@ class FixGoApiClient {
 
     final uploadUrl = result['uploadUrl'] as String;
     final publicUrl = result['publicUrl'] as String;
-    final uploadHeaders = (result['headers'] as Map<String, dynamic>? ?? const {})
-        .map((key, value) => MapEntry(key, value.toString()));
+    final uploadHeaders =
+        (result['headers'] as Map<String, dynamic>? ?? const {})
+            .map((key, value) => MapEntry(key, value.toString()));
     final response = await _http.put(
       Uri.parse(uploadUrl),
       headers: uploadHeaders,
@@ -314,13 +357,17 @@ class FixGoApiClient {
   // ---------- Wallet (ช่าง) ----------
 
   Future<int> getWalletBalance() async {
-    final result = await _send('GET', '/wallet/balance') as Map<String, dynamic>;
+    final result =
+        await _send('GET', '/wallet/balance') as Map<String, dynamic>;
     return result['balance'] as int;
   }
 
   Future<List<WalletEntry>> listWalletEntries() async {
     final result = await _send('GET', '/wallet/entries') as List<dynamic>;
-    return result.cast<Map<String, dynamic>>().map(WalletEntry.fromJson).toList();
+    return result
+        .cast<Map<String, dynamic>>()
+        .map(WalletEntry.fromJson)
+        .toList();
   }
 
   Future<void> requestWithdrawal(int amount) async {
@@ -329,7 +376,8 @@ class FixGoApiClient {
 
   // ---------- Payments (ลูกค้า) ----------
 
-  Future<({String chargeId, String qrPayload, int amount})> createPromptPayCharge(
+  Future<({String chargeId, String qrPayload, int amount})>
+      createPromptPayCharge(
     String orderId,
   ) async {
     final result = await _send(

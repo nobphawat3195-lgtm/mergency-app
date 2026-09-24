@@ -2,6 +2,8 @@ library fixgo_core;
 
 export 'src/api_client.dart';
 export 'src/category_icons.dart';
+export 'src/format.dart';
+export 'src/inspection.dart';
 export 'src/location_service.dart';
 export 'src/models.dart';
 export 'src/money.dart';

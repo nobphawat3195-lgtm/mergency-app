@@ -13,6 +13,6 @@ export class PresignUploadDto {
   @Max(10 * 1024 * 1024)
   byteLength!: number;
 
-  @IsIn(['ORDER', 'PROVIDER_TOOL'])
-  scope!: 'ORDER' | 'PROVIDER_TOOL';
+  @IsIn(['ORDER', 'PROVIDER_TOOL', 'INSPECTION'])
+  scope!: 'ORDER' | 'PROVIDER_TOOL' | 'INSPECTION';
 }

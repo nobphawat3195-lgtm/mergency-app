@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app_state.dart';
+import 'inspection_report_screen.dart';
 
 class OrderTrackingScreen extends StatefulWidget {
   const OrderTrackingScreen({super.key, required this.orderId});
@@ -195,6 +196,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
               children: [
                 _StatusCard(order: order),
                 const SizedBox(height: FixGoSpacing.md),
+                if (order.isInspection && order.inspection != null) ...[
+                  _InspectionCard(order: order),
+                  const SizedBox(height: FixGoSpacing.md),
+                ],
                 if (order.provider != null) _ProviderCard(order: order),
                 const SizedBox(height: FixGoSpacing.md),
                 if (order.quoteStatus != QuoteStatus.notRequested) ...[
@@ -426,7 +431,8 @@ class _ProviderCard extends StatelessWidget {
                 final uri = Uri(scheme: 'tel', path: provider.phone);
                 if (!await launchUrl(uri) && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('ไม่สามารถเปิดแอปโทรศัพท์ได้')),
+                    const SnackBar(
+                        content: Text('ไม่สามารถเปิดแอปโทรศัพท์ได้')),
                   );
                 }
               },
@@ -581,6 +587,75 @@ class _PriceCard extends StatelessWidget {
                 fontWeight: FontWeight.w900,
                 color: FixGoColors.navy,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InspectionCard extends StatelessWidget {
+  const _InspectionCard({required this.order});
+
+  final Order order;
+
+  @override
+  Widget build(BuildContext context) {
+    final report = order.inspection!;
+    final submitted = report.isSubmitted;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(FixGoSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Image.asset(categoryIconAsset('inspection'), height: 56),
+                const SizedBox(width: FixGoSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        report.vehicleTitle,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      if (report.appointmentAt != null)
+                        Text(
+                          'นัดตรวจ ${formatThaiDateTime(report.appointmentAt!)}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      if (submitted && report.grade != null)
+                        Text(
+                          'เกรด ${report.grade} · ${report.score}/100 · '
+                          '${inspectionVerdictLabel(report.verdict!)}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: FixGoColors.accent,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: FixGoSpacing.md),
+            FixGoButton(
+              label: submitted ? 'ดูรายงานตรวจรถ' : 'รอช่างตรวจให้ครบ 134 จุด',
+              icon: Icons.fact_check_outlined,
+              onPressed: submitted
+                  ? () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) =>
+                              InspectionReportScreen(orderId: order.id),
+                        ),
+                      )
+                  : null,
             ),
           ],
         ),

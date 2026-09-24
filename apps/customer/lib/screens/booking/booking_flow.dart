@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_state.dart';
 import '../order_tracking_screen.dart';
+import 'inspection_booking_card.dart';
 
 /// Booking wizard 4 ขั้นตอน: บริการ -> บริการย่อย -> ประเภทรถ -> ยืนยัน
 class BookingFlow extends StatefulWidget {
@@ -32,6 +33,9 @@ class _BookingFlowState extends State<BookingFlow> {
   String _note = '';
   final List<String> _photoUrls = [];
   bool _uploadingPhotos = false;
+  InspectionBooking _inspection = const InspectionBooking();
+
+  bool get _isInspection => _category?.slug == 'used-car-inspection';
 
   @override
   void initState() {
@@ -107,6 +111,12 @@ class _BookingFlowState extends State<BookingFlow> {
     final subService = _subService;
     final vehicleType = _vehicleType;
     if (category == null || subService == null || vehicleType == null) return;
+    if (_isInspection && _inspection.appointmentAt == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('เลือกวันและเวลานัดตรวจรถก่อน')),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
@@ -127,6 +137,7 @@ class _BookingFlowState extends State<BookingFlow> {
         pickupAddress: location.address,
         note: _note.trim().isEmpty ? null : _note.trim(),
         photoUrls: _photoUrls,
+        inspection: _isInspection ? _inspection : null,
       );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
@@ -208,6 +219,12 @@ class _BookingFlowState extends State<BookingFlow> {
           uploadingPhotos: _uploadingPhotos,
           onAddPhotos: _pickPhotos,
           onRemovePhoto: (url) => setState(() => _photoUrls.remove(url)),
+          header: _isInspection
+              ? InspectionBookingCard(
+                  value: _inspection,
+                  onChanged: (value) => setState(() => _inspection = value),
+                )
+              : null,
         );
     }
   }
@@ -507,8 +524,11 @@ class _ConfirmStep extends StatefulWidget {
     required this.uploadingPhotos,
     required this.onAddPhotos,
     required this.onRemovePhoto,
+    this.header,
   });
 
+  /// ส่วนเพิ่มเติมเฉพาะบางหมวด เช่น ข้อมูลรถที่จะตรวจของงานตรวจรถมือสอง
+  final Widget? header;
   final ServiceCategory category;
   final SubService subService;
   final VehicleType vehicleType;
@@ -545,7 +565,8 @@ class _ConfirmStepState extends State<_ConfirmStep> {
       'api': '1',
       'query': '${location.latitude},${location.longitude}',
     });
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ไม่สามารถเปิด Google Maps ได้')),
       );
@@ -569,6 +590,10 @@ class _ConfirmStepState extends State<_ConfirmStep> {
           child: ListView(
             padding: const EdgeInsets.all(FixGoSpacing.md),
             children: [
+              if (widget.header != null) ...[
+                widget.header!,
+                const SizedBox(height: FixGoSpacing.md),
+              ],
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(FixGoSpacing.md),
@@ -630,7 +655,9 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                                   )
                                 : const Icon(Icons.add_a_photo_outlined),
                             label: Text(
-                              widget.uploadingPhotos ? 'กำลังอัปโหลด' : 'เพิ่มรูป',
+                              widget.uploadingPhotos
+                                  ? 'กำลังอัปโหลด'
+                                  : 'เพิ่มรูป',
                             ),
                           ),
                         ],
