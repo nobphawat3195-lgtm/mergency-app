@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -49,12 +48,12 @@ export class PaymentsService {
    * สร้าง QR พร้อมเพย์สำหรับออเดอร์ที่ปิดงานแล้ว
    *
    * การแสดง QR ไม่ใช่การชำระสำเร็จ สถานะเปลี่ยนเป็น PAID ได้เฉพาะจาก webhook ที่ตรวจลายเซ็น
-   * ของ gateway แล้ว (markPaidFromGateway) หรือช่างยืนยันรับเงินสด
+   * ของ gateway แล้ว (markPaidFromGateway)
    */
   async createPromptPayCharge(orderId: string): Promise<PromptPayCharge> {
     if (this.gateway.name === 'stub' && process.env.NODE_ENV === 'production') {
       throw new ServiceUnavailableException(
-        'พร้อมเพย์ออนไลน์ยังไม่เปิดใช้งาน กรุณาเลือกชำระเงินสดกับช่าง',
+        'พร้อมเพย์ออนไลน์ยังไม่เปิดใช้งาน กรุณาติดต่อฝ่ายช่วยเหลือ',
       );
     }
     const payment = await this.prisma.payment.findUnique({
@@ -85,7 +84,7 @@ export class PaymentsService {
         `สร้าง QR พร้อมเพย์ไม่สำเร็จ (${orderId}): ${String(error)}`,
       );
       throw new ServiceUnavailableException(
-        'สร้าง QR พร้อมเพย์ไม่สำเร็จ กรุณาลองใหม่ หรือชำระเงินสดกับช่าง',
+        'สร้าง QR พร้อมเพย์ไม่สำเร็จ กรุณาลองใหม่หรือติดต่อฝ่ายช่วยเหลือ',
       );
     }
 
@@ -163,31 +162,6 @@ export class PaymentsService {
       amountReceived: payment.amount,
       currency: 'thb',
     });
-  }
-
-  async confirmCashPayment(orderId: string, providerId: string): Promise<void> {
-    const payment = await this.prisma.payment.findUnique({
-      where: { orderId },
-      include: { order: true },
-    });
-    if (!payment) throw new NotFoundException('ไม่พบรายการชำระเงินนี้');
-    if (payment.order.providerId !== providerId) {
-      throw new ForbiddenException('ยืนยันการรับเงินของงานคนอื่นไม่ได้');
-    }
-    if (payment.order.status !== OrderStatus.COMPLETED) {
-      throw new BadRequestException('ยืนยันรับเงินได้หลังปิดงานแล้วเท่านั้น');
-    }
-    if (payment.status === PaymentStatus.PAID) return;
-
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        method: PaymentMethod.CASH,
-        status: PaymentStatus.PAID,
-        paidAt: new Date(),
-      },
-    });
-    await this.wallet.creditOrderEarning(orderId);
   }
 
   getPaymentByOrder(orderId: string) {

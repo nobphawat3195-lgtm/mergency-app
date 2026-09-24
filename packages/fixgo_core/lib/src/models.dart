@@ -264,7 +264,7 @@ class Order {
 
   bool get isInspection => categorySlug == 'used-car-inspection';
 
-  /// ชำระสำเร็จเมื่อ backend ยืนยันแล้วเท่านั้น (webhook ผู้ให้บริการรับชำระ หรือช่างยืนยันรับเงินสด)
+  /// ชำระสำเร็จเมื่อ backend ยืนยันผ่าน webhook ของผู้ให้บริการรับชำระเท่านั้น
   bool get isPaid => paymentStatus == 'PAID';
 
   factory Order.fromJson(Map<String, dynamic> json) {

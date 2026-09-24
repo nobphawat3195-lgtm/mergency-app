@@ -410,9 +410,5 @@ class FixGoApiClient {
     );
   }
 
-  Future<void> confirmCashPayment(String orderId) async {
-    await _send('POST', '/payments/orders/$orderId/cash/confirm');
-  }
-
   void dispose() => _http.close();
 }

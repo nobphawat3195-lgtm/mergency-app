@@ -134,33 +134,6 @@ class _JobsScreenState extends State<JobsScreen> {
     await _run(() => ProviderAppScope.of(context).api.completeJob(order.id));
   }
 
-  Future<void> _confirmCash(Order order) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('ยืนยันรับเงินสด'),
-        content: Text(
-          'คุณได้รับเงินสด ${formatSatang(order.priceFinal ?? order.priceProposed ?? 0)} '
-          'จากลูกค้าเรียบร้อยแล้วใช่ไหม',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยังไม่ได้รับ'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ได้รับแล้ว'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    await _run(
-      () => ProviderAppScope.of(context).api.confirmCashPayment(order.id),
-    );
-  }
-
   Future<void> _openInspection(Order order) async {
     await Navigator.of(context).push(
       MaterialPageRoute<bool>(
@@ -262,12 +235,6 @@ class _JobsScreenState extends State<JobsScreen> {
               fontWeight: FontWeight.w600,
               color: FixGoColors.warning,
             ),
-          ),
-          const SizedBox(height: FixGoSpacing.sm),
-          FixGoButton(
-            label: 'ยืนยันว่าได้รับเงินสดแล้ว',
-            icon: Icons.payments_outlined,
-            onPressed: () => _confirmCash(order),
           ),
         ],
       );

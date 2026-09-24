@@ -144,25 +144,6 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     }
   }
 
-  void _showCashInstructions() {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('ชำระเงินสดกับช่าง'),
-        content: const Text(
-          'ชำระตามราคาที่คุณยืนยันไว้ และให้ช่างกด “ได้รับเงินสดแล้ว” '
-          'สถานะการชำระเงินจะอัปเดตในหน้านี้อัตโนมัติ',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('เข้าใจแล้ว'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final order = _order;
@@ -225,11 +206,6 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                     label: 'ชำระเงินผ่านพร้อมเพย์',
                     icon: Icons.qr_code_2,
                     onPressed: _pay,
-                  ),
-                  const SizedBox(height: FixGoSpacing.sm),
-                  FixGoSecondaryButton(
-                    label: 'ชำระเงินสดกับช่าง',
-                    onPressed: _showCashInstructions,
                   ),
                 ],
                 if (order.status == OrderStatus.completed) ...[
@@ -693,7 +669,7 @@ class _PaymentPendingBanner extends StatelessWidget {
                   compact
                       ? 'หลังโอนแล้ว สถานะจะเปลี่ยนเมื่อระบบได้รับการยืนยันยอดเงินเท่านั้น'
                       : 'ยังไม่ได้รับการยืนยันการชำระเงิน สถานะจะเปลี่ยนเป็น "ชำระแล้ว" '
-                          'เมื่อผู้ให้บริการรับชำระยืนยันยอด หรือช่างยืนยันรับเงินสด',
+                          'เมื่อผู้ให้บริการรับชำระยืนยันยอด',
                   style: const TextStyle(fontSize: 13, height: 1.4),
                 ),
               ],
