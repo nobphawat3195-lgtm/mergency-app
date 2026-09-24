@@ -95,6 +95,7 @@ const CATEGORIES = [
       },
     ],
   },
+  // ราคาหมวดแบต ยาง กุญแจ อิงตามแอป 24CarFix (ภาพหน้าจอจากเจ้าของโปรเจกต์ ก.ย. 2569)
   {
     slug: 'battery',
     name: 'ช่างแบตเตอรี่รถยนต์',
@@ -102,15 +103,27 @@ const CATEGORIES = [
     sortOrder: 3,
     subServices: [
       {
-        name: 'พ่วงแบตเตอรี่ (จั๊มแบต)',
-        description: 'บริการพ่วงแบตนอกสถานที่',
-        basePrice: baht(499),
+        name: 'เรียกช่างให้ไปดูก่อน จ่ายเงินหน้างาน',
+        description: 'ช่างไปดูอาการและประเมินราคาซ่อมหน้างาน',
+        basePrice: baht(535),
+        priceType: PriceType.CALL_OUT_FEE,
+      },
+      {
+        name: 'จั๊มแบต (นอกสถานที่)',
+        description: 'พ่วงแบตให้สตาร์ทติด ค่าบริการเบื้องต้น',
+        basePrice: baht(535),
         priceType: PriceType.FULL_SERVICE,
       },
       {
-        name: 'เปลี่ยนแบตเตอรี่นอกสถานที่',
-        description: 'ค่าบริการเริ่มต้น ไม่รวมค่าแบตเตอรี่',
-        basePrice: baht(749),
+        name: 'เปลี่ยนแบต (ช่างนำแบตไปติดตั้ง)',
+        description: 'ค่าบริการเริ่มต้น ไม่รวมค่าแบต ช่างแจ้งราคาแบตตามรุ่นให้ยืนยันก่อน',
+        basePrice: baht(428),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'เปลี่ยนแบต (ลูกค้ามีแบตแล้ว)',
+        description: 'จ่ายเฉพาะค่าแรงติดตั้ง',
+        basePrice: baht(442),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
@@ -122,15 +135,39 @@ const CATEGORIES = [
     sortOrder: 4,
     subServices: [
       {
-        name: 'ปะยางนอกสถานที่',
-        description: 'ค่าบริการเริ่มต้นต่อเส้น',
-        basePrice: baht(499),
+        name: 'เรียกช่างให้ไปดูก่อน จ่ายเงินหน้างาน',
+        description: 'ช่างตรวจยางและล้อหน้างานแล้วเสนอราคา',
+        basePrice: baht(856),
+        priceType: PriceType.CALL_OUT_FEE,
+      },
+      {
+        name: 'ปะยางตัวหนอน (นอกสถานที่)',
+        description: 'ซ่อมรอยรั่วขนาดเล็กบริเวณหน้ายาง',
+        basePrice: baht(856),
         priceType: PriceType.FULL_SERVICE,
       },
       {
-        name: 'เปลี่ยนยางอะไหล่',
-        description: 'ค่าบริการเปลี่ยนยางอะไหล่หน้างาน',
-        basePrice: baht(499),
+        name: 'เปลี่ยนยาง (นอกสถานที่)',
+        description: 'ถอดยางเดิมและติดตั้งยางใหม่ ไม่รวมค่ายาง',
+        basePrice: baht(856),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'ปะยางสตรีมเย็น (นอกสถานที่)',
+        description: 'ซ่อมรอยรั่วหน้ายางแบบสตรีมเย็น',
+        basePrice: baht(1070),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'ปะยางสตรีมร้อน (นอกสถานที่)',
+        description: 'ซ่อมรอยรั่วแบบสตรีมร้อน ช่างตรวจสภาพยางก่อนว่าซ่อมได้ปลอดภัย',
+        basePrice: baht(1391),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'เปลี่ยนยางอะไหล่ (นอกสถานที่)',
+        description: 'เปลี่ยนเป็นยางอะไหล่ของลูกค้า ให้ขับไปร้านยางได้',
+        basePrice: baht(749),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
@@ -142,9 +179,45 @@ const CATEGORIES = [
     sortOrder: 5,
     subServices: [
       {
-        name: 'เปิดรถกรณีกุญแจค้างในรถ',
-        description: 'ค่าบริการเริ่มต้น',
-        basePrice: baht(1177),
+        name: 'เรียกช่างให้ไปดูก่อน',
+        description: 'ช่างไปดูอาการหน้างานและประเมินราคา',
+        basePrice: baht(856),
+        priceType: PriceType.CALL_OUT_FEE,
+      },
+      {
+        name: 'สะเดาะล็อครถ (เปิดรถจากภายนอก)',
+        description: 'เปิดรถจากภายนอก ไม่รวมทำกุญแจใหม่',
+        basePrice: baht(1070),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'เปิดรถยนต์ฉุกเฉิน (นอกสถานที่)',
+        description: 'ลืมกุญแจไว้ในรถ กุญแจหาย หรือระบบล็อกขัดข้อง',
+        basePrice: baht(1070),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'ทำกุญแจรถยนต์ (นอกสถานที่)',
+        description: 'ทำกุญแจใหม่ที่จุดจอดรถ กรณีกุญแจหาย ชำรุด หรือทำดอกสำรอง',
+        basePrice: baht(1926),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'โปรแกรมกุญแจ Immobilizer (นอกสถานที่)',
+        description: 'ลงทะเบียนชิปกุญแจเข้ากับระบบกันขโมยของรถ',
+        basePrice: baht(2996),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'โปรแกรม Smart Key (นอกสถานที่)',
+        description: 'ลงทะเบียน Smart Key เข้ากับระบบ Keyless และระบบสตาร์ท',
+        basePrice: baht(4173),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'โปรแกรมรีโมทรถยนต์ (นอกสถานที่)',
+        description: 'ลงทะเบียนรีโมทเข้ากับระบบล็อก/ปลดล็อก',
+        basePrice: baht(2461),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
@@ -246,7 +319,7 @@ async function main(): Promise<void> {
       if (existing) {
         await prisma.subService.update({
           where: { id: existing.id },
-          data: { ...subService, sortOrder: index + 1 },
+          data: { ...subService, sortOrder: index + 1, active: true },
         });
       } else {
         await prisma.subService.create({
@@ -254,6 +327,15 @@ async function main(): Promise<void> {
         });
       }
     }
+
+    // บริการย่อยที่เลิกขายแล้วลบไม่ได้ถ้ามีออเดอร์อ้างอิง จึงปิดการแสดงแทน
+    await prisma.subService.updateMany({
+      where: {
+        categoryId: saved.id,
+        name: { notIn: subServices.map((subService) => subService.name) },
+      },
+      data: { active: false },
+    });
   }
 
   console.log('seed เสร็จเรียบร้อย');
