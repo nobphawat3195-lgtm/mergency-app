@@ -88,44 +88,26 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
   Future<void> _pay() async {
     try {
-      final charge = await AppStateScope.of(context)
-          .api
-          .createPromptPayCharge(widget.orderId);
+      final api = AppStateScope.of(context).api;
+      final charge = await api.createPromptPayCharge(widget.orderId);
       if (!mounted) return;
-      showDialog<void>(
+      final paid = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('สแกนจ่ายด้วยพร้อมเพย์'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const _PaymentPendingBanner(compact: true),
-              const SizedBox(height: FixGoSpacing.md),
-              QrImageView(
-                data: charge.qrPayload,
-                size: 200,
-                backgroundColor: Colors.white,
-              ),
-              const SizedBox(height: FixGoSpacing.md),
-              Text(
-                formatSatang(charge.amount),
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('ปิด'),
-            ),
-          ],
+        builder: (_) => _PromptPayDialog(
+          api: api,
+          orderId: widget.orderId,
+          qrPayload: charge.qrPayload,
+          amount: charge.amount,
+          expiresAt: charge.expiresAt,
         ),
       );
-      // ปิด QR แล้วดึงสถานะใหม่ แต่ไม่ถือว่าจ่ายแล้วจนกว่า backend จะตอบ PAID
-      unawaited(_refresh());
+      // ดึงสถานะใหม่เสมอ แต่ถือว่าจ่ายแล้วเฉพาะเมื่อ backend ตอบ PAID
+      await _refresh();
+      if (paid == true && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ชำระเงินเรียบร้อย ขอบคุณที่ใช้บริการ')),
+        );
+      }
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -835,6 +817,106 @@ class _FeedbackCardState extends State<_FeedbackCard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// QR พร้อมเพย์: ตรวจสถานะจาก backend ทุก 4 วินาที ปิดเองเมื่อผู้ให้บริการรับชำระยืนยันยอดแล้ว
+class _PromptPayDialog extends StatefulWidget {
+  const _PromptPayDialog({
+    required this.api,
+    required this.orderId,
+    required this.qrPayload,
+    required this.amount,
+    required this.expiresAt,
+  });
+
+  final FixGoApiClient api;
+  final String orderId;
+  final String qrPayload;
+  final int amount;
+  final DateTime? expiresAt;
+
+  @override
+  State<_PromptPayDialog> createState() => _PromptPayDialogState();
+}
+
+class _PromptPayDialogState extends State<_PromptPayDialog> {
+  Timer? _timer;
+  bool _checking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 4), (_) => _check());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _check() async {
+    if (_checking) return;
+    _checking = true;
+    try {
+      final order = await widget.api.getOrder(widget.orderId);
+      if (order.isPaid && mounted) Navigator.of(context).pop(true);
+    } on ApiException {
+      // เน็ตหลุดชั่วคราว รอบหน้าลองใหม่
+    } finally {
+      _checking = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final expires = widget.expiresAt;
+    return AlertDialog(
+      title: const Text('สแกนจ่ายด้วยพร้อมเพย์'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _PaymentPendingBanner(compact: true),
+          const SizedBox(height: FixGoSpacing.md),
+          QrImageView(
+            data: widget.qrPayload,
+            size: 200,
+            backgroundColor: Colors.white,
+          ),
+          const SizedBox(height: FixGoSpacing.md),
+          Text(
+            formatSatang(widget.amount),
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
+          ),
+          if (expires != null)
+            Text(
+              'QR ใช้ได้ถึง ${expires.hour.toString().padLeft(2, '0')}:${expires.minute.toString().padLeft(2, '0')} น.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          const SizedBox(height: FixGoSpacing.sm),
+          const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 14,
+                width: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 8),
+              Text('กำลังรอการยืนยันยอดเงิน...',
+                  style: TextStyle(fontSize: 13)),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('ปิด'),
+        ),
+      ],
     );
   }
 }

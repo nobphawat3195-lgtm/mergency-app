@@ -394,18 +394,19 @@ class FixGoApiClient {
 
   // ---------- Payments (ลูกค้า) ----------
 
-  Future<({String chargeId, String qrPayload, int amount})>
-      createPromptPayCharge(
-    String orderId,
-  ) async {
+  /// ขอ QR พร้อมเพย์ การได้ QR ไม่ใช่การชำระสำเร็จ ต้องรอ backend ยืนยันจาก gateway
+  Future<({String chargeId, String qrPayload, int amount, DateTime? expiresAt})>
+      createPromptPayCharge(String orderId) async {
     final result = await _send(
       'POST',
       '/payments/orders/$orderId/promptpay',
     ) as Map<String, dynamic>;
+    final expires = result['expiresAt'] as String?;
     return (
       chargeId: result['chargeId'] as String,
       qrPayload: result['qrPayload'] as String,
       amount: result['amount'] as int,
+      expiresAt: expires == null ? null : DateTime.parse(expires).toLocal(),
     );
   }
 

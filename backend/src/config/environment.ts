@@ -31,7 +31,6 @@ export function validateEnvironment(
     'DATABASE_URL',
     'JWT_SECRET',
     'OTP_SECRET',
-    'PAYMENT_WEBHOOK_SECRET',
     'S3_BUCKET',
     'S3_ACCESS_KEY_ID',
     'S3_SECRET_ACCESS_KEY',
@@ -60,6 +59,34 @@ export function validateEnvironment(
   ] as const) {
     if (!String(config[name] ?? '').trim()) {
       throw new Error(`${name} is required in production`);
+    }
+  }
+
+  const paymentProvider = String(config.PAYMENT_PROVIDER ?? 'stub').trim();
+  if (paymentProvider === 'stripe') {
+    for (const name of [
+      'STRIPE_SECRET_KEY',
+      'STRIPE_WEBHOOK_SECRET',
+    ] as const) {
+      if (!String(config[name] ?? '').trim()) {
+        throw new Error(`${name} is required when PAYMENT_PROVIDER=stripe`);
+      }
+    }
+    if (
+      !String(config.STRIPE_BILLING_EMAIL ?? '').trim() &&
+      !String(config.LEGAL_CONTACT_EMAIL ?? '').trim()
+    ) {
+      throw new Error(
+        'STRIPE_BILLING_EMAIL (or LEGAL_CONTACT_EMAIL) is required for Stripe PromptPay',
+      );
+    }
+  } else {
+    // gateway stub ปิดพร้อมเพย์ใน production อยู่แล้ว แต่ webhook HMAC เดิมยังต้องมี secret จริง
+    const secret = String(config.PAYMENT_WEBHOOK_SECRET ?? '').trim();
+    if (!secret || PLACEHOLDER_VALUES.has(secret)) {
+      throw new Error(
+        'PAYMENT_WEBHOOK_SECRET is required and must not use a placeholder in production',
+      );
     }
   }
 

@@ -59,4 +59,41 @@ describe('environment safety', () => {
       expect(reviewLoginCodeFor('0800000001')).toBeNull();
     });
   });
+
+  describe('payment provider', () => {
+    const base = {
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgresql://example',
+      JWT_SECRET: 'real-jwt',
+      OTP_SECRET: 'real-otp',
+      S3_BUCKET: 'b',
+      S3_ACCESS_KEY_ID: 'k',
+      S3_SECRET_ACCESS_KEY: 's',
+      S3_PUBLIC_BASE_URL: 'https://cdn.example.com',
+      CORS_ORIGIN: 'https://app.example.com',
+      SMS_PROVIDER: 'twilio',
+      TWILIO_ACCOUNT_SID: 'a',
+      TWILIO_AUTH_TOKEN: 't',
+      TWILIO_FROM: '+1',
+    };
+
+    it('requires Stripe keys when PAYMENT_PROVIDER=stripe', () => {
+      expect(() =>
+        validateEnvironment({ ...base, PAYMENT_PROVIDER: 'stripe' }),
+      ).toThrow('STRIPE_SECRET_KEY');
+      expect(() =>
+        validateEnvironment({
+          ...base,
+          PAYMENT_PROVIDER: 'stripe',
+          STRIPE_SECRET_KEY: 'sk_test_x',
+          STRIPE_WEBHOOK_SECRET: 'whsec_x',
+          STRIPE_BILLING_EMAIL: 'pay@fixgo.test',
+        }),
+      ).not.toThrow();
+    });
+
+    it('still requires the HMAC webhook secret for the stub gateway', () => {
+      expect(() => validateEnvironment(base)).toThrow('PAYMENT_WEBHOOK_SECRET');
+    });
+  });
 });
