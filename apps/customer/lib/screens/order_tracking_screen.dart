@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app_state.dart';
 
@@ -18,6 +20,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   Order? _order;
   String? _error;
   Timer? _pollTimer;
+  bool _respondingToQuote = false;
 
   @override
   void didChangeDependencies() {
@@ -95,8 +98,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // TODO: แสดง QR จริงหลังต่อ payment gateway (ตอนนี้ backend คืน payload ทดสอบ)
-              const Icon(Icons.qr_code_2, size: 120),
+              QrImageView(
+                data: charge.qrPayload,
+                size: 200,
+                backgroundColor: Colors.white,
+              ),
               const SizedBox(height: FixGoSpacing.md),
               Text(
                 formatSatang(charge.amount),
@@ -122,6 +128,54 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     }
   }
 
+  Future<void> _respondToQuote(bool approved) async {
+    setState(() => _respondingToQuote = true);
+    try {
+      final api = AppStateScope.of(context).api;
+      if (approved) {
+        await api.approveQuote(widget.orderId);
+      } else {
+        await api.rejectQuote(widget.orderId);
+      }
+      await _refresh();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            approved
+                ? 'ยืนยันราคาแล้ว ช่างสามารถเริ่มงานได้'
+                : 'ปฏิเสธราคาแล้ว กรุณาพูดคุยกับช่างเพื่อรับราคาใหม่',
+          ),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => _respondingToQuote = false);
+    }
+  }
+
+  void _showCashInstructions() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ชำระเงินสดกับช่าง'),
+        content: const Text(
+          'ชำระตามราคาที่คุณยืนยันไว้ และให้ช่างกด “ได้รับเงินสดแล้ว” '
+          'สถานะการชำระเงินจะอัปเดตในหน้านี้อัตโนมัติ',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('เข้าใจแล้ว'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final order = _order;
@@ -143,14 +197,49 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                 const SizedBox(height: FixGoSpacing.md),
                 if (order.provider != null) _ProviderCard(order: order),
                 const SizedBox(height: FixGoSpacing.md),
+                if (order.quoteStatus != QuoteStatus.notRequested) ...[
+                  _QuoteCard(
+                    order: order,
+                    responding: _respondingToQuote,
+                    onApprove: () => _respondToQuote(true),
+                    onReject: () => _respondToQuote(false),
+                  ),
+                  const SizedBox(height: FixGoSpacing.md),
+                ],
                 _PriceCard(order: order),
                 const SizedBox(height: FixGoSpacing.lg),
-                if (order.status == OrderStatus.completed)
+                if (order.status == OrderStatus.completed &&
+                    order.paymentStatus == 'PAID')
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(FixGoSpacing.md),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.verified_rounded,
+                            color: FixGoColors.success,
+                          ),
+                          SizedBox(width: FixGoSpacing.sm),
+                          Text(
+                            'ชำระเงินเรียบร้อยแล้ว',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (order.status == OrderStatus.completed) ...[
                   FixGoButton(
                     label: 'ชำระเงินผ่านพร้อมเพย์',
                     icon: Icons.qr_code_2,
                     onPressed: _pay,
                   ),
+                  const SizedBox(height: FixGoSpacing.sm),
+                  FixGoSecondaryButton(
+                    label: 'ชำระเงินสดกับช่าง',
+                    onPressed: _showCashInstructions,
+                  ),
+                ],
                 if (order.status == OrderStatus.searching ||
                     order.status == OrderStatus.created ||
                     order.status == OrderStatus.matched) ...[
@@ -332,8 +421,14 @@ class _ProviderCard extends StatelessWidget {
               ),
             ),
             IconButton.filled(
-              onPressed: () {
-                // TODO: ต่อ url_launcher เพื่อโทรออกจริง
+              tooltip: 'โทรหาช่าง',
+              onPressed: () async {
+                final uri = Uri(scheme: 'tel', path: provider.phone);
+                if (!await launchUrl(uri) && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('ไม่สามารถเปิดแอปโทรศัพท์ได้')),
+                  );
+                }
               },
               icon: const Icon(Icons.phone),
               style: IconButton.styleFrom(
@@ -341,6 +436,99 @@ class _ProviderCard extends StatelessWidget {
                 foregroundColor: Colors.white,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuoteCard extends StatelessWidget {
+  const _QuoteCard({
+    required this.order,
+    required this.responding,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final Order order;
+  final bool responding;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    final proposed = order.priceProposed;
+    final isPending = order.quoteStatus == QuoteStatus.pending;
+    final isApproved = order.quoteStatus == QuoteStatus.approved;
+
+    return Card(
+      color: isPending ? const Color(0xFFFFF8E1) : null,
+      child: Padding(
+        padding: const EdgeInsets.all(FixGoSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isApproved
+                      ? Icons.verified_outlined
+                      : isPending
+                          ? Icons.request_quote_outlined
+                          : Icons.info_outline,
+                  color: isApproved
+                      ? FixGoColors.success
+                      : isPending
+                          ? FixGoColors.warning
+                          : FixGoColors.error,
+                ),
+                const SizedBox(width: FixGoSpacing.sm),
+                Expanded(
+                  child: Text(
+                    isApproved
+                        ? 'คุณยืนยันราคานี้แล้ว'
+                        : isPending
+                            ? 'ช่างส่งราคาให้ยืนยัน'
+                            : 'คุณปฏิเสธราคานี้แล้ว',
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (proposed != null)
+                  Text(
+                    formatSatang(proposed),
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+              ],
+            ),
+            if (order.quoteNote != null && order.quoteNote!.isNotEmpty) ...[
+              const SizedBox(height: FixGoSpacing.sm),
+              Text(order.quoteNote!),
+            ],
+            if (isPending) ...[
+              const SizedBox(height: FixGoSpacing.md),
+              const Text(
+                'ตรวจสอบรายการให้ครบก่อนกดยืนยัน ช่างจะเริ่มงานได้หลังจากคุณยืนยันเท่านั้น',
+              ),
+              const SizedBox(height: FixGoSpacing.md),
+              FixGoButton(
+                label: 'ยืนยันราคาและให้เริ่มงาน',
+                loading: responding,
+                onPressed: onApprove,
+              ),
+              const SizedBox(height: FixGoSpacing.sm),
+              FixGoSecondaryButton(
+                label: 'ยังไม่ยืนยัน ขอคุยกับช่าง',
+                destructive: true,
+                onPressed: responding ? null : onReject,
+              ),
+            ],
           ],
         ),
       ),
@@ -356,6 +544,11 @@ class _PriceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFinal = order.priceFinal != null;
+    final displayPrice = order.priceFinal ??
+        (order.quoteStatus == QuoteStatus.approved
+            ? order.priceProposed
+            : null) ??
+        order.priceEstimated;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(FixGoSpacing.md),
@@ -371,14 +564,18 @@ class _PriceCard extends StatelessWidget {
                   ),
                   const SizedBox(height: FixGoSpacing.xs),
                   Text(
-                    isFinal ? 'ราคาสุทธิ' : 'ราคาประเมิน',
+                    isFinal
+                        ? 'ราคาสุทธิ'
+                        : order.quoteStatus == QuoteStatus.approved
+                            ? 'ราคาที่คุณยืนยัน'
+                            : 'ราคาประเมิน',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),
             ),
             Text(
-              formatSatang(order.priceFinal ?? order.priceEstimated),
+              formatSatang(displayPrice),
               style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w900,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/widgets.dart';
 
@@ -14,17 +16,36 @@ class AppState extends ChangeNotifier {
   AppState({required this.api});
 
   final FixGoApiClient api;
+  final SecureTokenStore _tokenStore =
+      const SecureTokenStore('fixgo_customer_access_token');
 
   bool get isSignedIn => api.accessToken != null;
 
   void signIn(String token) {
     api.accessToken = token;
+    unawaited(_tokenStore.write(token));
     notifyListeners();
   }
 
   void signOut() {
     api.accessToken = null;
+    unawaited(_tokenStore.clear());
     notifyListeners();
+  }
+
+  Future<void> restoreSession() async {
+    final token = await _tokenStore.read();
+    if (token == null || token.isEmpty) return;
+    api.accessToken = token;
+    try {
+      // ตรวจว่า token ยังใช้ได้และเป็นบัญชีที่เข้าถึงข้อมูลของตัวเองได้
+      await api.listMyOrders();
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        api.accessToken = null;
+        await _tokenStore.clear();
+      }
+    }
   }
 
   @override

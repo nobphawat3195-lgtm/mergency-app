@@ -170,9 +170,10 @@ const CATEGORIES = [
     subServices: [
       {
         name: 'ตรวจรถมือสองนอกสถานที่',
-        description: 'ช่างไปตรวจสภาพรถให้ถึงที่ก่อนตัดสินใจซื้อ ราคาเริ่มต้น',
-        basePrice: baht(699),
-        priceType: PriceType.CALL_OUT_FEE,
+        description: 'ตรวจสภาพก่อนซื้อถึงสถานที่ พร้อมรายงานอิเล็กทรอนิกส์ ราคาเดียวทุกประเภทรถ',
+        basePrice: baht(1990),
+        fixedPrice: true,
+        priceType: PriceType.FULL_SERVICE,
       },
     ],
   },

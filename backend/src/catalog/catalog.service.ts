@@ -49,7 +49,9 @@ export class CatalogService {
     if (!vehicleType) throw new NotFoundException('ไม่พบประเภทรถนี้');
 
     return {
-      price: Math.round(subService.basePrice * vehicleType.multiplier),
+      price: subService.fixedPrice
+        ? subService.basePrice
+        : Math.round(subService.basePrice * vehicleType.multiplier),
       subServiceId,
       vehicleTypeId,
     };

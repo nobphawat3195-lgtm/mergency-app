@@ -4,14 +4,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { OrderStatus, PaymentStatus } from '@prisma/client';
+import { OrderStatus, PaymentStatus, QuoteStatus, Role } from '@prisma/client';
 import { randomInt } from 'node:crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { DispatchService } from '../dispatch/dispatch.service';
 import { DEFAULT_COMMISSION_RATE } from '../common/constants';
-import { CompleteOrderDto, CreateOrderDto, RateOrderDto } from './dto/order.dto';
+import { CreateOrderDto, ProposeQuoteDto, RateOrderDto } from './dto/order.dto';
 
 /** สถานะที่ช่างเปลี่ยนเองได้ และสถานะก่อนหน้าที่อนุญาต */
 const PROVIDER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus>> = {
@@ -89,6 +89,22 @@ export class OrdersService {
     return order;
   }
 
+  async findAccessibleById(
+    orderId: string,
+    actor: { sub: string; role: Role },
+  ) {
+    const order = await this.findById(orderId);
+    const isOwner =
+      (actor.role === Role.CUSTOMER && order.customerId === actor.sub) ||
+      (actor.role === Role.PROVIDER && order.providerId === actor.sub);
+
+    if (!isOwner) {
+      // ไม่เปิดเผยว่า order id นี้มีอยู่จริงหรือไม่ให้ผู้ใช้คนอื่นทราบ
+      throw new NotFoundException('ไม่พบออเดอร์นี้');
+    }
+    return order;
+  }
+
   listForCustomer(customerId: string) {
     return this.prisma.order.findMany({
       where: { customerId },
@@ -100,7 +116,12 @@ export class OrdersService {
   listForProvider(providerId: string) {
     return this.prisma.order.findMany({
       where: { providerId },
-      include: { category: true, subService: true },
+      include: {
+        category: true,
+        subService: true,
+        photos: true,
+        payment: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -112,11 +133,13 @@ export class OrdersService {
       throw new ForbiddenException('ยกเลิกออเดอร์ของคนอื่นไม่ได้');
     }
     // ยกเลิกได้เฉพาะก่อนช่างเริ่มทำงานจริง
-    if (
-      order.status !== OrderStatus.CREATED &&
-      order.status !== OrderStatus.SEARCHING &&
-      order.status !== OrderStatus.MATCHED
-    ) {
+    const cancellableBeforeWork =
+      order.status === OrderStatus.CREATED ||
+      order.status === OrderStatus.SEARCHING ||
+      order.status === OrderStatus.MATCHED ||
+      (order.status === OrderStatus.EN_ROUTE &&
+        order.quoteStatus !== QuoteStatus.APPROVED);
+    if (!cancellableBeforeWork) {
       throw new BadRequestException('ออเดอร์นี้ยกเลิกไม่ได้แล้ว');
     }
 
@@ -142,18 +165,74 @@ export class OrdersService {
       throw new BadRequestException('เปลี่ยนสถานะจากขั้นตอนปัจจุบันไม่ได้');
     }
 
+    if (
+      next === OrderStatus.IN_PROGRESS &&
+      order.quoteStatus !== QuoteStatus.APPROVED
+    ) {
+      throw new BadRequestException('ต้องให้ลูกค้ายืนยันราคาก่อนเริ่มงาน');
+    }
+
     return this.prisma.order.update({
       where: { id: orderId },
       data: { status: next },
     });
   }
 
-  /** ช่างปิดงานพร้อมกรอกราคาสุดท้าย ระบบสร้างรายการชำระเงินรอลูกค้าจ่าย */
-  async completeByProvider(
+  async proposeQuote(
     providerId: string,
     orderId: string,
-    dto: CompleteOrderDto,
+    dto: ProposeQuoteDto,
   ) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
+    if (order.providerId !== providerId) {
+      throw new ForbiddenException('ออเดอร์นี้ไม่ใช่ของคุณ');
+    }
+    if (order.status !== OrderStatus.EN_ROUTE) {
+      throw new BadRequestException('เสนอราคาได้เมื่อเดินทางถึงขั้นตอนหน้างาน');
+    }
+
+    return this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        priceProposed: dto.priceProposed,
+        quoteNote: dto.note,
+        quoteStatus: QuoteStatus.PENDING,
+        quoteProposedAt: new Date(),
+        quoteRespondedAt: null,
+      },
+    });
+  }
+
+  async respondToQuote(
+    customerId: string,
+    orderId: string,
+    approved: boolean,
+  ) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
+    if (order.customerId !== customerId) {
+      throw new ForbiddenException('ยืนยันราคาของออเดอร์คนอื่นไม่ได้');
+    }
+    if (
+      order.status !== OrderStatus.EN_ROUTE ||
+      order.quoteStatus !== QuoteStatus.PENDING ||
+      order.priceProposed === null
+    ) {
+      throw new BadRequestException('ไม่มีราคาที่กำลังรอการยืนยัน');
+    }
+
+    return this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        quoteStatus: approved ? QuoteStatus.APPROVED : QuoteStatus.REJECTED,
+        quoteRespondedAt: new Date(),
+      },
+    });
+  }
+
+  /** ช่างปิดงานด้วยราคาที่ลูกค้ายืนยันแล้ว ระบบสร้างรายการชำระเงินรอลูกค้าจ่าย */
+  async completeByProvider(providerId: string, orderId: string) {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
     if (order.providerId !== providerId) {
@@ -162,24 +241,41 @@ export class OrdersService {
     if (order.status !== OrderStatus.IN_PROGRESS) {
       throw new BadRequestException('ต้องอยู่ในสถานะกำลังดำเนินการก่อนปิดงาน');
     }
+    if (
+      order.quoteStatus !== QuoteStatus.APPROVED ||
+      order.priceProposed === null
+    ) {
+      throw new BadRequestException('ไม่พบราคาที่ลูกค้ายืนยันแล้ว');
+    }
 
-    await this.prisma.$transaction([
-      this.prisma.order.update({
-        where: { id: orderId },
+    await this.prisma.$transaction(async (tx) => {
+      const completed = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          providerId,
+          status: OrderStatus.IN_PROGRESS,
+          quoteStatus: QuoteStatus.APPROVED,
+        },
         data: {
           status: OrderStatus.COMPLETED,
-          priceFinal: dto.priceFinal,
+          priceFinal: order.priceProposed!,
           completedAt: new Date(),
         },
-      }),
-      this.prisma.payment.create({
-        data: {
+      });
+      if (completed.count !== 1) {
+        throw new BadRequestException('ออเดอร์นี้ถูกปิดงานไปแล้ว');
+      }
+
+      await tx.payment.upsert({
+        where: { orderId },
+        create: {
           orderId,
-          amount: dto.priceFinal,
+          amount: order.priceProposed!,
           status: PaymentStatus.PENDING,
         },
-      }),
-    ]);
+        update: { amount: order.priceProposed! },
+      });
+    });
 
     return this.findById(orderId);
   }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -179,8 +180,20 @@ class FixGoApiClient {
 
   // ---------- Provider ----------
 
-  Future<void> registerProvider(Map<String, dynamic> form) async {
-    await _send('POST', '/providers/register', body: form);
+  Future<({String accessToken, bool hasProfile})> registerProvider(
+    Map<String, dynamic> form,
+  ) async {
+    final result = await _send(
+      'POST',
+      '/providers/register',
+      body: form,
+    ) as Map<String, dynamic>;
+    final token = result['accessToken'] as String;
+    accessToken = token;
+    return (
+      accessToken: token,
+      hasProfile: result['hasProfile'] as bool,
+    );
   }
 
   Future<Map<String, dynamic>> getProviderProfile() async {
@@ -196,6 +209,41 @@ class FixGoApiClient {
       'lat': lat,
       'lng': lng,
     });
+  }
+
+  Future<void> sendProviderHeartbeat() async {
+    await _send('POST', '/providers/me/heartbeat');
+  }
+
+  Future<String> uploadImage({
+    required Uint8List bytes,
+    required String fileName,
+    required String contentType,
+    required String scope,
+  }) async {
+    final result = await _send('POST', '/uploads/presign', body: {
+      'fileName': fileName,
+      'contentType': contentType,
+      'byteLength': bytes.length,
+      'scope': scope,
+    }) as Map<String, dynamic>;
+
+    final uploadUrl = result['uploadUrl'] as String;
+    final publicUrl = result['publicUrl'] as String;
+    final uploadHeaders = (result['headers'] as Map<String, dynamic>? ?? const {})
+        .map((key, value) => MapEntry(key, value.toString()));
+    final response = await _http.put(
+      Uri.parse(uploadUrl),
+      headers: uploadHeaders,
+      body: bytes,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        response.statusCode,
+        'อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่',
+      );
+    }
+    return publicUrl;
   }
 
   Future<void> updatePayoutInfo({
@@ -240,10 +288,27 @@ class FixGoApiClient {
     await _send('PATCH', '/orders/$orderId/start');
   }
 
-  Future<void> completeJob(String orderId, int priceFinal) async {
-    await _send('POST', '/orders/$orderId/complete', body: {
-      'priceFinal': priceFinal,
+  Future<void> proposeQuote(
+    String orderId,
+    int priceProposed, {
+    String? note,
+  }) async {
+    await _send('POST', '/orders/$orderId/quote', body: {
+      'priceProposed': priceProposed,
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
     });
+  }
+
+  Future<void> approveQuote(String orderId) async {
+    await _send('POST', '/orders/$orderId/quote/approve');
+  }
+
+  Future<void> rejectQuote(String orderId) async {
+    await _send('POST', '/orders/$orderId/quote/reject');
+  }
+
+  Future<void> completeJob(String orderId) async {
+    await _send('POST', '/orders/$orderId/complete');
   }
 
   // ---------- Wallet (ช่าง) ----------
@@ -276,6 +341,10 @@ class FixGoApiClient {
       qrPayload: result['qrPayload'] as String,
       amount: result['amount'] as int,
     );
+  }
+
+  Future<void> confirmCashPayment(String orderId) async {
+    await _send('POST', '/payments/orders/$orderId/cash/confirm');
   }
 
   void dispose() => _http.close();

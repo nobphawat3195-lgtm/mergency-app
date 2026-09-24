@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>FixGo ใช้ตำแหน่งของคุณเพื่อหาช่างที่ใกล้ที่สุดและแสดงจุดนัดหมายให้ช่างถูกต้อง</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>FixGo ใช้รูปที่คุณเลือกเพื่อส่งอาการรถให้ช่างเตรียมอุปกรณ์ได้ถูกต้อง</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

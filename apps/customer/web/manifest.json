@@ -1,11 +1,11 @@
 {
-    "name": "fixgo_customer",
-    "short_name": "fixgo_customer",
+    "name": "FixGo — เรียกช่างใกล้คุณ",
+    "short_name": "FixGo",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F8FAFC",
+    "theme_color": "#0B1F3A",
+    "description": "เรียกช่างช่วยเหลือรถฉุกเฉินใกล้คุณ พร้อมติดตามงานและยืนยันราคาก่อนเริ่มซ่อม",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -6,7 +6,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../app_state.dart';
 
-/// งานที่ระบบเสนอให้ช่าง — มีเวลา 5 นาทีต่อคนก่อนส่งต่อช่างคนถัดไป
+/// งานที่ระบบเสนอให้ช่างเป็นชุด ช่างคนแรกที่กดรับจะได้งาน
 class OffersScreen extends StatefulWidget {
   const OffersScreen({super.key});
 
@@ -16,17 +16,22 @@ class OffersScreen extends StatefulWidget {
 
 class _OffersScreenState extends State<OffersScreen> {
   List<JobOffer> _offers = const [];
-  bool _isOnline = false;
   bool _loading = true;
   String? _error;
   Timer? _timer;
   StreamSubscription<Position>? _positionSub;
+  bool _restoredTrackingStarted = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_timer != null) return;
     unawaited(_refresh());
+    final state = ProviderAppScope.of(context);
+    if (state.isOnline && !_restoredTrackingStarted) {
+      _restoredTrackingStarted = true;
+      unawaited(_startTrackingLocation());
+    }
     // ดึงงานใหม่ทุก 10 วิ และให้ countdown เดินด้วย
     _timer = Timer.periodic(const Duration(seconds: 10), (_) {
       unawaited(_refresh());
@@ -77,7 +82,9 @@ class _OffersScreenState extends State<OffersScreen> {
 
   Future<void> _refresh() async {
     try {
-      final offers = await ProviderAppScope.of(context).api.listOffers();
+      final state = ProviderAppScope.of(context);
+      if (state.isOnline) await state.api.sendProviderHeartbeat();
+      final offers = await state.api.listOffers();
       if (!mounted) return;
       setState(() {
         _offers = offers;
@@ -97,7 +104,7 @@ class _OffersScreenState extends State<OffersScreen> {
     try {
       await ProviderAppScope.of(context).api.setOnline(value);
       if (!mounted) return;
-      setState(() => _isOnline = value);
+      ProviderAppScope.of(context).setOnline(value);
 
       if (value) {
         await _startTrackingLocation();
@@ -143,6 +150,7 @@ class _OffersScreenState extends State<OffersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isOnline = ProviderAppScope.of(context).isOnline;
     return Scaffold(
       backgroundColor: FixGoColors.surface,
       appBar: AppBar(
@@ -151,15 +159,15 @@ class _OffersScreenState extends State<OffersScreen> {
           Row(
             children: [
               Text(
-                _isOnline ? 'ออนไลน์' : 'ออฟไลน์',
+                isOnline ? 'ออนไลน์' : 'ออฟไลน์',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
-                  color: _isOnline
+                  color: isOnline
                       ? FixGoColors.success
                       : FixGoColors.textSecondary,
                 ),
               ),
-              Switch(value: _isOnline, onChanged: _toggleOnline),
+              Switch(value: isOnline, onChanged: _toggleOnline),
             ],
           ),
         ],
@@ -175,7 +183,7 @@ class _OffersScreenState extends State<OffersScreen> {
                       Center(
                         child: Text(
                           _error ??
-                              (_isOnline
+                              (isOnline
                                   ? 'ยังไม่มีงานเข้ามาตอนนี้'
                                   : 'เปิดสถานะออนไลน์เพื่อเริ่มรับงาน'),
                           textAlign: TextAlign.center,

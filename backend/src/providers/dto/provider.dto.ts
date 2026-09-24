@@ -22,6 +22,11 @@ export class RegisterProviderDto {
   @Length(1, 60)
   nickname!: string;
 
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  experienceYears!: number;
+
   @IsOptional()
   @IsString()
   @Length(1, 160)

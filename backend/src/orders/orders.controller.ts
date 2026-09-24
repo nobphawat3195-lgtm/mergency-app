@@ -10,7 +10,7 @@ import {
 import { OrderStatus, Role } from '@prisma/client';
 
 import { OrdersService } from './orders.service';
-import { CompleteOrderDto, CreateOrderDto, RateOrderDto } from './dto/order.dto';
+import { CreateOrderDto, ProposeQuoteDto, RateOrderDto } from './dto/order.dto';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
 import { JwtPayload } from '../auth/auth.service';
 
@@ -39,8 +39,8 @@ export class OrdersController {
 
   @Get(':id')
   @Roles(Role.CUSTOMER, Role.PROVIDER)
-  findOne(@Param('id') id: string) {
-    return this.orders.findById(id);
+  findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.orders.findAccessibleById(id, user);
   }
 
   @Post(':id/cancel')
@@ -69,14 +69,32 @@ export class OrdersController {
     );
   }
 
-  @Post(':id/complete')
+  @Post(':id/quote')
   @Roles(Role.PROVIDER)
-  complete(
+  proposeQuote(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
-    @Body() dto: CompleteOrderDto,
+    @Body() dto: ProposeQuoteDto,
   ) {
-    return this.orders.completeByProvider(user.sub, id, dto);
+    return this.orders.proposeQuote(user.sub, id, dto);
+  }
+
+  @Post(':id/quote/approve')
+  @Roles(Role.CUSTOMER)
+  approveQuote(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.orders.respondToQuote(user.sub, id, true);
+  }
+
+  @Post(':id/quote/reject')
+  @Roles(Role.CUSTOMER)
+  rejectQuote(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.orders.respondToQuote(user.sub, id, false);
+  }
+
+  @Post(':id/complete')
+  @Roles(Role.PROVIDER)
+  complete(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.orders.completeByProvider(user.sub, id);
   }
 
   @Post(':id/rate')

@@ -59,6 +59,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _refresh() async {
+    setState(() {
+      _categoriesFuture = AppStateScope.of(context).api.listCategories();
+    });
+    await Future.wait([_categoriesFuture!, _fetchLocation()]);
+  }
+
   ServiceCategory? _findCategory(List<ServiceCategory> categories, String key) {
     for (final category in categories) {
       if (category.iconKey == key) return category;
@@ -72,13 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: FixGoColors.surface,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () async {
-            setState(() {
-              _categoriesFuture =
-                  AppStateScope.of(context).api.listCategories();
-            });
-            await _categoriesFuture;
-          },
+          onRefresh: _refresh,
           child: FutureBuilder<List<ServiceCategory>>(
             future: _categoriesFuture,
             builder: (context, snapshot) {
@@ -87,6 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
               final battery = _findCategory(categories, 'battery');
 
               return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.only(bottom: FixGoSpacing.xl),
                 children: [
                   _LocationHeader(
@@ -151,6 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: _CategorySection(
                       snapshot: snapshot,
+                      onRetry: _refresh,
                       onSelected: (category) =>
                           _startBooking(category: category),
                     ),
@@ -601,9 +604,14 @@ class _PromoCarouselState extends State<_PromoCarousel> {
 }
 
 class _CategorySection extends StatelessWidget {
-  const _CategorySection({required this.snapshot, required this.onSelected});
+  const _CategorySection({
+    required this.snapshot,
+    required this.onSelected,
+    required this.onRetry,
+  });
 
   final AsyncSnapshot<List<ServiceCategory>> snapshot;
+  final Future<void> Function() onRetry;
   final ValueChanged<ServiceCategory> onSelected;
 
   @override
@@ -615,11 +623,20 @@ class _CategorySection extends StatelessWidget {
         child: Center(child: CircularProgressIndicator()),
       );
     } else if (snapshot.hasError) {
-      content = const Padding(
-        padding: EdgeInsets.all(FixGoSpacing.md),
-        child: Text(
-          'โหลดรายการบริการไม่สำเร็จ ดึงหน้าจอลงเพื่อลองใหม่',
-          style: TextStyle(color: FixGoColors.error),
+      content = Padding(
+        padding: const EdgeInsets.all(FixGoSpacing.md),
+        child: Column(
+          children: [
+            const Text(
+              'โหลดรายการบริการไม่สำเร็จ',
+              style: TextStyle(color: FixGoColors.error),
+            ),
+            TextButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('ลองใหม่'),
+            ),
+          ],
         ),
       );
     } else {

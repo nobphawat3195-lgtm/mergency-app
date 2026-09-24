@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/widgets.dart';
 
@@ -12,17 +14,22 @@ class ProviderAppState extends ChangeNotifier {
   ProviderAppState({required this.api});
 
   final FixGoApiClient api;
+  final SecureTokenStore _tokenStore =
+      const SecureTokenStore('fixgo_provider_access_token');
 
   bool _hasProfile = false;
+  bool _isOnline = false;
 
   bool get isSignedIn => api.accessToken != null;
 
   /// ช่างที่ยังไม่ได้กรอกแบบฟอร์มลงทะเบียนจะเข้าได้แค่หน้าสมัคร
   bool get hasProfile => _hasProfile;
+  bool get isOnline => _isOnline;
 
   void signIn(String token, {required bool hasProfile}) {
     api.accessToken = token;
     _hasProfile = hasProfile;
+    unawaited(_tokenStore.write(token));
     notifyListeners();
   }
 
@@ -31,10 +38,37 @@ class ProviderAppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setOnline(bool value) {
+    _isOnline = value;
+    notifyListeners();
+  }
+
   void signOut() {
     api.accessToken = null;
     _hasProfile = false;
+    _isOnline = false;
+    unawaited(_tokenStore.clear());
     notifyListeners();
+  }
+
+  Future<void> restoreSession() async {
+    final token = await _tokenStore.read();
+    if (token == null || token.isEmpty) return;
+    api.accessToken = token;
+    try {
+      final profile = await api.getProviderProfile();
+      _hasProfile = true;
+      _isOnline = profile['isOnline'] as bool? ?? false;
+    } on ApiException catch (error) {
+      if (error.statusCode == 404) {
+        _hasProfile = false;
+        return;
+      }
+      if (error.statusCode == 401) {
+        api.accessToken = null;
+        await _tokenStore.clear();
+      }
+    }
   }
 
   @override

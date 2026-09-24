@@ -93,6 +93,24 @@ enum OrderStatus {
   noMatch,
 }
 
+enum QuoteStatus { notRequested, pending, approved, rejected }
+
+QuoteStatus quoteStatusFromJson(String? value) {
+  switch (value) {
+    case 'PENDING':
+      return QuoteStatus.pending;
+    case 'APPROVED':
+      return QuoteStatus.approved;
+    case 'REJECTED':
+      return QuoteStatus.rejected;
+    case 'NOT_REQUESTED':
+    case null:
+      return QuoteStatus.notRequested;
+    default:
+      throw ArgumentError('สถานะใบเสนอราคาไม่รู้จัก: $value');
+  }
+}
+
 OrderStatus orderStatusFromJson(String value) {
   switch (value) {
     case 'CREATED':
@@ -177,10 +195,17 @@ class Order {
     required this.pickupLat,
     required this.pickupLng,
     this.priceFinal,
+    this.priceProposed,
+    this.quoteStatus = QuoteStatus.notRequested,
+    this.quoteNote,
     this.pickupAddress,
+    this.note,
     this.categoryName,
     this.subServiceName,
     this.provider,
+    this.photoUrls = const [],
+    this.paymentStatus,
+    this.paymentMethod,
   });
 
   final String id;
@@ -188,17 +213,29 @@ class Order {
   final OrderStatus status;
   final int priceEstimated;
   final int? priceFinal;
+  final int? priceProposed;
+  final QuoteStatus quoteStatus;
+  final String? quoteNote;
   final double pickupLat;
   final double pickupLng;
   final String? pickupAddress;
+  final String? note;
   final String? categoryName;
   final String? subServiceName;
   final ProviderSummary? provider;
+  final List<String> photoUrls;
+  final String? paymentStatus;
+  final String? paymentMethod;
 
   factory Order.fromJson(Map<String, dynamic> json) {
     final category = json['category'] as Map<String, dynamic>?;
     final subService = json['subService'] as Map<String, dynamic>?;
     final provider = json['provider'] as Map<String, dynamic>?;
+    final payment = json['payment'] as Map<String, dynamic>?;
+    final photos = (json['photos'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map((photo) => photo['url'] as String)
+        .toList();
 
     return Order(
       id: json['id'] as String,
@@ -206,12 +243,19 @@ class Order {
       status: orderStatusFromJson(json['status'] as String),
       priceEstimated: json['priceEstimated'] as int,
       priceFinal: json['priceFinal'] as int?,
+      priceProposed: json['priceProposed'] as int?,
+      quoteStatus: quoteStatusFromJson(json['quoteStatus'] as String?),
+      quoteNote: json['quoteNote'] as String?,
       pickupLat: (json['pickupLat'] as num).toDouble(),
       pickupLng: (json['pickupLng'] as num).toDouble(),
       pickupAddress: json['pickupAddress'] as String?,
+      note: json['note'] as String?,
       categoryName: category?['name'] as String?,
       subServiceName: subService?['name'] as String?,
       provider: provider == null ? null : ProviderSummary.fromJson(provider),
+      photoUrls: photos,
+      paymentStatus: payment?['status'] as String?,
+      paymentMethod: payment?['method'] as String?,
     );
   }
 }

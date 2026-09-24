@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 
@@ -15,48 +17,65 @@ class ProviderShellScreen extends StatefulWidget {
 
 class _ProviderShellScreenState extends State<ProviderShellScreen> {
   int _index = 0;
+  Timer? _heartbeatTimer;
+  late final List<Widget> _pages = const [
+    OffersScreen(),
+    JobsScreen(),
+    WalletScreen(),
+    _ProviderProfileTab(),
+  ];
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+      final state = ProviderAppScope.of(context);
+      if (state.isOnline) {
+        unawaited(state.api.sendProviderHeartbeat());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _heartbeatTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      const OffersScreen(),
-      const JobsScreen(),
-      const WalletScreen(),
-      const _ProviderProfileTab(),
-    ];
-
     return Scaffold(
-      body: pages[_index],
+      body: IndexedStack(index: _index, children: _pages),
       bottomNavigationBar: DecoratedBox(
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: FixGoColors.hairline)),
         ),
         child: NavigationBar(
-          selectedIndex: _index,
-          onDestinationSelected: (value) => setState(() => _index = value),
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.notifications_outlined),
-              selectedIcon: Icon(Icons.notifications),
-              label: 'งานเข้า',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.build_outlined),
-              selectedIcon: Icon(Icons.build),
-              label: 'งานของฉัน',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.account_balance_wallet_outlined),
-              selectedIcon: Icon(Icons.account_balance_wallet),
-              label: 'กระเป๋าเงิน',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person),
-              label: 'โปรไฟล์',
-            ),
-          ],
-        ),
+        selectedIndex: _index,
+        onDestinationSelected: (value) => setState(() => _index = value),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.notifications_outlined),
+            selectedIcon: Icon(Icons.notifications),
+            label: 'งานเข้า',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.build_outlined),
+            selectedIcon: Icon(Icons.build),
+            label: 'งานของฉัน',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            selectedIcon: Icon(Icons.account_balance_wallet),
+            label: 'กระเป๋าเงิน',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'โปรไฟล์',
+          ),
+        ],
+      ),
       ),
     );
   }
@@ -81,8 +100,8 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
   Future<void> _editPayoutInfo(Map<String, dynamic> profile) async {
     final bankNameController =
         TextEditingController(text: profile['bankName'] as String? ?? '');
-    final accountNameController = TextEditingController(
-        text: profile['bankAccountName'] as String? ?? '');
+    final accountNameController =
+        TextEditingController(text: profile['bankAccountName'] as String? ?? '');
     final accountNumberController = TextEditingController(
       text: profile['bankAccountNumber'] as String? ?? '',
     );

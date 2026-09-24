@@ -1,31 +1,49 @@
-/// ไอคอนหมวดบริการแบบ 3D
+import 'package:flutter/material.dart';
+
+/// ไอคอนหมวดบริการแบบ 3D ชุดเดียวกันทั้งแอป (โทนน้ำเงิน-ส้ม ภาพสมจริง)
 ///
-/// - ส่วนใหญ่มาจาก Microsoft Fluent Emoji (MIT License)
-///   ที่มา: https://github.com/microsoft/fluentui-emoji
-///   สัญญาอนุญาตเต็มอยู่ที่ assets/icons/licenses/fluentui-emoji-LICENSE.txt
-/// - `tow.png` (รถสไลด์บรรทุกรถ) และ `tire.png` (ยางรถยนต์) วาดขึ้นใหม่สำหรับ FixGo
-///   เพราะ Fluent ไม่มีรูปที่สื่อความหมายตรง (เดิมใช้รถส่งของ/ล้อเกวียน ผู้ใช้เข้าใจผิด)
+/// - ชุดหลัก 8 รูป: ซ่อมรถ แบตเตอรี่ ยาง กุญแจ น้ำมัน รถยก รถ EV ตรวจรถ
+///   ได้จากเจ้าของโปรเจกต์ ตัดพื้นหลังเป็นโปร่งใสแล้ว (ไฟล์ละ 384x384)
+/// - `electrical.png` (สายฟ้า), `emergency.png` (ไซเรน), `technician.png` (ช่าง)
+///   มาจาก Microsoft Fluent Emoji (MIT) ใช้ชั่วคราวจนกว่าจะมีรูปชุดเดียวกัน
+///   สัญญาอนุญาตอยู่ที่ assets/icons/licenses/fluentui-emoji-LICENSE.txt
 ///
 /// map จาก iconKey ที่ backend ส่งมา เป็น path รูปภายในแพ็กเกจ ใช้กับ Image.asset
 /// เสมอ (ไม่ใช่ AssetImage เฉยๆ) เพราะต้องมี prefix "packages/fixgo_core/" ให้ถูกต้อง
 String categoryIconAsset(String iconKey) {
+  const base = 'packages/fixgo_core/assets/icons';
   switch (iconKey) {
     case 'mechanic':
-      return 'packages/fixgo_core/assets/icons/mechanic.png';
     case 'electrical':
-      return 'packages/fixgo_core/assets/icons/electrical.png';
     case 'battery':
-      return 'packages/fixgo_core/assets/icons/battery.png';
     case 'tire':
-      return 'packages/fixgo_core/assets/icons/tire.png';
     case 'key':
-      return 'packages/fixgo_core/assets/icons/key.png';
     case 'tow':
-      return 'packages/fixgo_core/assets/icons/tow.png';
+    case 'fuel':
+    case 'ev':
     case 'inspection':
-      return 'packages/fixgo_core/assets/icons/inspection.png';
+      return '$base/$iconKey.png';
     default:
-      return 'packages/fixgo_core/assets/icons/default.png';
+      return '$base/mechanic.png';
+  }
+}
+
+/// widget ไอคอนหมวดบริการขนาดคงที่ ใช้ในลิสต์และกริด
+class CategoryIconArt extends StatelessWidget {
+  const CategoryIconArt({super.key, required this.iconKey, this.size = 58});
+
+  final String iconKey;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      categoryIconAsset(iconKey),
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.medium,
+    );
   }
 }
 

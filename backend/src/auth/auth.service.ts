@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -9,6 +11,10 @@ import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { OTP_MAX_ATTEMPTS, OTP_TTL_MS } from '../common/constants';
+import { readSecret } from '../config/environment';
+import { SmsService } from '../notifications/sms.service';
+
+const OTP_REQUEST_COOLDOWN_MS = 60_000;
 
 export interface JwtPayload {
   sub: string;
@@ -21,10 +27,11 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly sms: SmsService,
   ) {}
 
   private hashCode(phone: string, role: Role, code: string): string {
-    const secret = process.env.OTP_SECRET ?? 'dev-otp-secret';
+    const secret = readSecret('OTP_SECRET', 'dev-otp-secret');
     return createHmac('sha256', secret)
       .update(`${phone}:${role}:${code}`)
       .digest('hex');
@@ -35,18 +42,49 @@ export class AuthService {
     phone: string,
     role: Role,
   ): Promise<{ sent: true; devCode?: string }> {
+    const latest = await this.prisma.otpCode.findFirst({
+      where: { phone, role },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    if (
+      latest &&
+      Date.now() - latest.createdAt.getTime() < OTP_REQUEST_COOLDOWN_MS
+    ) {
+      throw new HttpException(
+        'กรุณารอ 60 วินาทีก่อนขอรหัส OTP ใหม่',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
     const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
 
-    await this.prisma.otpCode.create({
-      data: {
-        phone,
-        role,
-        codeHash: this.hashCode(phone, role, code),
-        expiresAt: new Date(Date.now() + OTP_TTL_MS),
-      },
-    });
+    await this.prisma.$transaction([
+      this.prisma.otpCode.updateMany({
+        where: { phone, role, consumed: false },
+        data: { consumed: true },
+      }),
+      this.prisma.otpCode.create({
+        data: {
+          phone,
+          role,
+          codeHash: this.hashCode(phone, role, code),
+          expiresAt: new Date(Date.now() + OTP_TTL_MS),
+        },
+      }),
+    ]);
 
-    // TODO: ต่อ SMS gateway จริงตอน production
+    try {
+      await this.sms.sendOtp(phone, code);
+    } catch (error) {
+      // รหัสที่ส่งไม่สำเร็จต้องใช้ต่อไม่ได้
+      await this.prisma.otpCode.updateMany({
+        where: { phone, role, consumed: false },
+        data: { consumed: true },
+      });
+      throw error;
+    }
+
     return process.env.NODE_ENV === 'production'
       ? { sent: true }
       : { sent: true, devCode: code };
@@ -130,6 +168,11 @@ export class AuthService {
     }
 
     throw new BadRequestException('ผู้ดูแลระบบเข้าสู่ระบบผ่านช่องทางนี้ไม่ได้');
+  }
+
+  /** ออกโทเคนใหม่หลังช่างกรอกโปรไฟล์ เพื่อแทน pending token เดิม */
+  issueProviderSession(phone: string) {
+    return this.issueToken(phone, Role.PROVIDER);
   }
 
   private sign(payload: JwtPayload): Promise<string> {

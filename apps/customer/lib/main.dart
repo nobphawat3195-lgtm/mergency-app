@@ -5,21 +5,26 @@ import 'app_state.dart';
 import 'screens/login_screen.dart';
 import 'screens/shell_screen.dart';
 
-void main() {
-  runApp(const FixGoCustomerApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final appState = AppState(
+    api: FixGoApiClient(baseUrl: AppConfig.apiBaseUrl),
+  );
+  await appState.restoreSession();
+  runApp(FixGoCustomerApp(appState: appState));
 }
 
 class FixGoCustomerApp extends StatefulWidget {
-  const FixGoCustomerApp({super.key});
+  const FixGoCustomerApp({super.key, required this.appState});
+
+  final AppState appState;
 
   @override
   State<FixGoCustomerApp> createState() => _FixGoCustomerAppState();
 }
 
 class _FixGoCustomerAppState extends State<FixGoCustomerApp> {
-  late final AppState _appState = AppState(
-    api: FixGoApiClient(baseUrl: AppConfig.apiBaseUrl),
-  );
+  AppState get _appState => widget.appState;
 
   @override
   void dispose() {

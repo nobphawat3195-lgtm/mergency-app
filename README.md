@@ -1,105 +1,133 @@
 # FixGo
 
-แอปเรียกช่างซ่อมรถฉุกเฉิน — monorepo ของ backend, แอปลูกค้า, แอปช่าง และระบบหลังบ้าน
+Web app และแอปเรียกช่างรถยนต์นอกสถานที่ พร้อมระบบรับงานสำหรับช่างและหลังบ้านสำหรับผู้ดูแล ครอบคลุมตั้งแต่แชร์ตำแหน่ง ส่งรูป ประเมินราคา อนุมัติราคาก่อนซ่อม ไปจนถึงปิดงานและบันทึกรายได้ช่าง
 
 ## โครงสร้าง
 
-```
-fixgo/
-├── backend/            NestJS + Prisma + PostgreSQL (API + dispatch + ระบบเงิน)
-├── apps/
-│   ├── customer/       Flutter — แอปลูกค้าเรียกช่าง
-│   └── provider/       Flutter — แอปช่างรับงาน
-├── admin/              หน้าเว็บหลังบ้าน (HTML ไฟล์เดียว ไม่ต้อง build)
-├── packages/
-│   └── fixgo_core/     Dart package ใช้ร่วมกัน 2 แอป (ธีม, โมเดล, API client)
-└── docs/               เอกสาร spec และการตัดสินใจทั้งหมด
+```text
+backend/                 NestJS + Prisma + PostgreSQL
+apps/customer/           Flutter ลูกค้า (มือถือและ Web)
+apps/provider/           Flutter ช่างรับงาน
+admin/                    เว็บหลังบ้าน
+packages/fixgo_core/     ธีม โมเดล API client และบริการตำแหน่งที่ใช้ร่วมกัน
+docs/                     Product/UX specification
 ```
 
-## สิ่งที่ทำเสร็จแล้ว
+## ความสามารถที่มีแล้ว
 
-**Backend** — คอมไพล์ผ่าน typecheck สะอาด
-- ล็อกอินด้วยเบอร์โทร + OTP (ลูกค้า/ช่าง) และรหัสผ่านสำหรับแอดมิน
-- แคตตาล็อกบริการ + ราคาตามประเภทรถ
-- ลงทะเบียนช่าง, อนุมัติโดยแอดมิน, ออนไลน์/ออฟไลน์, อัปเดตพิกัด
-- สร้างออเดอร์ + dispatch อัตโนมัติ (เรียงตามระยะทาง, timeout 5 นาที/คน, ส่งต่ออัตโนมัติ)
-- วงจรสถานะงาน: กำลังหาช่าง → รับงาน → เดินทาง → ซ่อม → ปิดงาน
-- ระบบเงิน: หักค่าธรรมเนียม 35%, กระเป๋าเงินช่างแบบ ledger, ขอเบิก/อนุมัติ/ปฏิเสธ
-- ให้คะแนนช่าง + คำนวณคะแนนเฉลี่ย
+### ลูกค้า
 
-**แอปลูกค้า (Flutter)** — `flutter analyze` ผ่านสะอาด
-- ล็อกอิน OTP, หน้าแรก (หมวดบริการ), booking wizard 4 ขั้นตอน, ติดตามงาน, ประวัติ, จ่ายเงิน
+- ล็อกอินด้วยเบอร์โทรและ OTP พร้อมเก็บ session แบบ secure storage
+- เลือกบริการ ประเภทรถ และส่งตำแหน่ง GPS ปัจจุบัน
+- เขียนรายละเอียดและอัปโหลดรูปปัญหารถได้สูงสุด 5 รูป
+- เปิดตำแหน่งใน Google Maps และโทรหาช่างจากหน้าติดตามงาน
+- ดูสถานะงานและราคาประเมินแบบอัปเดตต่อเนื่อง
+- อนุมัติหรือปฏิเสธราคาที่ช่างเสนอ ก่อนเริ่มซ่อม
+- ชำระเงินสด หรือแสดง PromptPay QR เมื่อเชื่อม payment gateway
+- บริการตรวจรถมือสองแบบราคาเดียว 1,990 บาทใน catalog
 
-**แอปช่าง (Flutter)** — `flutter analyze` ผ่านสะอาด
-- ล็อกอิน OTP, แบบฟอร์มลงทะเบียน, สวิตช์ออนไลน์, งานเข้าพร้อมนับถอยหลัง, อัปเดตสถานะงาน, กระเป๋าเงิน + ขอเบิก
+### ช่าง
 
-**หลังบ้าน** — ภาพรวม, อนุมัติช่าง, จัดการคำขอเบิกเงิน, ดูออเดอร์
+- ลงทะเบียนด้วยชื่อ เบอร์โทร ประสบการณ์ พื้นที่ เวลาให้บริการ ประเภทรถ และบริการที่รับ
+- อัปโหลดรูปเครื่องมือจริงเพื่อให้แอดมินตรวจสอบ
+- เปิด/ปิดรับงาน ส่ง heartbeat และตำแหน่งล่าสุด
+- รับข้อเสนอเป็นชุดตามระยะทาง ป้องกันช่างที่กำลังมีงานรับซ้อน
+- เสนอราคาและหมายเหตุ รอลูกค้ายืนยันก่อนเริ่มงาน
+- อัปเดตสถานะ เดินทาง/กำลังซ่อม/เสร็จสิ้น และยืนยันรับเงินสด
+- กระเป๋ารายได้แบบ ledger และคำขอถอนเงิน
 
-## ยังไม่ได้ทำ (ต้องทำก่อนใช้งานจริง)
+### ผู้ดูแลและเซิร์ฟเวอร์
 
-- **Payment gateway ของจริง** — ตอนนี้ `payments.service.ts` เป็น stub คืน QR ปลอม ต้องต่อ gateway จริงและตรวจลายเซ็น webhook ก่อน production
-- **SMS gateway** — OTP ยังไม่ได้ส่งจริง โหมด development จะคืนรหัสกลับมาใน response เพื่อให้ทดสอบได้
-- **GPS + แผนที่** — ทั้ง 2 แอปยังใช้พิกัดกลางกรุงเทพเป็นค่าคงที่ ต้องต่อ geolocator + Google Maps
-- **Push notification** — ยังเป็น TODO ในโค้ด dispatch ตอนนี้แอปช่าง poll ทุก 10 วินาทีแทน
-- **อัปโหลดรูป** — รูปเครื่องมือช่าง/รูปปัญหารถยังใช้ URL ตัวอย่าง ต้องต่อ storage จริง
-- ยังไม่มี unit test และยังไม่เคยรันกับฐานข้อมูลจริง (ยังไม่ได้รัน migration)
+- อนุมัติช่าง ดูงาน และจัดการคำขอถอนเงิน
+- ป้องกันการเข้าถึงออเดอร์ของผู้อื่น (ownership/role checks)
+- Dispatch ช่างออนไลน์ที่ heartbeat ไม่เก่า ตามระยะทางและเวลาทำงาน
+- เสนองานครั้งละ 4 คน รอบละ 90 วินาที สูงสุด 12 คน ภายใน 25 กม.
+- บันทึกรายได้แบบ idempotent ป้องกันเครดิตซ้ำ
+- จำกัดการขอ/เดา OTP และไม่ส่ง OTP กลับใน production
+- CORS allow-list, secret validation, signed webhook และ health check
+- Presigned upload สำหรับ S3-compatible storage
+- SMS จริงผ่าน Twilio หรือ console ใน development
+- Migration เริ่มต้น, unit tests และ GitHub Actions CI
 
-## วิธีรัน
+## ส่วนที่ต้องเชื่อมก่อนเปิด production
 
-### 1. Backend
+โค้ดเตรียมจุดเชื่อมไว้แล้ว แต่ต้องมีบัญชีและ credential ของเจ้าของระบบ:
+
+1. **Push notification** — ตอนนี้แอปช่างตรวจงานใหม่ทุก 10 วินาที ต้องสร้าง Firebase project และเพิ่ม FCM/APNs เพื่อแจ้งเตือนเมื่อแอปอยู่เบื้องหลัง
+2. **Payment gateway** — เงินสดใช้งานได้ แต่ PromptPay production ถูกปิดไว้จนกว่าจะเชื่อม gateway จริงและใช้ webhook secret ของผู้ให้บริการ
+3. **SMS** — ตั้งค่า Twilio หรือเปลี่ยน adapter เป็นผู้ให้บริการ SMS ไทย
+4. **Object storage** — ตั้ง S3/R2/Spaces และ CORS ของ bucket เพื่อรับรูปจาก Flutter Web
+5. **แผนที่เชิงภาพ** — แชร์ GPS และเปิด Google Maps ได้แล้ว แต่ยังไม่ได้ฝังแผนที่/เส้นทางแบบ live ในแอป
+6. **Store release** — ต้องมี Apple Developer/Google Play Console, signing key, privacy policy และ Firebase config ของแอปจริง
+
+อย่าเปิด production ด้วย development fallback ระบบจะตรวจ secret ที่จำเป็นและหยุดทำงานทันทีหากตั้งค่าไม่ครบ
+
+## วิธีรัน Backend
 
 ```bash
 cd backend
-cp .env.example .env          # แล้วแก้ค่า DATABASE_URL และ secret ต่าง ๆ
-npm install
-npx prisma migrate dev --name init
-npm run prisma:seed           # ใส่หมวดบริการ + ราคาตั้งต้น
-npx ts-node prisma/create-admin.ts 0812345678 "แอดมิน" รหัสผ่านที่ต้องการ
-npm run start:dev             # http://localhost:3000
+cp .env.example .env
+npm ci
+npm run prisma:generate
+npx prisma migrate deploy
+npm run prisma:seed
+npx ts-node prisma/create-admin.ts 0812345678 "แอดมิน" รหัสผ่านที่ปลอดภัย
+npm run start:dev
 ```
 
-ต้องมี PostgreSQL รันอยู่ก่อน เช่น
+ต้องมี PostgreSQL ก่อน เช่น:
 
 ```bash
 docker run --name fixgo-db -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:16
 ```
 
-### 2. แอปมือถือ
+ตรวจคุณภาพ:
 
 ```bash
-cd apps/customer   # หรือ apps/provider
+npm run typecheck
+npm test
+npm run build
+```
+
+## วิธีรัน Flutter
+
+```bash
+cd apps/customer        # หรือ apps/provider
 flutter pub get
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000
 ```
 
-`10.0.2.2` คือ localhost ของเครื่องแม่เมื่อรันบน Android emulator
-ถ้ารันบนมือถือจริงให้ใช้ IP ของเครื่องที่รัน backend แทน
+สำหรับ Web:
 
-### 3. หลังบ้าน
-
-เปิด `admin/index.html` ด้วยเบราว์เซอร์ได้เลย ไม่ต้อง build
-ถ้า backend ไม่ได้อยู่ที่ `http://localhost:3000` ให้ตั้งค่าใน console ของเบราว์เซอร์
-
-```js
-localStorage.setItem('fixgo_api_base', 'https://api-ของคุณ')
+```bash
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:3000
 ```
 
-## การตัดสินใจหลักที่ฝังอยู่ในโค้ด
+`10.0.2.2` คือ localhost ของเครื่องแม่จาก Android emulator หากใช้มือถือจริงให้เปลี่ยนเป็น IP/HTTPS API ที่มือถือเข้าถึงได้
 
-| เรื่อง | ค่า | อยู่ที่ไหน |
-|---|---|---|
-| ค่าธรรมเนียมแอป | 35% ทุกงาน | `backend/src/common/constants.ts` |
-| เวลาให้ช่างกดรับงาน | 5 นาที/คน | `backend/src/common/constants.ts` |
-| รัศมีค้นหาช่าง | 25 กม. | `backend/src/common/constants.ts` |
-| จำนวนช่างสูงสุดต่อออเดอร์ | 10 คน | `backend/src/common/constants.ts` |
-| สีแบรนด์ | ส้ม FixGo `#F26B1D` + หมึก `#1D2330` พื้นเทาอ่อน การ์ดมุมโค้ง | `packages/fixgo_core/lib/src/theme.dart` |
+## หลังบ้าน
 
-จำนวนเงินทุกจุดเก็บเป็น **สตางค์ (integer)** ไม่ใช่ทศนิยม เพื่อไม่ให้เกิดเศษเพี้ยนจาก floating point
+เปิด `admin/index.html` ผ่าน web server และตั้ง API base URL เมื่อต้องการ:
 
-รายละเอียด spec และเหตุผลเบื้องหลังการตัดสินใจอยู่ใน `docs/` และ `DESIGN.md`
+```js
+localStorage.setItem('fixgo_api_base', 'https://api.example.com')
+```
 
-## ที่มาของไอคอนและฟอนต์ (Third-party Attribution)
+โทเคนแอดมินเก็บใน `sessionStorage` และ dynamic HTML ถูก escape เพื่อลดความเสี่ยง XSS
 
-- ไอคอนหมวดบริการ 3D ส่วนใหญ่มาจาก **Microsoft Fluent Emoji** ([github.com/microsoft/fluentui-emoji](https://github.com/microsoft/fluentui-emoji)) สัญญาอนุญาต **MIT License** เก็บไฟล์ต้นฉบับไว้ที่ `packages/fixgo_core/assets/icons/licenses/fluentui-emoji-LICENSE.txt` ต้องให้เครดิตครบตาม license ก่อน publish ขึ้น store จริง
-- `tow.png`, `tire.png` และโลโก้ FixGo วาดขึ้นใหม่สำหรับโปรเจกต์นี้
-- ฟอนต์ **Noto Sans Thai** สัญญาอนุญาต SIL Open Font License อยู่ที่ `packages/fixgo_core/assets/fonts/OFL.txt`
+## ค่าธุรกิจหลัก
+
+| เรื่อง | ค่า |
+|---|---:|
+| ค่าธรรมเนียมแพลตฟอร์ม | 35% |
+| รอบเวลารับงาน | 90 วินาที |
+| ช่างต่อรอบ | 4 คน |
+| ช่างสูงสุดต่อออเดอร์ | 12 คน |
+| รัศมีค้นหา | 25 กม. |
+| ตรวจรถมือสอง | 1,990 บาท ราคาเดียว |
+
+จำนวนเงินในฐานข้อมูลเก็บเป็น **สตางค์ (integer)** เพื่อไม่ให้เกิดความคลาดเคลื่อนจากเลขทศนิยม
+
+## Attribution
+
+ไอคอนหมวดบริการ 3D มาจาก [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) ภายใต้ MIT License โดยเก็บ license ไว้ที่ `packages/fixgo_core/assets/icons/licenses/fluentui-emoji-LICENSE.txt`

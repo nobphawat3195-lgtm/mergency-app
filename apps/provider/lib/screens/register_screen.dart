@@ -1,5 +1,6 @@
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../app_state.dart';
 
@@ -15,6 +16,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _realNameController = TextEditingController();
   final _nicknameController = TextEditingController();
+  final _experienceController = TextEditingController();
   final _shopNameController = TextEditingController();
   final _facebookController = TextEditingController();
 
@@ -32,6 +34,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final Set<String> _categoryIds = {};
   final Set<String> _vehicleTypeIds = {};
   final List<String> _toolPhotoUrls = [];
+  bool _uploadingToolPhotos = false;
 
   Future<List<ServiceCategory>>? _categoriesFuture;
   Future<List<VehicleType>>? _vehicleTypesFuture;
@@ -51,12 +54,61 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void dispose() {
     _realNameController.dispose();
     _nicknameController.dispose();
+    _experienceController.dispose();
     _shopNameController.dispose();
     _facebookController.dispose();
     super.dispose();
   }
 
   int _toMinutes(TimeOfDay time) => time.hour * 60 + time.minute;
+
+  String _contentTypeFor(XFile file) {
+    final mimeType = file.mimeType;
+    if (mimeType == 'image/png' ||
+        mimeType == 'image/webp' ||
+        mimeType == 'image/jpeg') {
+      return mimeType!;
+    }
+    return file.name.toLowerCase().endsWith('.png')
+        ? 'image/png'
+        : file.name.toLowerCase().endsWith('.webp')
+            ? 'image/webp'
+            : 'image/jpeg';
+  }
+
+  Future<void> _pickToolPhotos() async {
+    final remaining = 6 - _toolPhotoUrls.length;
+    if (remaining <= 0) return;
+    final picked = await ImagePicker().pickMultiImage(
+      imageQuality: 82,
+      maxWidth: 1920,
+    );
+    if (picked.isEmpty || !mounted) return;
+
+    setState(() => _uploadingToolPhotos = true);
+    try {
+      final api = ProviderAppScope.of(context).api;
+      for (final file in picked.take(remaining)) {
+        final bytes = await file.readAsBytes();
+        final url = await api.uploadImage(
+          bytes: bytes,
+          fileName: file.name,
+          contentType: _contentTypeFor(file),
+          scope: 'PROVIDER_TOOL',
+        );
+        if (!mounted) return;
+        setState(() => _toolPhotoUrls.add(url));
+      }
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'อ่านหรืออัปโหลดรูปไม่สำเร็จ');
+    } finally {
+      if (mounted) setState(() => _uploadingToolPhotos = false);
+    }
+  }
 
   Future<void> _pinCurrentLocation() async {
     setState(() {
@@ -122,9 +174,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       final appState = ProviderAppScope.of(context);
-      await appState.api.registerProvider({
+      final session = await appState.api.registerProvider({
         'realName': _realNameController.text.trim(),
         'nickname': _nicknameController.text.trim(),
+        'experienceYears': int.parse(_experienceController.text.trim()),
         if (_shopNameController.text.trim().isNotEmpty)
           'shopName': _shopNameController.text.trim(),
         if (_facebookController.text.trim().isNotEmpty)
@@ -137,7 +190,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'vehicleTypeIds': _vehicleTypeIds.toList(),
         'toolPhotoUrls': _toolPhotoUrls,
       });
-      appState.markProfileCreated();
+      appState.signIn(
+        session.accessToken,
+        hasProfile: session.hasProfile,
+      );
     } on ApiException catch (error) {
       setState(() => _error = error.message);
     } finally {
@@ -171,6 +227,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
               decoration: const InputDecoration(labelText: 'ชื่อเล่น'),
               validator: (value) =>
                   (value ?? '').trim().isEmpty ? 'กรุณากรอกชื่อเล่น' : null,
+            ),
+            const SizedBox(height: FixGoSpacing.md),
+            TextFormField(
+              controller: _experienceController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'ประสบการณ์ด้านรถยนต์ (ปี)',
+              ),
+              validator: (value) {
+                final years = int.tryParse((value ?? '').trim());
+                if (years == null || years < 0 || years > 60) {
+                  return 'กรุณากรอกจำนวนปี 0-60';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: FixGoSpacing.md),
             TextFormField(
@@ -300,22 +371,77 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(height: FixGoSpacing.lg),
             const _SectionTitle('รูปเครื่องมือช่าง'),
             Card(
-              child: ListTile(
-                leading: const Icon(Icons.photo_camera_outlined),
-                title: Text(
-                  _toolPhotoUrls.isEmpty
-                      ? 'ยังไม่ได้แนบรูป'
-                      : 'แนบแล้ว ${_toolPhotoUrls.length} รูป',
-                ),
-                subtitle: const Text('ใช้ยืนยันว่าเป็นช่างจริงมีอุปกรณ์พร้อม'),
-                trailing: TextButton(
-                  // TODO: ต่อ image_picker + อัปโหลดขึ้น storage จริง
-                  onPressed: () => setState(
-                    () => _toolPhotoUrls.add(
-                      'https://placehold.co/600x400?text=tool',
+              child: Padding(
+                padding: const EdgeInsets.all(FixGoSpacing.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.photo_camera_outlined),
+                        const SizedBox(width: FixGoSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            _toolPhotoUrls.isEmpty
+                                ? 'ยังไม่ได้แนบรูป'
+                                : 'แนบแล้ว ${_toolPhotoUrls.length} รูป',
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _uploadingToolPhotos ||
+                                  _toolPhotoUrls.length >= 6
+                              ? null
+                              : _pickToolPhotos,
+                          child: Text(
+                            _uploadingToolPhotos ? 'กำลังอัปโหลด' : 'เพิ่มรูป',
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  child: const Text('เพิ่มรูป'),
+                    const Text('ใช้ยืนยันว่าเป็นช่างจริงและมีอุปกรณ์พร้อม'),
+                    if (_toolPhotoUrls.isNotEmpty) ...[
+                      const SizedBox(height: FixGoSpacing.sm),
+                      Wrap(
+                        spacing: FixGoSpacing.sm,
+                        runSpacing: FixGoSpacing.sm,
+                        children: [
+                          for (final url in _toolPhotoUrls)
+                            Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    url,
+                                    width: 82,
+                                    height: 82,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                Positioned(
+                                  right: -7,
+                                  top: -7,
+                                  child: InkWell(
+                                    onTap: () => setState(
+                                      () => _toolPhotoUrls.remove(url),
+                                    ),
+                                    child: const CircleAvatar(
+                                      radius: 11,
+                                      backgroundColor: FixGoColors.error,
+                                      child: Icon(
+                                        Icons.close,
+                                        size: 14,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),

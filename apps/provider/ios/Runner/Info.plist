@@ -27,7 +27,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>FixGo Fixer ใช้ตำแหน่งของคุณเพื่อส่งงานที่อยู่ใกล้คุณที่สุด กรุณาเปิดแอปทิ้งไว้ระหว่างออนไลน์รับงาน</string>
+	<string>FixGo ช่าง ใช้ตำแหน่งของคุณเพื่อส่งงานที่อยู่ใกล้คุณที่สุด กรุณาเปิดแอปทิ้งไว้ระหว่างออนไลน์รับงาน</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>FixGo ช่าง ใช้รูปที่คุณเลือกเพื่อยืนยันเครื่องมือและความพร้อมของช่าง</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
