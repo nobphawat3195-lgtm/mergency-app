@@ -28,10 +28,8 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>FixGo Fixer ใช้ตำแหน่งของคุณเพื่อส่งงานที่อยู่ใกล้คุณที่สุด กรุณาเปิดแอปทิ้งไว้ระหว่างออนไลน์รับงาน</string>
-	<key>NSCameraUsageDescription</key>
-	<string>FixGo Fixer ใช้กล้องถ่ายรูปหลักฐานระหว่างตรวจรถ เพื่อแนบในรายงานให้ลูกค้า</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>FixGo Fixer ใช้รูปที่คุณเลือกเพื่อยืนยันเครื่องมือและความพร้อมของช่าง</string>
+	<string>FixGo Fixer ใช้รูปที่คุณเลือกจากคลังรูปเพื่อยืนยันเครื่องมือของช่าง และแนบเป็นหลักฐานในรายงานตรวจรถ</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

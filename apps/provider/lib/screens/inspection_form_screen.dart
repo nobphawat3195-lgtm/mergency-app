@@ -173,31 +173,69 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     _scheduleSave();
   }
 
+  /// ช่างถ่ายรูปด้วยกล้องของเครื่องไว้ก่อนระหว่างเดินตรวจ แล้วค่อยเลือกจากคลังรูปมาแนบทีละข้อ
+  /// (ไม่เปิดกล้องจากในแอป) แนบได้สูงสุด 5 รูปต่อข้อ ตามที่ backend รับ
+  static const _maxPhotosPerItem = 5;
+
+  String _contentTypeFor(XFile file) {
+    final mimeType = file.mimeType;
+    if (mimeType == 'image/png' ||
+        mimeType == 'image/webp' ||
+        mimeType == 'image/jpeg') {
+      return mimeType!;
+    }
+    final name = file.name.toLowerCase();
+    if (name.endsWith('.png')) return 'image/png';
+    if (name.endsWith('.webp')) return 'image/webp';
+    return 'image/jpeg';
+  }
+
   Future<void> _attachPhoto(ChecklistItem item) async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.camera,
+    final existing = _results[item.code]?.photoUrls.length ?? 0;
+    final remaining = _maxPhotosPerItem - existing;
+    if (remaining <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('แนบได้สูงสุด 5 รูปต่อรายการ')),
+      );
+      return;
+    }
+    final picked = await ImagePicker().pickMultiImage(
       imageQuality: 80,
       maxWidth: 1920,
     );
-    if (picked == null || !mounted) return;
+    if (picked.isEmpty || !mounted) return;
+    if (picked.length > remaining) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content:
+                Text('แนบเพิ่มได้อีก $remaining รูป ใช้ $remaining รูปแรก')),
+      );
+    }
     setState(() => _uploadingItem = item.code);
     try {
-      final bytes = await picked.readAsBytes();
-      if (!mounted) return;
-      final url = await ProviderAppScope.of(context).api.uploadImage(
-            bytes: bytes,
-            fileName: picked.name,
-            contentType: 'image/jpeg',
-            scope: 'INSPECTION',
-          );
-      _updateItem(
-        item.code,
-        (current) => current.copyWith(photoUrls: [...current.photoUrls, url]),
-      );
+      for (final file in picked.take(remaining)) {
+        final bytes = await file.readAsBytes();
+        if (!mounted) return;
+        final url = await ProviderAppScope.of(context).api.uploadImage(
+              bytes: bytes,
+              fileName: file.name,
+              contentType: _contentTypeFor(file),
+              scope: 'INSPECTION',
+            );
+        _updateItem(
+          item.code,
+          (current) => current.copyWith(photoUrls: [...current.photoUrls, url]),
+        );
+      }
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('อ่านหรืออัปโหลดรูปไม่สำเร็จ')),
+      );
     } finally {
       if (mounted) setState(() => _uploadingItem = null);
     }
@@ -782,11 +820,11 @@ class _ItemRow extends StatelessWidget {
                         width: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.photo_camera_outlined, size: 18),
+                    : const Icon(Icons.add_photo_alternate_outlined, size: 18),
                 label: Text(
                   needsPhoto
-                      ? 'ต้องถ่ายรูปประกอบ'
-                      : 'ถ่ายรูป (${result?.photoUrls.length ?? 0})',
+                      ? 'ต้องแนบรูปประกอบ'
+                      : 'แนบรูป (${result?.photoUrls.length ?? 0}/5)',
                 ),
               ),
             ],
