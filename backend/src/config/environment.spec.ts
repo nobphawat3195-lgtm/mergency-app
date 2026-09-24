@@ -96,4 +96,54 @@ describe('environment safety', () => {
       expect(() => validateEnvironment(base)).toThrow('PAYMENT_WEBHOOK_SECRET');
     });
   });
+
+  describe('sms and push providers', () => {
+    const base = {
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgresql://example',
+      JWT_SECRET: 'real-jwt',
+      OTP_SECRET: 'real-otp',
+      PAYMENT_WEBHOOK_SECRET: 'real-hook',
+      S3_BUCKET: 'b',
+      S3_ACCESS_KEY_ID: 'k',
+      S3_SECRET_ACCESS_KEY: 's',
+      S3_PUBLIC_BASE_URL: 'https://cdn.example.com',
+      CORS_ORIGIN: 'https://app.example.com',
+    };
+
+    it('rejects console SMS in production', () => {
+      expect(() =>
+        validateEnvironment({ ...base, SMS_PROVIDER: 'console' }),
+      ).toThrow('SMS_PROVIDER');
+    });
+
+    it('accepts ThaiBulkSMS with its credentials', () => {
+      expect(() =>
+        validateEnvironment({ ...base, SMS_PROVIDER: 'thaibulksms' }),
+      ).toThrow('THAIBULKSMS_API_KEY');
+      expect(() =>
+        validateEnvironment({
+          ...base,
+          SMS_PROVIDER: 'thaibulksms',
+          THAIBULKSMS_API_KEY: 'k',
+          THAIBULKSMS_API_SECRET: 's',
+          THAIBULKSMS_SENDER: 'FixGo',
+        }),
+      ).not.toThrow();
+    });
+
+    it('requires FCM credentials when push is enabled', () => {
+      const withSms = {
+        ...base,
+        SMS_PROVIDER: 'twilio',
+        TWILIO_ACCOUNT_SID: 'a',
+        TWILIO_AUTH_TOKEN: 't',
+        TWILIO_FROM: '+1',
+      };
+      expect(() =>
+        validateEnvironment({ ...withSms, PUSH_PROVIDER: 'fcm' }),
+      ).toThrow('FCM_PROJECT_ID');
+      expect(() => validateEnvironment(withSms)).not.toThrow();
+    });
+  });
 });

@@ -14,7 +14,7 @@
 | VPS | 2 vCPU / 2–4 GB RAM / 40 GB, Ubuntu 24.04 เลือก region สิงคโปร์ (DigitalOcean, Vultr, AWS Lightsail) |
 | โดเมน | ตั้ง A record `api.` และ `admin.` ชี้ไปที่ IP ของ VPS |
 | Object storage | Cloudflare R2 (ไม่มีค่า egress) หรือ AWS S3 |
-| SMS | Twilio หรือผู้ให้บริการที่ backend รองรับ ดูใน `.env.production.example` |
+| SMS | ThaiBulkSMS (ส่งในไทย ราคาถูก ต้องขออนุมัติชื่อผู้ส่งก่อน 1–3 วันทำการ) หรือ Twilio |
 | ชำระเงิน | Stripe ดู `docs/PAYMENTS.md` |
 | Push | Firebase ดู `docs/PUSH.md` |
 

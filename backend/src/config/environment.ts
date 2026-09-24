@@ -49,16 +49,35 @@ export function validateEnvironment(
     throw new Error('CORS_ORIGIN must be an explicit allow-list in production');
   }
 
-  if (String(config.SMS_PROVIDER ?? '') !== 'twilio') {
-    throw new Error('SMS_PROVIDER must be twilio in production');
+  const smsRequirements: Record<string, readonly string[]> = {
+    twilio: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM'],
+    thaibulksms: [
+      'THAIBULKSMS_API_KEY',
+      'THAIBULKSMS_API_SECRET',
+      'THAIBULKSMS_SENDER',
+    ],
+  };
+  const smsProvider = String(config.SMS_PROVIDER ?? '').trim();
+  const smsVars = smsRequirements[smsProvider];
+  if (!smsVars) {
+    throw new Error('SMS_PROVIDER must be twilio or thaibulksms in production');
   }
-  for (const name of [
-    'TWILIO_ACCOUNT_SID',
-    'TWILIO_AUTH_TOKEN',
-    'TWILIO_FROM',
-  ] as const) {
+  for (const name of smsVars) {
     if (!String(config[name] ?? '').trim()) {
-      throw new Error(`${name} is required in production`);
+      throw new Error(`${name} is required when SMS_PROVIDER=${smsProvider}`);
+    }
+  }
+
+  const pushProvider = String(config.PUSH_PROVIDER ?? 'console').trim();
+  if (pushProvider === 'fcm') {
+    for (const name of [
+      'FCM_PROJECT_ID',
+      'FCM_CLIENT_EMAIL',
+      'FCM_PRIVATE_KEY',
+    ] as const) {
+      if (!String(config[name] ?? '').trim()) {
+        throw new Error(`${name} is required when PUSH_PROVIDER=fcm`);
+      }
     }
   }
 
