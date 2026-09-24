@@ -1,3 +1,5 @@
+import 'dart:ui' show Locale;
+
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -61,10 +63,9 @@ class LocationService {
 
     String? address;
     try {
-      final placemarks = await placemarkFromCoordinates(
-        position.latitude,
-        position.longitude,
-      );
+      // สร้างในนี้: แพลตฟอร์มที่ไม่มี geocoder (เช่น เว็บ) จะ throw ตั้งแต่ตอนสร้าง
+      final placemarks = await Geocoding(locale: const Locale('th', 'TH'))
+          .placemarkFromCoordinates(position.latitude, position.longitude);
       if (placemarks.isNotEmpty) {
         address = _formatPlacemark(placemarks.first);
       }
