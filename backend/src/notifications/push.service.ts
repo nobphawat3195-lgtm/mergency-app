@@ -4,6 +4,7 @@ import { DevicePlatform, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { formatBaht } from '../common/money';
 import { PUSH_SENDER, PushMessage, PushSender } from './push-sender';
+import { OrderEventsService } from './order-events.service';
 
 /** ประเภทแจ้งเตือน แอปใช้ตัดสินว่ากดแล้วเปิดหน้าไหน */
 export type PushType =
@@ -37,6 +38,7 @@ export class PushService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(PUSH_SENDER) private readonly sender: PushSender,
+    private readonly events: OrderEventsService,
   ) {}
 
   async registerDevice(
@@ -70,6 +72,8 @@ export class PushService {
     title: string,
     body: string,
   ): Promise<void> {
+    // หน้าติดตามงานที่เปิดอยู่ (SSE) ดึงข้อมูลใหม่ทันที แม้ผู้ใช้จะไม่มีโทเคน push
+    this.events.emit(order.id, type);
     if (userIds.length === 0) return;
     try {
       const devices = await this.prisma.deviceToken.findMany({

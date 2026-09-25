@@ -4,6 +4,7 @@ import { DispatchStatus, OrderStatus, ProviderStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../notifications/push.service';
+import { OrderEventsService } from '../notifications/order-events.service';
 import {
   AdminAlertService,
   coarseArea,
@@ -49,6 +50,7 @@ export class DispatchService {
     private readonly prisma: PrismaService,
     private readonly push: PushService,
     private readonly adminAlert: AdminAlertService,
+    private readonly events: OrderEventsService,
   ) {}
 
   /** เริ่มกระจายงาน: หาช่างที่เข้าเงื่อนไข เรียงตามระยะทาง แล้วเสนอให้คนใกล้สุดก่อน */
@@ -186,7 +188,9 @@ export class DispatchService {
     });
     this.logger.warn(`ออเดอร์ ${orderId} ไม่มีช่างรับ ส่งต่อให้แอดมิน`);
     // แอดมินกดหาช่างใหม่เองแล้วยังไม่เจอ: แอดมินเห็นผลในหน้าจออยู่แล้ว ลูกค้าก็รู้แล้ว ไม่แจ้งซ้ำ
-    if (updated.count === 0 || !notify) return;
+    if (updated.count === 0) return;
+    this.events.emit(orderId, 'NO_MATCH');
+    if (!notify) return;
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       select: {

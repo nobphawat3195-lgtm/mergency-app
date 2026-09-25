@@ -65,6 +65,9 @@ jobs:
       - name: Analyze shared package
         working-directory: packages/fixgo_core
         run: flutter pub get && flutter analyze
+      - name: Test shared package
+        working-directory: packages/fixgo_core
+        run: flutter test
       - name: Analyze customer app
         working-directory: apps/customer
         run: flutter pub get && flutter analyze

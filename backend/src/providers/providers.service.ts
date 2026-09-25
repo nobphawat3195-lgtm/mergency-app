@@ -4,11 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Provider, ProviderStatus } from '@prisma/client';
+import { OrderStatus, Provider, ProviderStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { AdminAlertService } from '../notifications/admin-alert.service';
+import { OrderEventsService } from '../notifications/order-events.service';
 import {
   RegisterProviderDto,
   UpdateLocationDto,
@@ -21,6 +22,7 @@ export class ProvidersService {
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
     private readonly adminAlert: AdminAlertService,
+    private readonly events: OrderEventsService,
   ) {}
 
   /** uploaderId = sub ของโทเคนที่ใช้ขอ presign (ช่างที่ยังไม่สมัครคือ pending:<เบอร์>) */
@@ -108,7 +110,7 @@ export class ProvidersService {
     dto: UpdateLocationDto,
   ): Promise<Provider> {
     await this.requireVerified(providerId);
-    return this.prisma.provider.update({
+    const provider = await this.prisma.provider.update({
       where: { id: providerId },
       data: {
         currentLat: dto.lat,
@@ -116,6 +118,22 @@ export class ProvidersService {
         lastSeenAt: new Date(),
       },
     });
+    // ลูกค้าที่เปิดหน้าติดตามงานอยู่เห็นช่างขยับทันที
+    const active = await this.prisma.order.findFirst({
+      where: {
+        providerId,
+        status: {
+          in: [
+            OrderStatus.MATCHED,
+            OrderStatus.EN_ROUTE,
+            OrderStatus.IN_PROGRESS,
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    if (active) this.events.emit(active.id, 'LOCATION');
+    return provider;
   }
 
   async heartbeat(providerId: string): Promise<{ ok: true }> {

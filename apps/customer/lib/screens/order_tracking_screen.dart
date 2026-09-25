@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fixgo_core/fixgo_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -23,6 +24,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   Timer? _pollTimer;
   bool _respondingToQuote = false;
   StreamSubscription<PushEvent>? _pushSub;
+  StreamSubscription<String>? _liveSub;
+  Timer? _reconnectTimer;
+  int _reconnectAttempt = 0;
+
+  /// ต่อ event stream ติดอยู่: ดึงข้อมูลใหม่เมื่อมี event และ poll ช้าลงเป็นตัวสำรอง
+  bool _live = false;
+  int _pollTick = 0;
 
   @override
   void didChangeDependencies() {
@@ -32,17 +40,60 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     _pushSub = PushNotifications.instance.onAny
         .where((event) => event.orderId == widget.orderId)
         .listen((_) => unawaited(_refresh()));
-    // TODO: เปลี่ยนเป็น WebSocket เมื่อต่อ real-time tracking ตอนนี้ poll ไปก่อน
-    _pollTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => unawaited(_refresh()),
+    _connectLive();
+    // ตัวสำรองเมื่อ stream หลุดหรืออยู่บนเว็บ: ทุก 5 วินาที, ถ้า stream ติดอยู่ ทุก 30 วินาที
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _pollTick++;
+      if (_live && _pollTick % 6 != 0) return;
+      unawaited(_refresh());
+    });
+  }
+
+  bool get _finished {
+    final order = _order;
+    if (order == null) return false;
+    return order.status == OrderStatus.cancelled ||
+        (order.status == OrderStatus.completed &&
+            order.isPaid &&
+            order.ratingScore != null);
+  }
+
+  /// Server-Sent Events จาก backend: เห็นช่างรับงาน/ขยับ/เสนอราคาทันทีโดยไม่ต้องรอรอบ poll
+  void _connectLive() {
+    // browser client ของเว็บไม่ส่งข้อมูลทีละส่วน ใช้ poll อย่างเดียว
+    if (kIsWeb || !mounted || _finished) return;
+    unawaited(_liveSub?.cancel());
+    _liveSub = AppStateScope.of(context)
+        .api
+        .orderEvents(widget.orderId)
+        .listen(
+      (type) {
+        _live = true;
+        _reconnectAttempt = 0;
+        if (type != 'PING') unawaited(_refresh());
+      },
+      onError: (_) => _scheduleReconnect(),
+      onDone: _scheduleReconnect,
+      cancelOnError: true,
     );
+  }
+
+  void _scheduleReconnect() {
+    _live = false;
+    if (!mounted || _finished) return;
+    _reconnectTimer?.cancel();
+    // 2, 4, 8, 16, 30 วินาที
+    final seconds = [2, 4, 8, 16, 30][_reconnectAttempt.clamp(0, 4)];
+    _reconnectAttempt++;
+    _reconnectTimer = Timer(Duration(seconds: seconds), _connectLive);
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _reconnectTimer?.cancel();
     _pushSub?.cancel();
+    _liveSub?.cancel();
     super.dispose();
   }
 

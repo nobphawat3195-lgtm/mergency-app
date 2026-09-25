@@ -2,6 +2,7 @@ import { Role } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PushSender } from './push-sender';
+import { OrderEventsService } from './order-events.service';
 import { PushService } from './push.service';
 
 function setup(results: Record<string, 'sent' | 'invalid' | 'failed'>) {
@@ -20,7 +21,12 @@ function setup(results: Record<string, 'sent' | 'invalid' | 'failed'>) {
       return results[token];
     }),
   };
-  const service = new PushService(prisma as unknown as PrismaService, sender);
+  const events = new OrderEventsService();
+  const service = new PushService(
+    prisma as unknown as PrismaService,
+    sender,
+    events,
+  );
   return { service, prisma, sender };
 }
 
@@ -84,5 +90,25 @@ describe('PushService', () => {
     const qr = setup({ t: 'sent' });
     await qr.service.paid('cus_1', 'pro_1', order, 50000, 'PROMPTPAY');
     expect(qr.prisma.deviceToken.findMany).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('PushService order events', () => {
+  it('signals open tracking screens even when the user has no push token', async () => {
+    const prisma = {
+      deviceToken: {
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn(),
+      },
+    };
+    const events = new OrderEventsService();
+    const emit = jest.spyOn(events, 'emit');
+    const service = new PushService(
+      prisma as unknown as PrismaService,
+      { name: 'fake', send: jest.fn() },
+      events,
+    );
+    await service.enRoute('cus_1', { id: 'order_1', orderNo: 'FG1' });
+    expect(emit).toHaveBeenCalledWith('order_1', 'EN_ROUTE');
   });
 });

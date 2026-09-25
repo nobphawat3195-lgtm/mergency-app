@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -23,11 +24,18 @@ String _roleToJson(ApiRole role) =>
     role == ApiRole.customer ? 'CUSTOMER' : 'PROVIDER';
 
 class FixGoApiClient {
-  FixGoApiClient({required this.baseUrl, http.Client? httpClient})
-      : _http = httpClient ?? http.Client();
+  FixGoApiClient({
+    required this.baseUrl,
+    http.Client? httpClient,
+    http.Client Function()? streamClientFactory,
+  })  : _http = httpClient ?? http.Client(),
+        _streamClientFactory = streamClientFactory ?? http.Client.new;
 
   final String baseUrl;
   final http.Client _http;
+
+  /// event stream ใช้ client แยกต่อ stream เพื่อปิด connection ได้ทันทีเมื่อเลิกฟัง
+  final http.Client Function() _streamClientFactory;
 
   String? accessToken;
 
@@ -67,6 +75,73 @@ class FixGoApiClient {
 
     if (response.body.isEmpty) return null;
     return jsonDecode(utf8.decode(response.bodyBytes));
+  }
+
+  /// ฟังการเปลี่ยนแปลงของงานแบบ real-time (Server-Sent Events)
+  ///
+  /// ปล่อยค่าเป็นประเภทเหตุการณ์ เช่น MATCHED, EN_ROUTE, LOCATION ให้ผู้ฟังไปเรียก [getOrder] ใหม่
+  /// stream จบหรือ error เมื่อการเชื่อมต่อหลุด ผู้ฟังต้องต่อใหม่เอง
+  /// ใช้บนเว็บไม่ได้ (browser client ไม่ส่งข้อมูลทีละส่วน) ให้ดึงข้อมูลเป็นรอบแทน
+  Stream<String> orderEvents(String orderId) {
+    final client = _streamClientFactory();
+    late final StreamController<String> controller;
+    StreamSubscription<String>? lines;
+    controller = StreamController<String>(
+      onListen: () async {
+        try {
+          final request = http.Request(
+            'GET',
+            Uri.parse('$baseUrl/api/orders/$orderId/events'),
+          )..headers.addAll({
+              ..._headers,
+              'Accept': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+            });
+          final response = await client.send(request);
+          if (response.statusCode != 200) {
+            throw ApiException(
+              response.statusCode,
+              'เชื่อมต่อการติดตามงานไม่สำเร็จ (${response.statusCode})',
+            );
+          }
+          var event = 'message';
+          var data = StringBuffer();
+          lines = response.stream
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())
+              .listen(
+            (line) {
+              if (line.isEmpty) {
+                if (event == 'order' && data.isNotEmpty) {
+                  final decoded = jsonDecode(data.toString());
+                  final type = decoded is Map ? decoded['type'] : null;
+                  if (type is String) controller.add(type);
+                } else if (event == 'ping') {
+                  controller.add('PING');
+                }
+                event = 'message';
+                data = StringBuffer();
+              } else if (line.startsWith('event:')) {
+                event = line.substring(6).trim();
+              } else if (line.startsWith('data:')) {
+                data.write(line.substring(5).trim());
+              }
+            },
+            onError: controller.addError,
+            onDone: controller.close,
+            cancelOnError: true,
+          );
+        } catch (error, stackTrace) {
+          controller.addError(error, stackTrace);
+          await controller.close();
+        }
+      },
+      onCancel: () async {
+        await lines?.cancel();
+        client.close();
+      },
+    );
+    return controller.stream;
   }
 
   // ---------- Auth ----------
