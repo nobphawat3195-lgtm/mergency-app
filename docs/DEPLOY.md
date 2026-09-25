@@ -15,7 +15,7 @@
 | โดเมน | ตั้ง A record `api.` และ `admin.` ชี้ไปที่ IP ของ VPS |
 | Object storage | Cloudflare R2 (ไม่มีค่า egress) หรือ AWS S3 |
 | SMS | ThaiBulkSMS (ส่งในไทย ราคาถูก ต้องขออนุมัติชื่อผู้ส่งก่อน 1–3 วันทำการ) หรือ Twilio |
-| ชำระเงิน | Stripe ดู `docs/PAYMENTS.md` |
+| ชำระเงิน | พร้อมเพย์ของเจ้าของ + แอดมินตรวจสลิป (เริ่มต้น) หรือ Stripe ดู `docs/PAYMENTS.md` |
 | Push | Firebase ดู `docs/PUSH.md` |
 
 ## 2. เตรียมเครื่อง
@@ -69,7 +69,7 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production \
 
 ## 5. เชื่อมบริการภายนอก
 
-- **Stripe:**
+- **Stripe** (เฉพาะเมื่อใช้ `PAYMENT_PROVIDER=stripe`):
   - ที่ Developers > Webhooks ให้เพิ่ม endpoint `https://api.<โดเมน>/api/payments/stripe/webhook` แล้วเลือก event `payment_intent.succeeded`
   - นำ signing secret (`whsec_…`) ไปใส่ใน `STRIPE_WEBHOOK_SECRET`
 - **แอปมือถือ:** build แอปด้วย `--dart-define=API_BASE_URL=https://api.<โดเมน>` และค่า Firebase ตาม `docs/PUSH.md`

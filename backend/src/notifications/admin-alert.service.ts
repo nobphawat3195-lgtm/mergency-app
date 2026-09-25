@@ -123,6 +123,12 @@ export class AdminAlertService {
     );
   }
 
+  slipSubmitted(orderNo: string, amountText: string) {
+    return this.send(
+      `🧾 สลิปพร้อมเพย์ใหม่ ${orderNo} ยอด ${amountText} ตรวจยอดเข้าบัญชีแล้วกดยืนยันในหน้าแอดมิน`,
+    );
+  }
+
   providerApplied(nickname: string) {
     return this.send(`🧰 ช่างสมัครใหม่: ${nickname} รอตรวจเอกสารและอนุมัติ`);
   }

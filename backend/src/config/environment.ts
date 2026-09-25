@@ -99,6 +99,14 @@ export function validateEnvironment(
         'STRIPE_BILLING_EMAIL (or LEGAL_CONTACT_EMAIL) is required for Stripe PromptPay',
       );
     }
+  } else if (paymentProvider === 'promptpay_manual') {
+    for (const name of ['PROMPTPAY_ID', 'PROMPTPAY_NAME'] as const) {
+      if (!String(config[name] ?? '').trim()) {
+        throw new Error(
+          `${name} is required when PAYMENT_PROVIDER=promptpay_manual`,
+        );
+      }
+    }
   } else {
     // gateway stub ปิดพร้อมเพย์ใน production อยู่แล้ว แต่ webhook HMAC เดิมยังต้องมี secret จริง
     const secret = String(config.PAYMENT_WEBHOOK_SECRET ?? '').trim();

@@ -406,6 +406,11 @@ model Payment {
   chargeId String? // reference จาก payment gateway
   paidAt   DateTime?
 
+  /// พร้อมเพย์แบบโอนเข้าบัญชีบริษัท: สลิปที่ลูกค้าแนบ รอแอดมินตรวจยอดเข้าจริงก่อนเป็น PAID
+  slipUrl          String?
+  slipSubmittedAt  DateTime?
+  slipRejectReason String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -416,6 +421,7 @@ enum WalletEntryType {
   ORDER_EARNING // ยอดสุทธิที่ช่างได้หลังหักคอมมิชชันแล้ว (65%)
   WITHDRAWAL // กันยอดไว้ทันทีที่ช่างกดขอเบิก (ค่าติดลบ)
   ADJUSTMENT // คืนยอดเมื่อแอดมินปฏิเสธคำขอเบิก หรือแอดมินปรับยอดเอง
+  COMMISSION_DUE // งานเงินสด: ช่างถือเงินเต็มจำนวน จึงหักค่าธรรมเนียมที่ต้องคืนบริษัท (ค่าติดลบ)
 }
 
 // หมายเหตุ: คอมมิชชัน 35% ไม่ถูกบันทึกในกระเป๋าช่าง

@@ -5,11 +5,13 @@ import { AdminService } from './admin.service';
 import { AdminController } from './admin.controller';
 import { WalletModule } from '../wallet/wallet.module';
 import { DispatchModule } from '../dispatch/dispatch.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
     WalletModule,
     DispatchModule,
+    PaymentsModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'dev-jwt-secret',
       signOptions: {

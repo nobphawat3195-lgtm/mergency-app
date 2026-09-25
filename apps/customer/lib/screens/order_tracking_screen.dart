@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -63,10 +64,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     // browser client ของเว็บไม่ส่งข้อมูลทีละส่วน ใช้ poll อย่างเดียว
     if (kIsWeb || !mounted || _finished) return;
     unawaited(_liveSub?.cancel());
-    _liveSub = AppStateScope.of(context)
-        .api
-        .orderEvents(widget.orderId)
-        .listen(
+    _liveSub = AppStateScope.of(context).api.orderEvents(widget.orderId).listen(
       (type) {
         _live = true;
         _reconnectAttempt = 0;
@@ -155,6 +153,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           qrPayload: charge.qrPayload,
           amount: charge.amount,
           expiresAt: charge.expiresAt,
+          requiresSlip: charge.requiresSlip,
+          payeeName: charge.payeeName,
+          slipAlreadySubmitted: _order?.awaitingSlipReview ?? false,
         ),
       );
       // ดึงสถานะใหม่เสมอ แต่ถือว่าจ่ายแล้วเฉพาะเมื่อ backend ตอบ PAID
@@ -275,10 +276,17 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                     ),
                   )
                 else if (order.status == OrderStatus.completed) ...[
-                  const _PaymentPendingBanner(),
+                  if (order.awaitingSlipReview)
+                    const _SlipReviewBanner()
+                  else if (order.paymentSlipRejectReason != null)
+                    _SlipRejectedBanner(reason: order.paymentSlipRejectReason!)
+                  else
+                    const _PaymentPendingBanner(),
                   const SizedBox(height: FixGoSpacing.md),
                   FixGoButton(
-                    label: 'ชำระเงินผ่านพร้อมเพย์',
+                    label: order.awaitingSlipReview
+                        ? 'ดู QR / แนบสลิปใหม่'
+                        : 'ชำระเงินผ่านพร้อมเพย์',
                     icon: Icons.qr_code_2,
                     onPressed: _pay,
                   ),
@@ -724,6 +732,66 @@ class _InspectionCard extends StatelessWidget {
 
 /// สถานะรอยืนยันยอดเงิน: การแสดง QR หรือการกดปุ่มไม่ถือว่าชำระสำเร็จ
 /// เปลี่ยนเป็น "ชำระแล้ว" ได้เมื่อ backend บันทึก PAID เท่านั้น
+/// ลูกค้าแนบสลิปแล้ว รอทีมงานตรวจยอดเข้าบัญชี (ยังไม่ถือว่าชำระแล้ว)
+class _SlipReviewBanner extends StatelessWidget {
+  const _SlipReviewBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: FixGoColors.accentSoft,
+        borderRadius: BorderRadius.circular(FixGoRadius.md),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.fact_check_outlined, color: FixGoColors.accent),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'ได้รับสลิปแล้ว ทีมงานกำลังตรวจสอบยอดเงินเข้าบัญชี '
+              'สถานะจะเปลี่ยนเป็น "ชำระแล้ว" หลังตรวจเสร็จ',
+              style: TextStyle(fontSize: 13, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SlipRejectedBanner extends StatelessWidget {
+  const _SlipRejectedBanner({required this.reason});
+
+  final String reason;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFDECEC),
+        borderRadius: BorderRadius.circular(FixGoRadius.md),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline, color: FixGoColors.error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'สลิปยังไม่ผ่านการตรวจ: $reason\nกรุณาตรวจยอดแล้วแนบสลิปใหม่',
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PaymentPendingBanner extends StatelessWidget {
   const _PaymentPendingBanner({this.compact = false});
 
@@ -893,6 +961,9 @@ class _PromptPayDialog extends StatefulWidget {
     required this.qrPayload,
     required this.amount,
     required this.expiresAt,
+    this.requiresSlip = false,
+    this.payeeName,
+    this.slipAlreadySubmitted = false,
   });
 
   final FixGoApiClient api;
@@ -901,6 +972,11 @@ class _PromptPayDialog extends StatefulWidget {
   final int amount;
   final DateTime? expiresAt;
 
+  /// โอนเข้าบัญชีบริษัท: ต้องแนบสลิปให้ทีมงานตรวจ
+  final bool requiresSlip;
+  final String? payeeName;
+  final bool slipAlreadySubmitted;
+
   @override
   State<_PromptPayDialog> createState() => _PromptPayDialogState();
 }
@@ -908,6 +984,45 @@ class _PromptPayDialog extends StatefulWidget {
 class _PromptPayDialogState extends State<_PromptPayDialog> {
   Timer? _timer;
   bool _checking = false;
+  late bool _slipSubmitted = widget.slipAlreadySubmitted;
+  bool _uploadingSlip = false;
+
+  Future<void> _attachSlip() async {
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1600,
+    );
+    if (file == null || !mounted) return;
+    setState(() => _uploadingSlip = true);
+    try {
+      final bytes = await file.readAsBytes();
+      final name = file.name.toLowerCase();
+      final url = await widget.api.uploadImage(
+        bytes: bytes,
+        fileName: file.name,
+        contentType: name.endsWith('.png')
+            ? 'image/png'
+            : name.endsWith('.webp')
+                ? 'image/webp'
+                : 'image/jpeg',
+        scope: 'PAYMENT_SLIP',
+      );
+      await widget.api.submitPaymentSlip(widget.orderId, url);
+      if (mounted) setState(() => _slipSubmitted = true);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('อัปโหลดสลิปไม่สำเร็จ กรุณาลองใหม่')),
+      );
+    } finally {
+      if (mounted) setState(() => _uploadingSlip = false);
+    }
+  }
 
   @override
   void initState() {
@@ -939,41 +1054,79 @@ class _PromptPayDialogState extends State<_PromptPayDialog> {
     final expires = widget.expiresAt;
     return AlertDialog(
       title: const Text('สแกนจ่ายด้วยพร้อมเพย์'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const _PaymentPendingBanner(compact: true),
-          const SizedBox(height: FixGoSpacing.md),
-          QrImageView(
-            data: widget.qrPayload,
-            size: 200,
-            backgroundColor: Colors.white,
-          ),
-          const SizedBox(height: FixGoSpacing.md),
-          Text(
-            formatSatang(widget.amount),
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
-          ),
-          if (expires != null)
-            Text(
-              'QR ใช้ได้ถึง ${expires.hour.toString().padLeft(2, '0')}:${expires.minute.toString().padLeft(2, '0')} น.',
-              style: Theme.of(context).textTheme.bodySmall,
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const _PaymentPendingBanner(compact: true),
+            const SizedBox(height: FixGoSpacing.md),
+            QrImageView(
+              data: widget.qrPayload,
+              size: 200,
+              backgroundColor: Colors.white,
             ),
-          const SizedBox(height: FixGoSpacing.sm),
-          const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                height: 14,
-                width: 14,
-                child: CircularProgressIndicator(strokeWidth: 2),
+            const SizedBox(height: FixGoSpacing.md),
+            Text(
+              formatSatang(widget.amount),
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
+            ),
+            if (widget.payeeName != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'โอนเข้าบัญชี: ${widget.payeeName}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
-              SizedBox(width: 8),
-              Text('กำลังรอการยืนยันยอดเงิน...',
-                  style: TextStyle(fontSize: 13)),
+              Text(
+                'ตรวจชื่อบัญชีในแอปธนาคารให้ตรงก่อนกดโอน',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ] else if (expires != null)
+              Text(
+                'QR ใช้ได้ถึง ${expires.hour.toString().padLeft(2, '0')}:${expires.minute.toString().padLeft(2, '0')} น.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            if (widget.requiresSlip) ...[
+              const SizedBox(height: FixGoSpacing.md),
+              if (_slipSubmitted)
+                const _SlipReviewBanner()
+              else
+                const Text(
+                  'โอนเสร็จแล้ว แนบสลิปเพื่อให้ทีมงานตรวจยอด',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13),
+                ),
+              const SizedBox(height: FixGoSpacing.sm),
+              OutlinedButton.icon(
+                onPressed: _uploadingSlip ? null : _attachSlip,
+                icon: _uploadingSlip
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.receipt_long_outlined),
+                label: Text(_slipSubmitted ? 'แนบสลิปใหม่' : 'แนบสลิป'),
+              ),
             ],
-          ),
-        ],
+            const SizedBox(height: FixGoSpacing.sm),
+            if (!widget.requiresSlip || _slipSubmitted)
+              const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 14,
+                    width: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(width: 8),
+                  Text('กำลังรอการยืนยันยอดเงิน...',
+                      style: TextStyle(fontSize: 13)),
+                ],
+              ),
+          ],
+        ),
       ),
       actions: [
         TextButton(

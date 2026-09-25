@@ -16,7 +16,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import Stripe from 'stripe';
-import { IsString } from 'class-validator';
+import { IsString, MaxLength } from 'class-validator';
 import { Role } from '@prisma/client';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
@@ -26,6 +26,12 @@ import { JwtPayload } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { readSecret } from '../config/environment';
 import { confirmedPaymentFromStripeEvent } from './payment-gateway';
+
+export class SubmitSlipDto {
+  @IsString()
+  @MaxLength(1000)
+  slipUrl!: string;
+}
 
 export class GatewayWebhookDto {
   @IsString()
@@ -69,6 +75,17 @@ export class PaymentsController {
     @Param('orderId') orderId: string,
   ) {
     return this.payments.getPaymentForActor(orderId, user);
+  }
+
+  @Post('orders/:orderId/slip')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CUSTOMER)
+  submitSlip(
+    @CurrentUser() user: JwtPayload,
+    @Param('orderId') orderId: string,
+    @Body() dto: SubmitSlipDto,
+  ) {
+    return this.payments.submitSlip(orderId, user.sub, dto.slipUrl);
   }
 
   @Post('orders/:orderId/cash/confirm')

@@ -230,6 +230,8 @@ class Order {
     this.ratingComment,
     this.completedAt,
     this.cancelReason,
+    this.paymentSlipSubmittedAt,
+    this.paymentSlipRejectReason,
   });
 
   final String id;
@@ -265,6 +267,15 @@ class Order {
 
   /// เหตุผลเมื่อทีมงานเป็นผู้ยกเลิกงาน (ลูกค้ายกเลิกเองจะเป็น null)
   final String? cancelReason;
+
+  /// ลูกค้าแนบสลิปโอนพร้อมเพย์แล้ว รอทีมงานตรวจยอดเข้าบัญชี
+  final DateTime? paymentSlipSubmittedAt;
+
+  /// ทีมงานตรวจแล้วสลิปไม่ผ่าน ลูกค้าต้องแนบใหม่
+  final String? paymentSlipRejectReason;
+
+  bool get awaitingSlipReview =>
+      !isPaid && paymentSlipSubmittedAt != null;
 
   bool get isInspection => categorySlug == 'used-car-inspection';
 
@@ -316,6 +327,10 @@ class Order {
           ? DateTime.parse(json['completedAt'] as String).toLocal()
           : null,
       cancelReason: json['cancelReason'] as String?,
+      paymentSlipSubmittedAt: payment?['slipSubmittedAt'] is String
+          ? DateTime.parse(payment!['slipSubmittedAt'] as String).toLocal()
+          : null,
+      paymentSlipRejectReason: payment?['slipRejectReason'] as String?,
     );
   }
 }

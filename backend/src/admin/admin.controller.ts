@@ -17,6 +17,7 @@ import {
 } from '@prisma/client';
 
 import { AdminService } from './admin.service';
+import { PaymentsService } from '../payments/payments.service';
 import { JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
 
 export class AdminLoginDto {
@@ -51,7 +52,10 @@ export class ResolveWithdrawalDto {
 
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly payments: PaymentsService,
+  ) {}
 
   @Post('login')
   login(@Body() dto: AdminLoginDto) {
@@ -101,6 +105,27 @@ export class AdminController {
   @Roles(Role.ADMIN)
   cancelOrder(@Param('id') id: string, @Body() dto: CancelOrderDto) {
     return this.admin.cancelOrder(id, dto.reason);
+  }
+
+  @Get('payments/slips')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  listSlips() {
+    return this.payments.listSlipsForReview();
+  }
+
+  @Post('payments/:id/confirm')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  confirmSlip(@Param('id') id: string) {
+    return this.payments.confirmSlip(id);
+  }
+
+  @Post('payments/:id/reject')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  rejectSlip(@Param('id') id: string, @Body() dto: CancelOrderDto) {
+    return this.payments.rejectSlip(id, dto.reason);
   }
 
   @Get('withdrawals')

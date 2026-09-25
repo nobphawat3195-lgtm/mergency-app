@@ -147,6 +147,13 @@
       </tr></thead><tbody id="nomatch-body"></tbody></table></div>
     </div>
 
+    <div class="card" id="slips-card">
+      <h2>สลิปพร้อมเพย์รอตรวจ <span class="muted">(เช็คยอดเข้าบัญชีจริงก่อนกดยืนยัน)</span></h2>
+      <div class="table-wrap"><table><thead><tr>
+        <th>สลิป</th><th>เลขที่งาน</th><th>ยอดที่ต้องได้รับ</th><th>ลูกค้า</th><th>ช่าง</th><th>ส่งเมื่อ</th><th></th>
+      </tr></thead><tbody id="slips-body"></tbody></table></div>
+    </div>
+
     <div class="card">
       <h2>ช่างรออนุมัติ</h2>
       <div class="table-wrap"><table><thead><tr>
@@ -256,7 +263,7 @@ async function showDashboard() {
 
 async function refreshAll() {
   await Promise.all([
-    loadSummary(), loadNoMatch(), loadProviders(), loadWithdrawals(), loadOrders(),
+    loadSummary(), loadNoMatch(), loadSlips(), loadProviders(), loadWithdrawals(), loadOrders(),
   ]);
 }
 
@@ -283,6 +290,53 @@ async function loadNoMatch() {
           <button class="danger" onclick="cancelOrder('${order.id}')">ยกเลิกงาน</button>
         </td>
       </tr>`).join('');
+}
+
+async function loadSlips() {
+  const slips = await api('/admin/payments/slips');
+  el('slips-card').classList.toggle('alert', slips.length > 0);
+  el('slips-body').innerHTML = slips.length === 0
+    ? '<tr><td colspan="7">ไม่มีสลิปรอตรวจ</td></tr>'
+    : slips.map((payment) => `
+      <tr>
+        <td><a href="${escapeHtml(payment.slipUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(payment.slipUrl)}" alt="สลิป" style="width:64px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"></a></td>
+        <td><strong>${escapeHtml(payment.order.orderNo)}</strong></td>
+        <td><strong>${escapeHtml(formatSatang(payment.amount))}</strong></td>
+        <td>${escapeHtml(payment.order.customer?.phone || '-')}</td>
+        <td>${escapeHtml(payment.order.provider?.nickname || '-')}</td>
+        <td>${escapeHtml(new Date(payment.slipSubmittedAt).toLocaleString('th-TH'))}</td>
+        <td>
+          <button onclick="confirmSlip('${payment.id}','${escapeHtml(formatSatang(payment.amount))}')">ยอดเข้าแล้ว</button>
+          <button class="danger" onclick="rejectSlip('${payment.id}')">ไม่ผ่าน</button>
+        </td>
+      </tr>`).join('');
+}
+
+async function confirmSlip(id, amountText) {
+  if (!confirm(`ยืนยันว่ายอด ${amountText} เข้าบัญชีแล้ว? ระบบจะบันทึกชำระแล้วและเครดิตรายได้ให้ช่างทันที`)) return;
+  try {
+    await api('/admin/payments/' + id + '/confirm', { method: 'POST' });
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
+}
+
+async function rejectSlip(id) {
+  const reason = prompt(
+    'เหตุผลที่สลิปไม่ผ่าน (ส่งถึงลูกค้า)',
+    'ยังไม่พบยอดเงินเข้าบัญชี หรือยอดในสลิปไม่ตรงกับยอดที่ต้องชำระ',
+  );
+  if (!reason) return;
+  try {
+    await api('/admin/payments/' + id + '/reject', {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
 }
 
 async function redispatch(id) {
@@ -319,6 +373,7 @@ async function loadSummary() {
   el('stats').innerHTML = [
     { label: 'ออเดอร์ทั้งหมด', value: summary.orderCount },
     { label: 'งานไม่มีช่างรับ', value: summary.noMatchOrders ?? 0, alert: (summary.noMatchOrders ?? 0) > 0 },
+    { label: 'สลิปรอตรวจ', value: summary.pendingSlips ?? 0, alert: (summary.pendingSlips ?? 0) > 0 },
     { label: 'งานที่เสร็จแล้ว', value: summary.completedCount },
     { label: 'รายได้ค่าธรรมเนียม', value: formatSatang(summary.commissionRevenue) },
     { label: 'ช่างรออนุมัติ', value: summary.pendingProviders },

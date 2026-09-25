@@ -18,7 +18,8 @@ export type PushType =
   | 'QUOTE_REJECTED'
   | 'COMPLETED'
   | 'CANCELLED'
-  | 'PAID';
+  | 'PAID'
+  | 'PAYMENT_REVIEW';
 
 interface OrderRef {
   id: string;
@@ -233,6 +234,16 @@ export class PushService {
       order,
       'งานเสร็จแล้ว',
       `ยอดชำระ ${formatBaht(amountSatang)} ชำระและให้คะแนนช่างได้ในแอป`,
+    );
+  }
+
+  slipRejected(customerId: string, order: OrderRef, reason: string) {
+    return this.toCustomer(
+      customerId,
+      'PAYMENT_REVIEW',
+      order,
+      'สลิปยังไม่ผ่านการตรวจสอบ',
+      `${reason} แนบสลิปใหม่ได้ในหน้างาน`,
     );
   }
 

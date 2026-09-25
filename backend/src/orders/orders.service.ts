@@ -19,6 +19,19 @@ import {
 } from '../inspections/inspections.service';
 import { CreateOrderDto, ProposeQuoteDto, RateOrderDto } from './dto/order.dto';
 
+/** ไม่ส่งรูปสลิปออกไปกับข้อมูลงาน (ช่างไม่ควรเห็นบัญชีธนาคารของลูกค้า) แอดมินดูได้ในหน้าตรวจสลิป */
+const PAYMENT_SUMMARY = {
+  select: {
+    id: true,
+    amount: true,
+    method: true,
+    status: true,
+    paidAt: true,
+    slipSubmittedAt: true,
+    slipRejectReason: true,
+  },
+} as const;
+
 /** สถานะที่ช่างเปลี่ยนเองได้ และสถานะก่อนหน้าที่อนุญาต */
 const PROVIDER_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus>> = {
   [OrderStatus.EN_ROUTE]: OrderStatus.MATCHED,
@@ -103,7 +116,7 @@ export class OrdersService {
         subService: true,
         vehicleType: true,
         photos: true,
-        payment: true,
+        payment: PAYMENT_SUMMARY,
         rating: true,
         inspection: {
           select: {
@@ -168,7 +181,7 @@ export class OrdersService {
         category: true,
         subService: true,
         photos: true,
-        payment: true,
+        payment: PAYMENT_SUMMARY,
         inspection: {
           select: {
             brand: true,

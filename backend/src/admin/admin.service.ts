@@ -190,6 +190,7 @@ export class AdminService {
       pendingProviders,
       pendingWithdrawals,
       noMatchOrders,
+      pendingSlips,
     ] = await Promise.all([
       this.prisma.order.count(),
       this.prisma.order.findMany({
@@ -203,6 +204,9 @@ export class AdminService {
         where: { status: WithdrawalStatus.REQUESTED },
       }),
       this.prisma.order.count({ where: { status: OrderStatus.NO_MATCH } }),
+      this.prisma.payment.count({
+        where: { status: 'PENDING', slipSubmittedAt: { not: null } },
+      }),
     ]);
 
     const commissionRevenue = completedOrders.reduce(
@@ -218,6 +222,7 @@ export class AdminService {
       pendingProviders,
       pendingWithdrawals,
       noMatchOrders,
+      pendingSlips,
     };
   }
 }

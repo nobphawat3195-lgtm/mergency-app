@@ -1,6 +1,8 @@
 import { Logger } from '@nestjs/common';
 import Stripe from 'stripe';
 
+import { normalizePromptPayId, promptPayPayload } from './promptpay-qr';
+
 /** ข้อมูลที่ gateway ต้องใช้สร้าง QR พร้อมเพย์ 1 รายการ */
 export interface PromptPayRequest {
   paymentId: string;
@@ -31,7 +33,7 @@ export interface ConfirmedPayment {
 }
 
 export interface PaymentGateway {
-  readonly name: 'stub' | 'stripe';
+  readonly name: 'stub' | 'stripe' | 'promptpay_manual';
   createPromptPay(request: PromptPayRequest): Promise<PromptPayQr>;
 }
 
@@ -50,6 +52,33 @@ export class StubPaymentGateway implements PaymentGateway {
       qrPayload: `STUB-QR|${chargeId}|${request.amount}`,
       hostedUrl: null,
       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    };
+  }
+}
+
+/**
+ * พร้อมเพย์โอนตรงเข้าบัญชีของบริษัท (ไม่มีค่าธรรมเนียม)
+ *
+ * QR ล็อกยอดเงินตามงาน แต่ระบบรู้ไม่ได้เองว่าเงินเข้าแล้ว ลูกค้าต้องแนบสลิป
+ * แล้วแอดมินตรวจยอดในบัญชีจริงก่อนกดยืนยัน สถานะจึงเป็น PAID
+ */
+export class ManualPromptPayGateway implements PaymentGateway {
+  readonly name = 'promptpay_manual' as const;
+
+  constructor(
+    private readonly promptPayId: string,
+    readonly payeeName: string,
+  ) {
+    normalizePromptPayId(promptPayId);
+  }
+
+  async createPromptPay(request: PromptPayRequest): Promise<PromptPayQr> {
+    return {
+      chargeId: `manual_${request.paymentId}`,
+      qrPayload: promptPayPayload(this.promptPayId, request.amount),
+      hostedUrl: null,
+      // QR แบบนี้ไม่หมดอายุฝั่งธนาคาร แต่ให้แอปขอใหม่ทุกวันเผื่อยอดงานเปลี่ยน
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     };
   }
 }
@@ -168,6 +197,16 @@ export function createPaymentGateway(): PaymentGateway {
       );
     }
     return new StripePaymentGateway(new Stripe(secretKey), email);
+  }
+  if (provider === 'promptpay_manual') {
+    const id = process.env.PROMPTPAY_ID?.trim();
+    const name = process.env.PROMPTPAY_NAME?.trim();
+    if (!id || !name) {
+      throw new Error(
+        'PAYMENT_PROVIDER=promptpay_manual ต้องตั้ง PROMPTPAY_ID และ PROMPTPAY_NAME',
+      );
+    }
+    return new ManualPromptPayGateway(id, name);
   }
   return new StubPaymentGateway();
 }

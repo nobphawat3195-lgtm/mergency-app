@@ -17,8 +17,12 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { PushService } from '../notifications/push.service';
+import { AdminAlertService } from '../notifications/admin-alert.service';
+import { UploadsService } from '../uploads/uploads.service';
+import { formatBaht } from '../common/money';
 import {
   ConfirmedPayment,
+  ManualPromptPayGateway,
   PAYMENT_GATEWAY,
   PaymentGateway,
 } from './payment-gateway';
@@ -30,6 +34,10 @@ export interface PromptPayCharge {
   expiresAt: Date;
   hostedUrl: string | null;
   provider: PaymentGateway['name'];
+  /** โอนเข้าบัญชีบริษัท: ลูกค้าต้องแนบสลิปให้ทีมงานตรวจ */
+  requiresSlip: boolean;
+  /** ชื่อบัญชีปลายทางให้ลูกค้าเทียบกับหน้าจอแอปธนาคารก่อนกดโอน */
+  payeeName: string | null;
 }
 
 @Injectable()
@@ -41,6 +49,8 @@ export class PaymentsService {
     private readonly wallet: WalletService,
     @Inject(PAYMENT_GATEWAY) private readonly gateway: PaymentGateway,
     private readonly push: PushService,
+    private readonly adminAlert: AdminAlertService,
+    private readonly uploads: UploadsService,
   ) {}
 
   get provider(): PaymentGateway['name'] {
@@ -103,7 +113,128 @@ export class PaymentsService {
       expiresAt: qr.expiresAt,
       hostedUrl: qr.hostedUrl,
       provider: this.gateway.name,
+      requiresSlip: this.gateway instanceof ManualPromptPayGateway,
+      payeeName:
+        this.gateway instanceof ManualPromptPayGateway
+          ? this.gateway.payeeName
+          : null,
     };
+  }
+
+  /**
+   * ลูกค้าแนบสลิปโอนพร้อมเพย์ (โหมดโอนเข้าบัญชีบริษัท)
+   * ยังไม่ถือว่าจ่ายแล้วจนกว่าแอดมินตรวจยอดเข้าบัญชีจริงแล้วกดยืนยัน
+   */
+  async submitSlip(orderId: string, customerId: string, slipUrl: string) {
+    if (!(this.gateway instanceof ManualPromptPayGateway)) {
+      throw new BadRequestException('ระบบชำระเงินนี้ไม่ต้องแนบสลิป');
+    }
+    this.uploads.assertOwnedUploads([slipUrl], customerId, 'PAYMENT_SLIP');
+    const payment = await this.prisma.payment.findUnique({
+      where: { orderId },
+      include: {
+        order: { select: { customerId: true, status: true, orderNo: true } },
+      },
+    });
+    if (!payment || payment.order.customerId !== customerId) {
+      throw new NotFoundException('ไม่พบรายการชำระเงินนี้');
+    }
+    if (payment.order.status !== OrderStatus.COMPLETED) {
+      throw new BadRequestException('แนบสลิปได้หลังช่างปิดงานแล้ว');
+    }
+    const updated = await this.prisma.payment.updateMany({
+      where: { id: payment.id, status: { not: PaymentStatus.PAID } },
+      data: {
+        slipUrl,
+        slipSubmittedAt: new Date(),
+        slipRejectReason: null,
+        method: PaymentMethod.PROMPTPAY,
+      },
+    });
+    if (updated.count !== 1) {
+      throw new BadRequestException('ออเดอร์นี้ชำระเงินแล้ว');
+    }
+    void this.adminAlert.slipSubmitted(
+      payment.order.orderNo,
+      formatBaht(payment.amount),
+    );
+    return { submitted: true };
+  }
+
+  /** รายการสลิปที่รอแอดมินตรวจ เรียงจากเก่าสุด */
+  listSlipsForReview() {
+    return this.prisma.payment.findMany({
+      where: {
+        status: PaymentStatus.PENDING,
+        slipSubmittedAt: { not: null },
+      },
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNo: true,
+            customer: { select: { phone: true } },
+            provider: { select: { nickname: true } },
+          },
+        },
+      },
+      orderBy: { slipSubmittedAt: 'asc' },
+    });
+  }
+
+  /**
+   * แอดมินตรวจแล้วว่ายอดเข้าบัญชีจริง: บันทึก PAID และเครดิตรายได้ช่างครั้งเดียว
+   * กดซ้ำได้ผลเหมือนเดิม
+   */
+  async confirmSlip(paymentId: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+    });
+    if (!payment) throw new NotFoundException('ไม่พบรายการชำระเงินนี้');
+    if (payment.status === PaymentStatus.PAID) return { status: 'PAID' };
+    if (!payment.slipSubmittedAt) {
+      throw new BadRequestException('ลูกค้ายังไม่ได้แนบสลิป');
+    }
+    const updated = await this.prisma.payment.updateMany({
+      where: { id: payment.id, status: { not: PaymentStatus.PAID } },
+      data: {
+        status: PaymentStatus.PAID,
+        method: PaymentMethod.PROMPTPAY,
+        paidAt: new Date(),
+      },
+    });
+    if (updated.count > 0) {
+      await this.wallet.creditOrderEarning(payment.orderId);
+      void this.notifyPaid(payment.orderId, payment.amount, 'PROMPTPAY');
+    }
+    return { status: 'PAID' };
+  }
+
+  /** สลิปไม่ถูกต้อง/ยอดไม่เข้า: แจ้งลูกค้าให้แนบใหม่ งานยังค้างชำระ */
+  async rejectSlip(paymentId: string, reason: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        order: { select: { id: true, orderNo: true, customerId: true } },
+      },
+    });
+    if (!payment) throw new NotFoundException('ไม่พบรายการชำระเงินนี้');
+    const updated = await this.prisma.payment.updateMany({
+      where: { id: payment.id, status: { not: PaymentStatus.PAID } },
+      data: {
+        slipSubmittedAt: null,
+        slipRejectReason: reason,
+      },
+    });
+    if (updated.count !== 1) {
+      throw new BadRequestException('รายการนี้ยืนยันชำระแล้ว ปฏิเสธไม่ได้');
+    }
+    void this.push.slipRejected(
+      payment.order.customerId,
+      payment.order,
+      reason,
+    );
+    return { rejected: true };
   }
 
   /**
@@ -191,7 +322,8 @@ export class PaymentsService {
         paidAt: new Date(),
       },
     });
-    await this.wallet.creditOrderEarning(orderId);
+    // ช่างรับเงินสดเต็มจำนวนแล้ว: หักค่าธรรมเนียมจากกระเป๋า ไม่ใช่เครดิตรายได้เพิ่ม
+    await this.wallet.chargeCashCommission(orderId);
     void this.notifyPaid(orderId, payment.amount, 'CASH');
   }
 

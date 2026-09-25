@@ -483,8 +483,15 @@ class FixGoApiClient {
   // ---------- Payments (ลูกค้า) ----------
 
   /// ขอ QR พร้อมเพย์ การได้ QR ไม่ใช่การชำระสำเร็จ ต้องรอ backend ยืนยันจาก gateway
-  Future<({String chargeId, String qrPayload, int amount, DateTime? expiresAt})>
-      createPromptPayCharge(String orderId) async {
+  Future<
+      ({
+        String chargeId,
+        String qrPayload,
+        int amount,
+        DateTime? expiresAt,
+        bool requiresSlip,
+        String? payeeName,
+      })> createPromptPayCharge(String orderId) async {
     final result = await _send(
       'POST',
       '/payments/orders/$orderId/promptpay',
@@ -495,7 +502,17 @@ class FixGoApiClient {
       qrPayload: result['qrPayload'] as String,
       amount: result['amount'] as int,
       expiresAt: expires == null ? null : DateTime.parse(expires).toLocal(),
+      requiresSlip: result['requiresSlip'] as bool? ?? false,
+      payeeName: result['payeeName'] as String?,
     );
+  }
+
+  /// ส่งสลิปโอนพร้อมเพย์ (อัปโหลดรูปด้วย [uploadImage] scope PAYMENT_SLIP ก่อน)
+  /// งานยังไม่เป็น "ชำระแล้ว" จนกว่าทีมงานตรวจยอดเข้าบัญชีจริง
+  Future<void> submitPaymentSlip(String orderId, String slipUrl) async {
+    await _send('POST', '/payments/orders/$orderId/slip', body: {
+      'slipUrl': slipUrl,
+    });
   }
 
   Future<void> confirmCashPayment(String orderId) async {

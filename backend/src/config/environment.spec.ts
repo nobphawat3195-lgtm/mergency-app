@@ -92,6 +92,20 @@ describe('environment safety', () => {
       ).not.toThrow();
     });
 
+    it('requires the PromptPay id and payee name for manual transfers', () => {
+      expect(() =>
+        validateEnvironment({ ...base, PAYMENT_PROVIDER: 'promptpay_manual' }),
+      ).toThrow('PROMPTPAY_ID');
+      expect(() =>
+        validateEnvironment({
+          ...base,
+          PAYMENT_PROVIDER: 'promptpay_manual',
+          PROMPTPAY_ID: '0812345678',
+          PROMPTPAY_NAME: 'FixGo',
+        }),
+      ).not.toThrow();
+    });
+
     it('still requires the HMAC webhook secret for the stub gateway', () => {
       expect(() => validateEnvironment(base)).toThrow('PAYMENT_WEBHOOK_SECRET');
     });

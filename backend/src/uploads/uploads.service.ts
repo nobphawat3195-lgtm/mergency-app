@@ -27,6 +27,7 @@ const DIRECTORIES: Record<UploadScope, string> = {
   ORDER: 'orders',
   PROVIDER_TOOL: 'provider-tools',
   INSPECTION: 'inspections',
+  PAYMENT_SLIP: 'payment-slips',
 };
 
 const UUID_FILE =
@@ -79,6 +80,9 @@ export class UploadsService {
       role !== 'PROVIDER'
     ) {
       throw new ForbiddenException('บัญชีนี้แนบรูปเครื่องมือช่างไม่ได้');
+    }
+    if (dto.scope === 'PAYMENT_SLIP' && role !== 'CUSTOMER') {
+      throw new ForbiddenException('แนบสลิปได้เฉพาะลูกค้า');
     }
 
     const key = `${DIRECTORIES[dto.scope]}/${userId}/${randomUUID()}.${EXTENSIONS[dto.contentType]}`;

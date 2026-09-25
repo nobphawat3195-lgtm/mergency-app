@@ -78,6 +78,43 @@ export class WalletService {
   }
 
   /**
+   * งานที่ลูกค้าจ่ายเงินสดให้ช่าง: ช่างถือเงินเต็มจำนวนอยู่แล้ว
+   * จึงบันทึกค่าธรรมเนียมที่ช่างต้องคืนบริษัทเป็นยอดติดลบ (หักจากรายได้งานพร้อมเพย์ครั้งถัดไป)
+   * ห้ามเครดิตรายได้ให้ซ้ำ ไม่งั้นช่างจะเบิกเงินที่บริษัทไม่เคยได้รับ
+   */
+  async chargeCashCommission(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
+    if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
+    if (!order.providerId) {
+      throw new BadRequestException('ออเดอร์นี้ไม่มีช่างรับผิดชอบ');
+    }
+    const gross = order.priceFinal ?? order.priceEstimated;
+    const commission = Math.round(gross * order.commissionRate);
+    try {
+      await this.prisma.walletEntry.create({
+        data: {
+          idempotencyKey: `cash-commission:${orderId}`,
+          providerId: order.providerId,
+          type: WalletEntryType.COMMISSION_DUE,
+          amount: -commission,
+          orderId,
+          memo: `ค่าธรรมเนียม ${Math.round(order.commissionRate * 100)}% งาน ${order.orderNo} (ลูกค้าจ่ายเงินสดกับช่าง)`,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  /**
    * ช่างกดขอเบิกเงิน — กันยอดออกจากกระเป๋าทันทีเพื่อไม่ให้เบิกซ้อนเกินยอดคงเหลือ
    * ใช้ Serializable กันกรณีกดเบิกพร้อมกันหลายครั้ง
    */
