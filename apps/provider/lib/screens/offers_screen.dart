@@ -967,7 +967,7 @@ class _OfferCardState extends State<_OfferCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'ราคาประเมินของงาน (ก่อนหักค่าธรรมเนียม)',
+                  'ราคาประเมินของงาน',
                   style: TextStyle(
                     fontSize: 12,
                     color: FixGoColors.textSecondary,

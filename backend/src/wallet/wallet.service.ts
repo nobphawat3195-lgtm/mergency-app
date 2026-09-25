@@ -62,7 +62,7 @@ export class WalletService {
           type: WalletEntryType.ORDER_EARNING,
           amount: net,
           orderId,
-          memo: `รายได้งาน ${order.orderNo} (หักค่าธรรมเนียม ${Math.round(order.commissionRate * 100)}%)`,
+          memo: `รายได้งาน ${order.orderNo}`,
         },
       });
     } catch (error) {
@@ -100,7 +100,7 @@ export class WalletService {
           type: WalletEntryType.COMMISSION_DUE,
           amount: -commission,
           orderId,
-          memo: `ค่าธรรมเนียม ${Math.round(order.commissionRate * 100)}% งาน ${order.orderNo} (ลูกค้าจ่ายเงินสดกับช่าง)`,
+          memo: `ค่าบริการแพลตฟอร์ม งาน ${order.orderNo} (ลูกค้าจ่ายเงินสดกับช่าง)`,
         },
       });
     } catch (error) {

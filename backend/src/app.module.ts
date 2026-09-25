@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 
+import { HideInternalFieldsInterceptor } from './common/hide-internal-fields.interceptor';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
@@ -40,6 +41,9 @@ import { NotificationsModule } from './notifications/notifications.module';
     LegalModule,
     NotificationsModule,
   ],
-  providers: [{ provide: APP_FILTER, useClass: SentryGlobalFilter }],
+  providers: [
+    { provide: APP_FILTER, useClass: SentryGlobalFilter },
+    { provide: APP_INTERCEPTOR, useClass: HideInternalFieldsInterceptor },
+  ],
 })
 export class AppModule {}

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../app_state.dart';
 
-/// กระเป๋าเงินช่าง — ยอดคงเหลือหลังหักค่าธรรมเนียม 35% แล้ว กดขอเบิกได้ตลอดเวลา
+/// กระเป๋าเงินช่าง — ยอดคงเหลือหลังหักค่าบริการแพลตฟอร์มแล้ว กดขอเบิกได้ตลอดเวลา
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
 
