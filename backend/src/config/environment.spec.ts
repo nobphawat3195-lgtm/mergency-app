@@ -125,6 +125,20 @@ describe('environment safety', () => {
       CORS_ORIGIN: 'https://app.example.com',
     };
 
+    it('allows SMS_PROVIDER=none only with team test phones', () => {
+      expect(() =>
+        validateEnvironment({ ...base, SMS_PROVIDER: 'none' }),
+      ).toThrow('REVIEW_LOGIN_PHONES');
+      expect(() =>
+        validateEnvironment({
+          ...base,
+          SMS_PROVIDER: 'none',
+          REVIEW_LOGIN_PHONES: '0811111111',
+          REVIEW_LOGIN_CODE: '482913',
+        }),
+      ).not.toThrow();
+    });
+
     it('rejects console SMS in production', () => {
       expect(() =>
         validateEnvironment({ ...base, SMS_PROVIDER: 'console' }),
@@ -142,6 +156,32 @@ describe('environment safety', () => {
           THAIBULKSMS_API_KEY: 'k',
           THAIBULKSMS_API_SECRET: 's',
           THAIBULKSMS_SENDER: 'FixGo',
+        }),
+      ).not.toThrow();
+    });
+
+    it('lets STORAGE_PROVIDER=local run without R2/S3 keys', () => {
+      const noS3 = {
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgresql://example',
+        JWT_SECRET: 'real-jwt',
+        OTP_SECRET: 'real-otp',
+        PAYMENT_WEBHOOK_SECRET: 'real-hook',
+        CORS_ORIGIN: 'https://app.example.com',
+        SMS_PROVIDER: 'twilio',
+        TWILIO_ACCOUNT_SID: 'a',
+        TWILIO_AUTH_TOKEN: 't',
+        TWILIO_FROM: '+1',
+      };
+      expect(() => validateEnvironment(noS3)).toThrow('S3_BUCKET');
+      expect(() =>
+        validateEnvironment({ ...noS3, STORAGE_PROVIDER: 'local' }),
+      ).toThrow('API_DOMAIN');
+      expect(() =>
+        validateEnvironment({
+          ...noS3,
+          STORAGE_PROVIDER: 'local',
+          API_DOMAIN: 'api.example.com',
         }),
       ).not.toThrow();
     });

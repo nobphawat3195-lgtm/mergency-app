@@ -168,7 +168,11 @@ export class SmsService {
 
   async sendOtp(phone: string, code: string): Promise<void> {
     if (!this.sender) {
-      throw new ServiceUnavailableException('ยังไม่ได้ตั้งค่าผู้ให้บริการ SMS');
+      throw new ServiceUnavailableException(
+        process.env.SMS_PROVIDER?.trim() === 'none'
+          ? 'ขณะนี้เปิดให้ทดลองใช้เฉพาะทีมงาน กรุณาโทรติดต่อทีมงานเพื่อเรียกช่าง'
+          : 'ยังไม่ได้ตั้งค่าผู้ให้บริการ SMS',
+      );
     }
     try {
       await this.sender.send(phone, otpMessage(code));

@@ -1,5 +1,29 @@
 # Deploy production
 
+## ติดตั้งเร็ว (ฟรีทั้งหมด ประมาณ 30 นาที)
+
+1. **เซิร์ฟเวอร์ฟรี:** สมัคร [Oracle Cloud Free Tier](https://www.oracle.com/cloud/free/) แล้วสร้าง instance
+   - Image: Ubuntu 24.04, Shape: VM.Standard.A1.Flex (2 OCPU / 12 GB)
+   - ดาวน์โหลด SSH key เก็บไว้
+   - ที่ Networking > Virtual Cloud Network > Security List ให้เพิ่ม Ingress rule เปิด TCP 80 และ 443 จาก `0.0.0.0/0`
+2. **ชื่อเว็บฟรี:** สมัคร [DuckDNS](https://www.duckdns.org) จองชื่อ เช่น `fixgo` แล้วใส่ IP ของเครื่อง Oracle
+   - `fixgo.duckdns.org`, `api.fixgo.duckdns.org`, `admin.…`, `fixer.…` จะชี้มาที่เครื่องเดียวกันเอง
+3. **ติดตั้ง:** SSH เข้าเครื่องแล้วรัน
+   ```bash
+   git clone https://github.com/<owner>/mergency-app.git fixgo   # repo ส่วนตัว: ใช้ Personal Access Token แทนรหัสผ่าน
+   cd fixgo
+   sudo bash deploy/install.sh
+   ```
+   สคริปต์จะถามโดเมน เบอร์พร้อมเพย์ ชื่อบัญชี และเบอร์ติดต่อ แล้วติดตั้งให้ครบ ทั้ง HTTPS, ฐานข้อมูล, เก็บรูปบนเครื่อง, สำรองข้อมูลทุกวัน และบัญชีแอดมิน
+
+**ยังไม่มี SMS ก็เปิดได้:** เลือก "โหมดทดลอง" แล้วใส่เบอร์ทีมงาน เบอร์เหล่านี้ล็อกอินด้วยรหัสตายตัวที่สคริปต์สุ่มให้ ส่วนคนอื่นจะเห็นปุ่มโทรหาทีมงานแทน
+- พร้อมเปิดให้ทุกคน: ใส่ค่า ThaiBulkSMS ใน `deploy/.env.production` เปลี่ยน `SMS_PROVIDER=thaibulksms` ลบ `REVIEW_LOGIN_PHONES` แล้วรัน `sudo bash deploy/install.sh` อีกครั้ง
+
+อัปเดตเวอร์ชัน: `git pull && sudo bash deploy/install.sh`
+
+รายละเอียดแต่ละส่วนอยู่ด้านล่าง
+
+
 ใช้ VPS เครื่องเดียวรัน 3 container:
 - **api**: NestJS จาก `backend/Dockerfile` รัน migration ให้เองทุกครั้งที่เริ่ม
 - **db**: PostgreSQL 16 ข้อมูลอยู่ใน volume `pgdata`
@@ -19,7 +43,9 @@
 - ช่างต้องเปิดหน้าเว็บค้างไว้ระหว่างพร้อมรับงาน (ระบบเช็กงานใหม่ทุก 10 วินาที)
 - ถ้าช่างใช้ Android ให้ติดตั้งไฟล์ APK จาก CI แทน (ไม่ต้องผ่าน Google Play) จะได้รับแจ้งเตือนงานเข้า
 
-รูปทั้งหมดอัปโหลดจากแอปตรงไป object storage (Cloudflare R2 หรือ S3) ไม่ผ่านเซิร์ฟเวอร์ เครื่องจึงใช้สเปกไม่สูงได้
+รูปเก็บได้ 2 แบบ:
+- `STORAGE_PROVIDER=local` (ค่าเริ่มต้นของ install.sh): เก็บบนดิสก์ของเครื่องนี้ใน volume `uploads` และ `backup.sh` สำรองให้ทุกวัน
+- Cloudflare R2 / S3: แอปอัปโหลดตรงไปที่ storage ไม่ผ่านเซิร์ฟเวอร์ เหมาะเมื่อมีรูปจำนวนมาก
 
 ## 1. สิ่งที่ต้องมี
 

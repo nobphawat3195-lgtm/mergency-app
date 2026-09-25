@@ -2,8 +2,13 @@
 
 {$API_DOMAIN} {
 	encode gzip
-	# รูปจากแอปอัปโหลดตรงไป object storage ไม่ผ่าน API จึงจำกัด body ได้เล็ก
-	request_body {
+	# คำขอทั่วไปจำกัด body เล็ก ยกเว้นการอัปโหลดรูปในโหมด STORAGE_PROVIDER=local (ไม่เกิน 10MB)
+	@upload path /api/uploads/local/*
+	@notUpload not path /api/uploads/local/*
+	request_body @upload {
+		max_size 11MB
+	}
+	request_body @notUpload {
 		max_size 2MB
 	}
 	reverse_proxy api:3000
@@ -46,6 +51,10 @@
 
 {$WEB_DOMAIN} {
 	root * /srv/web
+	# หน้าแรก HTML ของเว็บลูกค้ามีเบอร์ติดต่อและลิงก์นโยบายจาก env (LEGAL_CONTACT_PHONE, API_DOMAIN)
+	templates /index.html {
+		mime text/html
+	}
 	import flutter_web
 }
 

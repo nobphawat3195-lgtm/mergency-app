@@ -26,6 +26,8 @@ COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/dist-scripts ./dist-scripts
 COPY --from=build --chown=node:node /app/prisma ./prisma
 COPY --chown=node:node docker-entrypoint.sh ./
+# volume รูป (STORAGE_PROVIDER=local) รับสิทธิ์จากโฟลเดอร์นี้ตอนสร้างครั้งแรก
+RUN mkdir -p /data/uploads && chown node:node /data/uploads
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

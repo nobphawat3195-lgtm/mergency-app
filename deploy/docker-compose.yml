@@ -32,6 +32,10 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgresql://fixgo:${POSTGRES_PASSWORD}@db:5432/fixgo?schema=public
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      # รูปที่อัปโหลดเมื่อตั้ง STORAGE_PROVIDER=local
+      - uploads:/data/uploads
     expose:
       - "3000"
 
@@ -54,6 +58,8 @@ services:
       ADMIN_DOMAIN: ${ADMIN_DOMAIN:?ต้องตั้ง ADMIN_DOMAIN เช่น admin.fixgo.co.th}
       WEB_DOMAIN: ${WEB_DOMAIN:?ต้องตั้ง WEB_DOMAIN เช่น fixgo.co.th}
       FIXER_DOMAIN: ${FIXER_DOMAIN:?ต้องตั้ง FIXER_DOMAIN เช่น fixer.fixgo.co.th}
+      # เบอร์โทรบนหน้าแรกของเว็บลูกค้า (ว่างไว้ = ไม่แสดงปุ่มโทร)
+      LEGAL_CONTACT_PHONE: ${LEGAL_CONTACT_PHONE:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ../admin:/srv/admin:ro
@@ -62,5 +68,6 @@ services:
 
 volumes:
   pgdata:
+  uploads:
   caddy_data:
   caddy_config:

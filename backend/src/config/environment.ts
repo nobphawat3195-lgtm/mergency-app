@@ -27,14 +27,29 @@ export function validateEnvironment(
 ): Record<string, unknown> {
   if (config.NODE_ENV !== 'production') return config;
 
+  // STORAGE_PROVIDER=local เก็บรูปบนดิสก์ของเซิร์ฟเวอร์ ไม่ต้องใช้ R2/S3
+  const localStorage = String(config.STORAGE_PROVIDER ?? '').trim() === 'local';
+  if (
+    localStorage &&
+    !String(config.PUBLIC_API_URL ?? config.API_DOMAIN ?? '').trim()
+  ) {
+    throw new Error(
+      'API_DOMAIN (or PUBLIC_API_URL) is required when STORAGE_PROVIDER=local',
+    );
+  }
+  const storageVars = localStorage
+    ? []
+    : ([
+        'S3_BUCKET',
+        'S3_ACCESS_KEY_ID',
+        'S3_SECRET_ACCESS_KEY',
+        'S3_PUBLIC_BASE_URL',
+      ] as const);
   for (const name of [
     'DATABASE_URL',
     'JWT_SECRET',
     'OTP_SECRET',
-    'S3_BUCKET',
-    'S3_ACCESS_KEY_ID',
-    'S3_SECRET_ACCESS_KEY',
-    'S3_PUBLIC_BASE_URL',
+    ...storageVars,
   ] as const) {
     const value = String(config[name] ?? '').trim();
     if (!value || PLACEHOLDER_VALUES.has(value)) {
@@ -58,9 +73,21 @@ export function validateEnvironment(
     ],
   };
   const smsProvider = String(config.SMS_PROVIDER ?? '').trim();
-  const smsVars = smsRequirements[smsProvider];
+  // none = โหมดทดลอง: ยังไม่ส่ง SMS เข้าสู่ระบบได้เฉพาะเบอร์ใน REVIEW_LOGIN_PHONES ด้วยรหัสตายตัว
+  const smsVars =
+    smsProvider === 'none' ? ([] as const) : smsRequirements[smsProvider];
   if (!smsVars) {
-    throw new Error('SMS_PROVIDER must be twilio or thaibulksms in production');
+    throw new Error(
+      'SMS_PROVIDER must be twilio, thaibulksms or none in production',
+    );
+  }
+  if (
+    smsProvider === 'none' &&
+    !String(config.REVIEW_LOGIN_PHONES ?? '').trim()
+  ) {
+    throw new Error(
+      'REVIEW_LOGIN_PHONES is required when SMS_PROVIDER=none (only those phones can log in)',
+    );
   }
   for (const name of smsVars) {
     if (!String(config[name] ?? '').trim()) {

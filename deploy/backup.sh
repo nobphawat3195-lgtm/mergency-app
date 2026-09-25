@@ -12,3 +12,13 @@ docker compose -f docker-compose.yml --env-file .env.production exec -T db \
 [ -s "$file" ] || { echo "backup ว่างเปล่า: $file"; rm -f "$file"; exit 1; }
 find backups -name 'fixgo-*.sql.gz' -mtime +14 -delete
 echo "สำรองแล้ว: $file"
+
+# รูปที่เก็บบนเซิร์ฟเวอร์ (STORAGE_PROVIDER=local) สำรองแบบเต็มทุกวันเช่นกัน
+if docker compose -f docker-compose.yml --env-file .env.production exec -T api test -d /data/uploads; then
+  uploads="backups/fixgo-uploads-$(date -u +%Y%m%d-%H%M%S).tar.gz"
+  docker compose -f docker-compose.yml --env-file .env.production exec -T api \
+    tar -C /data -czf - uploads > "$uploads"
+  [ -s "$uploads" ] || { echo "backup รูปว่างเปล่า: $uploads"; rm -f "$uploads"; exit 1; }
+  find backups -name 'fixgo-uploads-*.tar.gz' -mtime +14 -delete
+  echo "สำรองรูปแล้ว: $uploads"
+fi
