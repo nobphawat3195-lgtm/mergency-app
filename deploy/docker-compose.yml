@@ -1,4 +1,5 @@
 # FixGo production บน VPS เครื่องเดียว: API + PostgreSQL + Caddy (HTTPS อัตโนมัติ)
+# Caddy เสิร์ฟเว็บแอปลูกค้า, เว็บแอปช่าง และหน้าแอดมินด้วย
 # วิธีใช้ดู docs/DEPLOY.md
 #   cp deploy/.env.production.example deploy/.env.production   แล้วกรอกค่า
 #   docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production up -d --build
@@ -35,7 +36,12 @@ services:
       - "3000"
 
   caddy:
-    image: caddy:2-alpine
+    # อิมเมจ Caddy ที่มีเว็บแอปลูกค้า (/srv/web) และแอปช่าง (/srv/fixer) build ไว้แล้ว
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      args:
+        API_BASE_URL: https://${API_DOMAIN}
     restart: unless-stopped
     depends_on:
       - api
@@ -46,6 +52,8 @@ services:
     environment:
       API_DOMAIN: ${API_DOMAIN:?ต้องตั้ง API_DOMAIN เช่น api.fixgo.co.th}
       ADMIN_DOMAIN: ${ADMIN_DOMAIN:?ต้องตั้ง ADMIN_DOMAIN เช่น admin.fixgo.co.th}
+      WEB_DOMAIN: ${WEB_DOMAIN:?ต้องตั้ง WEB_DOMAIN เช่น fixgo.co.th}
+      FIXER_DOMAIN: ${FIXER_DOMAIN:?ต้องตั้ง FIXER_DOMAIN เช่น fixer.fixgo.co.th}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ../admin:/srv/admin:ro

@@ -3,7 +3,21 @@
 ใช้ VPS เครื่องเดียวรัน 3 container:
 - **api**: NestJS จาก `backend/Dockerfile` รัน migration ให้เองทุกครั้งที่เริ่ม
 - **db**: PostgreSQL 16 ข้อมูลอยู่ใน volume `pgdata`
-- **caddy**: HTTPS อัตโนมัติ ส่งต่อ `api.<โดเมน>` ไปที่ API และเสิร์ฟหน้าแอดมินที่ `admin.<โดเมน>`
+- **caddy**: HTTPS อัตโนมัติ build จาก `deploy/web.Dockerfile` เสิร์ฟ 4 โดเมน
+
+| โดเมน (ตัวแปร) | เสิร์ฟอะไร |
+|---|---|
+| `WEB_DOMAIN` | เว็บแอปลูกค้า FixGo |
+| `FIXER_DOMAIN` | เว็บแอปช่าง FixGo Fixer |
+| `ADMIN_DOMAIN` | หน้าแอดมิน (ต้องขึ้นต้นด้วย `admin.` และอยู่คู่กับ `api.` ของโดเมนเดียวกัน) |
+| `API_DOMAIN` | API |
+
+เว็บแอปทั้งสองคือโค้ดเดียวกับแอปมือถือ build เป็นเว็บ ผู้ใช้กด "เพิ่มลงหน้าจอโฮม" ในเบราว์เซอร์แล้วจะเปิดใช้เหมือนแอปได้
+
+**ข้อจำกัดของเว็บ:**
+- ไม่มีแจ้งเตือน push
+- ช่างต้องเปิดหน้าเว็บค้างไว้ระหว่างพร้อมรับงาน (ระบบเช็กงานใหม่ทุก 10 วินาที)
+- ถ้าช่างใช้ Android ให้ติดตั้งไฟล์ APK จาก CI แทน (ไม่ต้องผ่าน Google Play) จะได้รับแจ้งเตือนงานเข้า
 
 รูปทั้งหมดอัปโหลดจากแอปตรงไป object storage (Cloudflare R2 หรือ S3) ไม่ผ่านเซิร์ฟเวอร์ เครื่องจึงใช้สเปกไม่สูงได้
 
@@ -11,8 +25,8 @@
 
 | รายการ | คำแนะนำ |
 |---|---|
-| VPS | 2 vCPU / 2–4 GB RAM / 40 GB, Ubuntu 24.04 เลือก region สิงคโปร์ (DigitalOcean, Vultr, AWS Lightsail) |
-| โดเมน | ตั้ง A record `api.` และ `admin.` ชี้ไปที่ IP ของ VPS |
+| VPS | 2 vCPU / 2–4 GB RAM / 40 GB, Ubuntu 24.04 เลือก region สิงคโปร์ ตัวเลือกฟรี: Oracle Cloud Always Free (ARM, VM.Standard.A1.Flex) ใช้กับชุดนี้ได้ |
+| โดเมน | ชี้โดเมนหลัก และ `api.` `admin.` `fixer.` ไปที่ IP ของ VPS ตัวเลือกฟรี: DuckDNS จองชื่อเดียว เช่น `fixgo.duckdns.org` แล้ว `api.fixgo.duckdns.org` ฯลฯ จะชี้ไปที่ IP เดียวกันเอง |
 | Object storage | Cloudflare R2 (ไม่มีค่า egress) หรือ AWS S3 |
 | SMS | ThaiBulkSMS (ส่งในไทย ราคาถูก ต้องขออนุมัติชื่อผู้ส่งก่อน 1–3 วันทำการ) หรือ Twilio |
 | ชำระเงิน | พร้อมเพย์ของเจ้าของ + แอดมินตรวจสลิป (เริ่มต้น) หรือ Stripe ดู `docs/PAYMENTS.md` |
@@ -23,6 +37,8 @@
 ```bash
 # ติดตั้ง Docker
 curl -fsSL https://get.docker.com | sh
+# Oracle Cloud: เปิดพอร์ต 80/443 ที่ Networking > Virtual Cloud Network > Security List ด้วย
+# (image ของ Oracle ปิดพอร์ตไว้ทั้งใน cloud และใน iptables ของเครื่อง)
 # เปิดเฉพาะ SSH และเว็บ
 ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw allow 443/udp && ufw enable
 
@@ -66,12 +82,15 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production \
 - `https://api.<โดเมน>/api/health` ต้องตอบ `{"status":"ok","database":"up"}`
 - `https://api.<โดเมน>/api/legal/privacy` ต้องเปิดได้ และต้องไม่มีช่องสีเหลืองที่ยังไม่กรอก
 - `https://admin.<โดเมน>` เปิดหน้าแอดมินได้ หน้านี้เรียก API ที่ `api.<โดเมน>` เอง
+- `https://<โดเมน>` เปิดเว็บลูกค้า และ `https://fixer.<โดเมน>` เปิดเว็บช่าง ล็อกอินด้วย OTP ได้
+  - ถ้าล็อกอินแล้วขึ้นว่าเชื่อมต่อไม่ได้ ให้ตรวจว่า `CORS_ORIGIN` มีทั้งสองโดเมนนี้
 
 ## 5. เชื่อมบริการภายนอก
 
 - **Stripe** (เฉพาะเมื่อใช้ `PAYMENT_PROVIDER=stripe`):
   - ที่ Developers > Webhooks ให้เพิ่ม endpoint `https://api.<โดเมน>/api/payments/stripe/webhook` แล้วเลือก event `payment_intent.succeeded`
   - นำ signing secret (`whsec_…`) ไปใส่ใน `STRIPE_WEBHOOK_SECRET`
+- **เว็บแอป:** ไม่ต้องตั้งเพิ่ม `docker compose ... up -d --build` จะ build เว็บด้วย `API_BASE_URL=https://$API_DOMAIN` ให้เอง ครั้งแรกใช้เวลาประมาณ 5–10 นาที
 - **แอปมือถือ:** build แอปด้วย `--dart-define=API_BASE_URL=https://api.<โดเมน>` และค่า Firebase ตาม `docs/PUSH.md`
 - **ทีมรีวิว App Store:**
   - ตั้ง `REVIEW_LOGIN_PHONES` และ `REVIEW_LOGIN_CODE`

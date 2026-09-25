@@ -93,6 +93,15 @@ export class AccountService {
         select: { url: true },
       });
       await tx.orderPhoto.deleteMany({ where: { orderId: { in: orderIds } } });
+      // สลิปโอนเงินมีชื่อและเลขบัญชีของลูกค้า ลบรูป เหลือไว้แค่ยอดและสถานะการชำระ
+      const slips = await tx.payment.findMany({
+        where: { orderId: { in: orderIds }, slipUrl: { not: null } },
+        select: { slipUrl: true },
+      });
+      await tx.payment.updateMany({
+        where: { orderId: { in: orderIds } },
+        data: { slipUrl: null },
+      });
       await tx.order.updateMany({
         where: { customerId },
         data: { pickupAddress: null, note: null },
@@ -120,7 +129,10 @@ export class AccountService {
           deletedAt: new Date(),
         },
       });
-      return orderPhotos.map((photo) => photo.url);
+      return [
+        ...orderPhotos.map((photo) => photo.url),
+        ...slips.map((slip) => slip.slipUrl as string),
+      ];
     });
     // ลบไฟล์หลัง commit แล้วเท่านั้น ถ้า transaction ล้มรูปต้องยังอยู่ครบ
     await this.uploads.deleteUploads(photos);

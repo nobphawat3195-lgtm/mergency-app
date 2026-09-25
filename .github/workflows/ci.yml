@@ -54,6 +54,29 @@ jobs:
         if: failure()
         run: docker logs api || true
 
+  web-image:
+    # อิมเมจ Caddy + เว็บแอปที่ docker compose build บนเซิร์ฟเวอร์จริง
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build web image
+        run: docker build -f deploy/web.Dockerfile --build-arg API_BASE_URL=https://api.example.com -t fixgo-web:ci .
+      - name: Serve both web apps through the real Caddyfile
+        run: |
+          docker run -d --name web -p 8081:8081 -p 8082:8082 \
+            -e API_DOMAIN=http://localhost:8090 -e ADMIN_DOMAIN=http://localhost:8091 \
+            -e WEB_DOMAIN=http://localhost:8081 -e FIXER_DOMAIN=http://localhost:8082 \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" -v "$PWD/admin:/srv/admin:ro" fixgo-web:ci
+          sleep 3
+          curl -fsS http://localhost:8081/ | grep -q "FixGo"
+          curl -fsS http://localhost:8082/ | grep -q "FixGo Fixer"
+          # ลิงก์ตรงเข้าหน้าในแอปต้องได้ index.html ไม่ใช่ 404
+          curl -fsS http://localhost:8081/orders/any | grep -q "flutter_bootstrap.js"
+          docker exec web grep -q "https://api.example.com" /srv/web/main.dart.js
+      - name: Web logs
+        if: failure()
+        run: docker logs web || true
+
   flutter:
     runs-on: ubuntu-latest
     steps:
@@ -74,3 +97,10 @@ jobs:
       - name: Analyze provider app
         working-directory: apps/provider
         run: flutter pub get && flutter analyze
+      # เว็บแอปที่ deploy/web.Dockerfile build ขึ้นเซิร์ฟเวอร์จริง
+      - name: Build customer web
+        working-directory: apps/customer
+        run: flutter build web --release --no-web-resources-cdn --dart-define=API_BASE_URL=https://api.example.com
+      - name: Build provider web
+        working-directory: apps/provider
+        run: flutter build web --release --no-web-resources-cdn --dart-define=API_BASE_URL=https://api.example.com
