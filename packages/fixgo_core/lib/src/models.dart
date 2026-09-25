@@ -274,8 +274,7 @@ class Order {
   /// ทีมงานตรวจแล้วสลิปไม่ผ่าน ลูกค้าต้องแนบใหม่
   final String? paymentSlipRejectReason;
 
-  bool get awaitingSlipReview =>
-      !isPaid && paymentSlipSubmittedAt != null;
+  bool get awaitingSlipReview => !isPaid && paymentSlipSubmittedAt != null;
 
   bool get isInspection => categorySlug == 'used-car-inspection';
 
@@ -389,15 +388,19 @@ class WalletEntry {
     required this.amount,
     required this.createdAt,
     this.memo,
+    this.orderId,
   });
 
   final String id;
+
+  /// ORDER_EARNING, COMMISSION_DUE (งานเงินสด: หักค่าธรรมเนียม), WITHDRAWAL, ...
   final String type;
 
   /// หน่วยสตางค์ บวก = เงินเข้า ลบ = เงินออก
   final int amount;
   final DateTime createdAt;
   final String? memo;
+  final String? orderId;
 
   factory WalletEntry.fromJson(Map<String, dynamic> json) {
     return WalletEntry(
@@ -406,6 +409,7 @@ class WalletEntry {
       amount: json['amount'] as int,
       createdAt: DateTime.parse(json['createdAt'] as String),
       memo: json['memo'] as String?,
+      orderId: json['orderId'] as String?,
     );
   }
 }

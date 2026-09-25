@@ -38,8 +38,7 @@ class _OffersScreenState extends State<OffersScreen> {
     unawaited(_syncOnlineStatus());
     // มีงานใหม่หรือสถานะงานเปลี่ยน: ดึงทันทีไม่ต้องรอรอบ 10 วิ
     final push = PushNotifications.instance;
-    _pushSub = push.onAny
-        .listen((_) => unawaited(_refresh()));
+    _pushSub = push.onAny.listen((_) => unawaited(_refresh()));
     // ดึงงานใหม่ทุก 10 วิ และให้ countdown เดินด้วย
     _timer = Timer.periodic(const Duration(seconds: 10), (_) {
       unawaited(_refresh());
@@ -280,7 +279,7 @@ class _OffersScreenState extends State<OffersScreen> {
 
 /// ตัวเลขสรุปวันนี้ คำนวณจากข้อมูลจริงเท่านั้น
 /// - งานเสร็จวันนี้: ออเดอร์ของช่างที่ completedAt เป็นวันนี้
-/// - รายได้วันนี้: ORDER_EARNING ที่เข้ากระเป๋าวันนี้ (หลังยืนยันการชำระแล้ว หักค่าธรรมเนียมแล้ว)
+/// - รายได้วันนี้: รายได้สุทธิหลังหักค่าธรรมเนียมของงานที่ยืนยันการชำระวันนี้ ทั้งพร้อมเพย์และเงินสด
 /// ไม่มี "เวลาออนไลน์" เพราะ backend ยังไม่เก็บประวัติเวลาออนไลน์
 class _TodaySummary {
   const _TodaySummary({
@@ -301,6 +300,23 @@ class _TodaySummary {
         local.day == now.day;
   }
 
+  /// รายได้สุทธิของช่างจากรายการในกระเป๋า
+  /// - ORDER_EARNING (พร้อมเพย์): ยอดที่เข้ากระเป๋า
+  /// - COMMISSION_DUE (เงินสด): ช่างถือเงินสดเต็มจำนวน รายได้สุทธิ = ยอดงาน - ค่าธรรมเนียม
+  static int _netEarning(WalletEntry entry, List<Order> orders) {
+    switch (entry.type) {
+      case 'ORDER_EARNING':
+        return entry.amount;
+      case 'COMMISSION_DUE':
+        final order =
+            orders.where((order) => order.id == entry.orderId).firstOrNull;
+        if (order == null) return 0;
+        return (order.priceFinal ?? order.priceEstimated) + entry.amount;
+      default:
+        return 0;
+    }
+  }
+
   factory _TodaySummary.from({
     required List<Order> orders,
     required List<WalletEntry> entries,
@@ -316,11 +332,8 @@ class _TodaySummary {
           )
           .length,
       earnedToday: entries
-          .where(
-            (entry) =>
-                entry.type == 'ORDER_EARNING' && _isToday(entry.createdAt),
-          )
-          .fold(0, (sum, entry) => sum + entry.amount),
+          .where((entry) => _isToday(entry.createdAt))
+          .fold(0, (sum, entry) => sum + _netEarning(entry, orders)),
       balance: balance,
     );
   }
