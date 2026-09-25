@@ -4,6 +4,10 @@ import { DispatchStatus, OrderStatus, ProviderStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../notifications/push.service';
+import {
+  AdminAlertService,
+  coarseArea,
+} from '../notifications/admin-alert.service';
 import { distanceKm } from '../common/geo';
 import {
   DISPATCH_MAX_CANDIDATES,
@@ -44,6 +48,7 @@ export class DispatchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly push: PushService,
+    private readonly adminAlert: AdminAlertService,
   ) {}
 
   /** เริ่มกระจายงาน: หาช่างที่เข้าเงื่อนไข เรียงตามระยะทาง แล้วเสนอให้คนใกล้สุดก่อน */
@@ -56,7 +61,10 @@ export class DispatchService {
   }
 
   /** เสนองานพร้อมกันให้กลุ่มช่างที่ใกล้ที่สุด คนแรกที่รับได้งาน */
-  private async offerToNextBatch(orderId: string): Promise<void> {
+  private async offerToNextBatch(
+    orderId: string,
+    { notifyNoMatch = true }: { notifyNoMatch?: boolean } = {},
+  ): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -81,7 +89,7 @@ export class DispatchService {
     if (hasActiveOffer) return;
 
     if (order.dispatchAttempts.length >= DISPATCH_MAX_CANDIDATES) {
-      await this.markNoMatch(orderId);
+      await this.markNoMatch(orderId, notifyNoMatch);
       return;
     }
 
@@ -138,7 +146,7 @@ export class DispatchService {
       Math.min(DISPATCH_BATCH_SIZE, remainingSlots),
     );
     if (batch.length === 0) {
-      await this.markNoMatch(orderId);
+      await this.markNoMatch(orderId, notifyNoMatch);
       return;
     }
 
@@ -171,19 +179,51 @@ export class DispatchService {
     );
   }
 
-  private async markNoMatch(orderId: string): Promise<void> {
+  private async markNoMatch(orderId: string, notify = true): Promise<void> {
     const updated = await this.prisma.order.updateMany({
       where: { id: orderId, status: OrderStatus.SEARCHING },
       data: { status: OrderStatus.NO_MATCH },
     });
     this.logger.warn(`ออเดอร์ ${orderId} ไม่มีช่างรับ ส่งต่อให้แอดมิน`);
-    // TODO: แจ้งเตือนแอดมิน
-    if (updated.count === 0) return;
+    // แอดมินกดหาช่างใหม่เองแล้วยังไม่เจอ: แอดมินเห็นผลในหน้าจออยู่แล้ว ลูกค้าก็รู้แล้ว ไม่แจ้งซ้ำ
+    if (updated.count === 0 || !notify) return;
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, orderNo: true, customerId: true },
+      select: {
+        id: true,
+        orderNo: true,
+        customerId: true,
+        pickupAddress: true,
+        subService: { select: { name: true } },
+      },
     });
-    if (order) void this.push.noMatch(order.customerId, order);
+    if (!order) return;
+    void this.push.noMatch(order.customerId, order);
+    void this.adminAlert.noMatch({
+      orderNo: order.orderNo,
+      serviceName: order.subService.name,
+      area: coarseArea(order.pickupAddress),
+    });
+  }
+
+  /**
+   * แอดมินสั่งหาช่างใหม่ให้งานที่ไม่มีใครรับ (เช่น หลังโทรเรียกช่างให้เปิดแอป)
+   * ล้างรอบเสนองานเดิมเพื่อให้ช่างที่เคยปฏิเสธ/หมดเวลาได้รับข้อเสนออีกครั้ง
+   */
+  async redispatch(orderId: string): Promise<void> {
+    const reopened = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: { id: orderId, status: OrderStatus.NO_MATCH },
+        data: { status: OrderStatus.SEARCHING },
+      });
+      if (updated.count !== 1) return false;
+      await tx.dispatchAttempt.deleteMany({ where: { orderId } });
+      return true;
+    });
+    if (!reopened) {
+      throw new BadRequestException('ส่งหาช่างใหม่ได้เฉพาะงานที่ไม่มีช่างรับ');
+    }
+    await this.offerToNextBatch(orderId, { notifyNoMatch: false });
   }
 
   /** ช่างกดรับงาน */

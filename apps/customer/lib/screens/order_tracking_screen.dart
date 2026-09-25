@@ -301,6 +301,14 @@ class _StatusCard extends StatelessWidget {
                 style: TextStyle(color: FixGoColors.warning),
               ),
             ],
+            if (order.status == OrderStatus.cancelled &&
+                order.cancelReason != null) ...[
+              const SizedBox(height: FixGoSpacing.sm),
+              Text(
+                order.cancelReason!,
+                style: const TextStyle(color: FixGoColors.textSecondary),
+              ),
+            ],
             const SizedBox(height: FixGoSpacing.md),
             for (var index = 0; index < _timeline.length; index++)
               _TimelineRow(

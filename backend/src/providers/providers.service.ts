@@ -8,6 +8,7 @@ import { Provider, ProviderStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
+import { AdminAlertService } from '../notifications/admin-alert.service';
 import {
   RegisterProviderDto,
   UpdateLocationDto,
@@ -19,6 +20,7 @@ export class ProvidersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
+    private readonly adminAlert: AdminAlertService,
   ) {}
 
   /** uploaderId = sub ของโทเคนที่ใช้ขอ presign (ช่างที่ยังไม่สมัครคือ pending:<เบอร์>) */
@@ -39,7 +41,7 @@ export class ProvidersService {
       throw new BadRequestException('เบอร์นี้ลงทะเบียนเป็นช่างไว้แล้ว');
     }
 
-    return this.prisma.provider.create({
+    const provider = await this.prisma.provider.create({
       data: {
         phone,
         realName: dto.realName,
@@ -65,6 +67,8 @@ export class ProvidersService {
         },
       },
     });
+    void this.adminAlert.providerApplied(provider.nickname);
+    return provider;
   }
 
   async getMe(providerId: string) {

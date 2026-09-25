@@ -229,6 +229,7 @@ class Order {
     this.ratingScore,
     this.ratingComment,
     this.completedAt,
+    this.cancelReason,
   });
 
   final String id;
@@ -261,6 +262,9 @@ class Order {
 
   /// เวลาปิดงานจาก backend ใช้สรุปงานเสร็จวันนี้ในแอปช่าง
   final DateTime? completedAt;
+
+  /// เหตุผลเมื่อทีมงานเป็นผู้ยกเลิกงาน (ลูกค้ายกเลิกเองจะเป็น null)
+  final String? cancelReason;
 
   bool get isInspection => categorySlug == 'used-car-inspection';
 
@@ -311,6 +315,7 @@ class Order {
       completedAt: json['completedAt'] is String
           ? DateTime.parse(json['completedAt'] as String).toLocal()
           : null,
+      cancelReason: json['cancelReason'] as String?,
     );
   }
 }

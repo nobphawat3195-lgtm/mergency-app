@@ -3,17 +3,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  Prisma,
-  WalletEntryType,
-  WithdrawalStatus,
-} from '@prisma/client';
+import { Prisma, WalletEntryType, WithdrawalStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { AdminAlertService } from '../notifications/admin-alert.service';
+import { formatBaht } from '../common/money';
 
 @Injectable()
 export class WalletService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly adminAlert: AdminAlertService,
+  ) {}
 
   /** ยอดคงเหลือ = ผลรวมทุกรายการใน ledger ของช่างคนนั้น */
   async getBalance(providerId: string): Promise<number> {
@@ -85,7 +86,7 @@ export class WalletService {
       throw new BadRequestException('จำนวนเงินที่ขอเบิกต้องมากกว่า 0');
     }
 
-    return this.prisma.$transaction(
+    const withdrawal = await this.prisma.$transaction(
       async (tx) => {
         const provider = await tx.provider.findUnique({
           where: { id: providerId },
@@ -133,10 +134,15 @@ export class WalletService {
           },
         });
 
-        return withdrawal;
+        return { withdrawal, nickname: provider.nickname };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+    void this.adminAlert.withdrawalRequested(
+      withdrawal.nickname,
+      formatBaht(amount),
+    );
+    return withdrawal.withdrawal;
   }
 
   listWithdrawals(providerId: string) {

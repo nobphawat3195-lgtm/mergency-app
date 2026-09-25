@@ -80,6 +80,28 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production \
 
 หลังแก้ `.env.production` ต้องรัน `up -d` อีกครั้ง container จะถูกสร้างใหม่ด้วยค่าใหม่
 
+### แจ้งเตือนทีมงานผ่าน LINE
+
+ระบบจะส่งข้อความเข้ากลุ่ม LINE ของทีมงานเมื่อเกิด 3 เหตุการณ์:
+- **ไม่มีช่างรับงาน**
+- **ช่างสมัครใหม่**
+- **คำขอเบิกเงิน**
+
+ในข้อความจะมีแค่เลขงาน ประเภทบริการ และเขตกับจังหวัด ไม่มีเบอร์โทรหรือชื่อลูกค้า รายละเอียดเต็มให้ดูในหน้าแอดมินที่ต้องล็อกอิน
+
+ขั้นตอนตั้งค่า:
+1. สร้าง LINE Official Account แล้วเปิด Messaging API ที่ [LINE Developers](https://developers.line.biz)
+2. ออก channel access token (long-lived) แล้วใส่ใน `LINE_CHANNEL_ACCESS_TOKEN`
+3. เชิญบอตเข้ากลุ่ม LINE ของทีมงาน
+4. หา groupId ของกลุ่มจาก webhook event แล้วใส่ใน `LINE_ADMIN_TO`
+5. ตั้ง `ADMIN_ALERT_CHANNEL=line`
+
+ถ้าใช้ Slack หรือ Discord ให้ตั้ง `ADMIN_ALERT_CHANNEL=webhook` และใส่ URL ของ webhook ใน `ADMIN_ALERT_WEBHOOK_URL`
+
+เมื่อแอดมินได้รับแจ้งว่าไม่มีช่างรับงาน ให้เปิดหน้าแอดมิน ส่วน "งานที่ไม่มีช่างรับ" จะแสดงเบอร์ลูกค้าและปุ่มแผนที่ แล้วเลือกจัดการได้ 2 ทาง:
+- **ส่งหาช่างอีกครั้ง** เช่น หลังโทรเรียกช่างให้เปิดแอปแล้ว
+- **ยกเลิกงาน** ต้องใส่เหตุผล และเหตุผลนี้จะส่งถึงลูกค้าทาง push
+
 ## 6. อัปเดตเวอร์ชัน
 
 ```bash

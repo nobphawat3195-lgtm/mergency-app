@@ -7,17 +7,18 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700;800&display=swap" rel="stylesheet">
 <title>FixGo Admin</title>
 <style>
-  /* โทนเดียวกับแอป: พื้นเทาอ่อน การ์ดขาวมุมโค้ง ส้ม FixGo เป็นสีปุ่ม action */
+  /* โทนเดียวกับแอป (DESIGN.md): เขียว FixGo เป็นสีปุ่ม action พื้นมินต์อ่อน */
   :root {
-    --navy: #1D2330;
-    --accent: #F26B1D;
-    --accent-active: #D9560A;
-    --accent-soft: #FFF1E7;
-    --surface: #F5F6F8;
-    --text-secondary: #6B7280;
-    --border: #E8EAEE;
-    --success: #16A34A;
-    --error: #DC2626;
+    --navy: #122821;
+    --accent: #0B5F45;
+    --accent-active: #084A36;
+    --accent-soft: #ECF8F1;
+    --surface: #F3F8F5;
+    --text-secondary: #4A6259;
+    --border: #D5E8DE;
+    --success: #16A37B;
+    --error: #C62828;
+    --warn-soft: #FFF4E5;
   }
   * { box-sizing: border-box; }
   body {
@@ -39,7 +40,7 @@
   }
   header .logo {
     width: 36px; height: 36px; border-radius: 10px;
-    background: linear-gradient(135deg, #FF8A2B, #E8480C);
+    background: linear-gradient(135deg, #16A37B, #0B5F45);
     display: grid; place-items: center; color: #fff;
   }
   header h1 { margin: 0; font-size: 20px; font-weight: 800; }
@@ -99,7 +100,10 @@
     border-radius: 16px;
     padding: 16px;
   }
-  .stat:first-child { background: linear-gradient(135deg, #FF8A3D, #E0500C); }
+  .stat:first-child { background: linear-gradient(135deg, #16A37B, #0B5F45); }
+  .stat.alert { background: var(--warn-soft); outline: 2px solid #F5A524; }
+  .card.alert { border-color: #F5A524; }
+  .muted { color: var(--text-secondary); font-size: 13px; }
   .stat:first-child .value, .stat:first-child .label { color: #fff; }
   .stat .value { font-size: 26px; font-weight: 800; color: var(--navy); }
   .stat .label { font-size: 13px; color: var(--text-secondary); }
@@ -134,6 +138,13 @@
     <div class="card">
       <h2>ภาพรวม</h2>
       <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="card" id="nomatch-card">
+      <h2>งานที่ไม่มีช่างรับ <span class="muted">(ลูกค้ารออยู่ ต้องจัดการด่วน)</span></h2>
+      <div class="table-wrap"><table><thead><tr>
+        <th>เลขที่</th><th>บริการ</th><th>จุดนัดหมาย</th><th>ลูกค้า</th><th>สร้างเมื่อ</th><th></th>
+      </tr></thead><tbody id="nomatch-body"></tbody></table></div>
     </div>
 
     <div class="card">
@@ -240,18 +251,79 @@ async function showDashboard() {
   el('login-view').classList.add('hidden');
   el('dashboard-view').classList.remove('hidden');
   el('logout').classList.remove('hidden');
-  await Promise.all([loadSummary(), loadProviders(), loadWithdrawals(), loadOrders()]);
+  await refreshAll();
+}
+
+async function refreshAll() {
+  await Promise.all([
+    loadSummary(), loadNoMatch(), loadProviders(), loadWithdrawals(), loadOrders(),
+  ]);
+}
+
+// งานไม่มีช่างรับต้องเห็นเร็ว รีเฟรชทุก 30 วินาทีขณะเปิดหน้าอยู่
+setInterval(() => {
+  if (token && !document.hidden) refreshAll().catch(() => {});
+}, 30000);
+
+async function loadNoMatch() {
+  const orders = await api('/admin/orders?status=NO_MATCH');
+  el('nomatch-card').classList.toggle('alert', orders.length > 0);
+  el('nomatch-body').innerHTML = orders.length === 0
+    ? '<tr><td colspan="6">ไม่มีงานค้าง</td></tr>'
+    : orders.map((order) => `
+      <tr>
+        <td><strong>${escapeHtml(order.orderNo)}</strong><br><small>เสนอช่างแล้ว ${escapeHtml(order._count?.dispatchAttempts ?? 0)} คน</small></td>
+        <td>${escapeHtml(order.subService?.name || order.category?.name || '-')}</td>
+        <td>${escapeHtml(order.pickupAddress || `${order.pickupLat.toFixed(5)}, ${order.pickupLng.toFixed(5)}`)}<br>
+          <small><a href="https://www.google.com/maps?q=${order.pickupLat},${order.pickupLng}" target="_blank" rel="noopener">เปิดแผนที่</a></small></td>
+        <td>${escapeHtml(order.customer?.phone || '-')}</td>
+        <td>${escapeHtml(new Date(order.createdAt).toLocaleString('th-TH'))}</td>
+        <td>
+          <button onclick="redispatch('${order.id}')">ส่งหาช่างอีกครั้ง</button>
+          <button class="danger" onclick="cancelOrder('${order.id}')">ยกเลิกงาน</button>
+        </td>
+      </tr>`).join('');
+}
+
+async function redispatch(id) {
+  try {
+    const result = await api('/admin/orders/' + id + '/redispatch', { method: 'POST' });
+    alert(result.status === 'SEARCHING'
+      ? 'ส่งข้อเสนอให้ช่างแล้ว รอช่างกดรับ'
+      : 'ยังไม่มีช่างที่ออนไลน์ในรัศมี ลองโทรเรียกช่างให้เปิดแอปแล้วกดอีกครั้ง');
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
+}
+
+async function cancelOrder(id) {
+  const reason = prompt(
+    'เหตุผลที่ยกเลิก (ข้อความนี้ส่งถึงลูกค้า)',
+    'ขออภัย ตอนนี้ไม่มีช่างว่างในพื้นที่ของคุณ ทีมงานยกเลิกงานให้แล้ว ไม่มีค่าใช้จ่าย',
+  );
+  if (!reason) return;
+  try {
+    await api('/admin/orders/' + id + '/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
 }
 
 async function loadSummary() {
   const summary = await api('/admin/summary');
   el('stats').innerHTML = [
     { label: 'ออเดอร์ทั้งหมด', value: summary.orderCount },
+    { label: 'งานไม่มีช่างรับ', value: summary.noMatchOrders ?? 0, alert: (summary.noMatchOrders ?? 0) > 0 },
     { label: 'งานที่เสร็จแล้ว', value: summary.completedCount },
     { label: 'รายได้ค่าธรรมเนียม', value: formatSatang(summary.commissionRevenue) },
     { label: 'ช่างรออนุมัติ', value: summary.pendingProviders },
     { label: 'คำขอเบิกค้าง', value: summary.pendingWithdrawals },
-  ].map((stat) => `<div class="stat"><div class="value">${escapeHtml(stat.value)}</div><div class="label">${escapeHtml(stat.label)}</div></div>`).join('');
+  ].map((stat) => `<div class="stat${stat.alert ? ' alert' : ''}"><div class="value">${escapeHtml(stat.value)}</div><div class="label">${escapeHtml(stat.label)}</div></div>`).join('');
 }
 
 async function loadProviders() {

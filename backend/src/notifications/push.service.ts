@@ -232,6 +232,30 @@ export class PushService {
     );
   }
 
+  cancelledByAdmin(
+    customerId: string,
+    providerId: string | null,
+    order: OrderRef,
+    reason: string,
+  ) {
+    return Promise.all([
+      this.toCustomer(
+        customerId,
+        'CANCELLED',
+        order,
+        'ทีมงานยกเลิกงานของคุณ',
+        reason,
+      ),
+      this.toProvider(
+        providerId,
+        'CANCELLED',
+        order,
+        'งานถูกยกเลิกโดยทีมงาน',
+        `งาน ${order.orderNo} ถูกยกเลิกแล้ว ไม่ต้องเดินทางต่อ`,
+      ),
+    ]).then(() => undefined);
+  }
+
   cancelledByCustomer(providerId: string | null, order: OrderRef) {
     return this.toProvider(
       providerId,

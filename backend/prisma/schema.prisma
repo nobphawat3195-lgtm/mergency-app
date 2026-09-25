@@ -234,6 +234,8 @@ model Order {
   matchedAt   DateTime?
   completedAt DateTime?
   cancelledAt DateTime?
+  /// เหตุผลที่ทีมงานยกเลิกงาน (ลูกค้ายกเลิกเองจะเป็น null)
+  cancelReason String?
 
   customer    Customer        @relation(fields: [customerId], references: [id])
   provider    Provider?       @relation(fields: [providerId], references: [id])

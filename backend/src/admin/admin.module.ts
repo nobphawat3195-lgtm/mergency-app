@@ -4,10 +4,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { AdminService } from './admin.service';
 import { AdminController } from './admin.controller';
 import { WalletModule } from '../wallet/wallet.module';
+import { DispatchModule } from '../dispatch/dispatch.module';
 
 @Module({
   imports: [
     WalletModule,
+    DispatchModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'dev-jwt-secret',
       signOptions: {
