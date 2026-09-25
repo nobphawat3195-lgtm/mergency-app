@@ -63,6 +63,7 @@ LEGAL_UPDATED_AT="..."
 | Other User Content (หมายเหตุ รายงานตรวจรถ) | ✓ | ✓ |
 | Purchase History (ประวัติงานและการชำระ) | ✓ | ✓ |
 | User ID | ✓ | ✓ |
+| Crash Data (Sentry: stack trace และรุ่นอุปกรณ์ ไม่มีข้อมูลผู้ใช้ ใช้แก้บั๊ก, App Functionality, ไม่ผูกกับตัวตน) | ✓ | ✓ |
 | Device ID (push token ของ FCM ใช้ส่งแจ้งเตือนสถานะงาน, App Functionality, ไม่ใช้ติดตาม) | ✓ | ✓ |
 | Name | | ✓ |
 | Other Financial Info (บัญชีรับเงิน) | | ✓ |

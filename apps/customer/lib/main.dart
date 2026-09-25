@@ -9,13 +9,15 @@ import 'screens/order_tracking_screen.dart';
 import 'screens/shell_screen.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await PushNotifications.instance.init();
-  final appState = AppState(
-    api: FixGoApiClient(baseUrl: AppConfig.apiBaseUrl),
-  );
-  await appState.restoreSession();
-  runApp(FixGoCustomerApp(appState: appState));
+  await runWithErrorReporting(appName: 'fixgo-customer', () async {
+    WidgetsFlutterBinding.ensureInitialized();
+    await PushNotifications.instance.init();
+    final appState = AppState(
+      api: FixGoApiClient(baseUrl: AppConfig.apiBaseUrl),
+    );
+    await appState.restoreSession();
+    runApp(FixGoCustomerApp(appState: appState));
+  });
 }
 
 class FixGoCustomerApp extends StatefulWidget {

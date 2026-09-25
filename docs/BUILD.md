@@ -15,6 +15,7 @@ GitHub Actions build แอปให้อัตโนมัติ:
 | `API_BASE_URL` | `https://api.<โดเมน>` |
 | `FIREBASE_PROJECT_ID`, `FIREBASE_SENDER_ID`, `FIREBASE_API_KEY` | จาก Firebase > Project settings |
 | `FIREBASE_CUSTOMER_ANDROID_APP_ID`, `FIREBASE_PROVIDER_ANDROID_APP_ID` | App ID ของแอป Android แต่ละตัว |
+| `SENTRY_CUSTOMER_DSN`, `SENTRY_PROVIDER_DSN` | DSN ของโปรเจกต์ Sentry แยกแอป (ไม่ตั้งค่า = ไม่ส่ง crash report) |
 
 **Secrets** (สำหรับเซ็นแอป Android ถ้าไม่ตั้ง CI จะเซ็นด้วย debug key ซึ่งใช้ติดตั้งทดสอบได้ แต่อัปโหลด Google Play ไม่ได้)
 
@@ -55,7 +56,8 @@ keytool -genkey -v -keystore fixgo-customer-upload.jks -keyalg RSA -keysize 2048
    flutter build ipa --release \
      --dart-define=API_BASE_URL=https://api.<โดเมน> \
      --dart-define=FIREBASE_PROJECT_ID=... --dart-define=FIREBASE_SENDER_ID=... \
-     --dart-define=FIREBASE_API_KEY=... --dart-define=FIREBASE_IOS_APP_ID=...
+     --dart-define=FIREBASE_API_KEY=... --dart-define=FIREBASE_IOS_APP_ID=... \
+     --dart-define=SENTRY_DSN=https://...@o0.ingest.sentry.io/0
    ```
    ครั้งแรกให้เปิด `ios/Runner.xcworkspace` ใน Xcode แล้วเลือก Team ที่ Signing & Capabilities (Automatic signing)
 4. อัปโหลด `build/ios/ipa/*.ipa` ผ่านแอป **Transporter** หรือ `xcrun altool` แล้วเพิ่มผู้ทดสอบใน TestFlight

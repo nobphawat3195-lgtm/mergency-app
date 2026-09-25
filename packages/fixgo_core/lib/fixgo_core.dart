@@ -5,6 +5,7 @@ export 'src/category_icons.dart';
 export 'src/format.dart';
 export 'src/inspection.dart';
 export 'src/location_service.dart';
+export 'src/error_reporting.dart';
 export 'src/models.dart';
 export 'src/push_notifications.dart';
 export 'src/money.dart';

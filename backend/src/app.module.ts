@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -19,6 +21,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
+    // ส่งเฉพาะ error ที่ไม่ใช่ HttpException (เช่น 500) ไป Sentry ถ้าตั้ง SENTRY_DSN
+    SentryModule.forRoot(),
     ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
@@ -36,5 +40,6 @@ import { NotificationsModule } from './notifications/notifications.module';
     LegalModule,
     NotificationsModule,
   ],
+  providers: [{ provide: APP_FILTER, useClass: SentryGlobalFilter }],
 })
 export class AppModule {}

@@ -7,13 +7,15 @@ import 'screens/register_screen.dart';
 import 'screens/shell_screen.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await PushNotifications.instance.init();
-  final appState = ProviderAppState(
-    api: FixGoApiClient(baseUrl: AppConfig.apiBaseUrl),
-  );
-  await appState.restoreSession();
-  runApp(FixGoProviderApp(appState: appState));
+  await runWithErrorReporting(appName: 'fixgo-fixer', () async {
+    WidgetsFlutterBinding.ensureInitialized();
+    await PushNotifications.instance.init();
+    final appState = ProviderAppState(
+      api: FixGoApiClient(baseUrl: AppConfig.apiBaseUrl),
+    );
+    await appState.restoreSession();
+    runApp(FixGoProviderApp(appState: appState));
+  });
 }
 
 class FixGoProviderApp extends StatefulWidget {

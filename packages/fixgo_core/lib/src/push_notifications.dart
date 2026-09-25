@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
+import 'error_reporting.dart';
 
 /// ค่า Firebase ต่อแอป ส่งตอน build ด้วย --dart-define (ไม่เก็บไฟล์ config ไว้ใน repo)
 ///
@@ -144,8 +145,9 @@ class PushNotifications {
       final initial = await messaging.getInitialMessage();
       if (initial != null) _launchEvent = PushEvent.fromMessage(initial);
       _enabled = true;
-    } catch (error) {
-      debugPrint('ปิด push: เริ่ม Firebase ไม่สำเร็จ ($error)');
+    } catch (error, stackTrace) {
+      // ปิด push แต่แอปยังใช้ได้ (ดึงสถานะจาก API ตามปกติ)
+      reportError(error, stackTrace);
     }
   }
 
