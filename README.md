@@ -1,149 +1,137 @@
-# FixGo
+# FixGo — On-demand roadside car repair platform
 
-Web app และแอปเรียกช่างรถยนต์นอกสถานที่ พร้อมระบบรับงานสำหรับช่างและหลังบ้านสำหรับผู้ดูแล ครอบคลุมตั้งแต่แชร์ตำแหน่ง ส่งรูป ประเมินราคา อนุมัติราคาก่อนซ่อม ไปจนถึงปิดงานและบันทึกรายได้ช่าง
+**FixGo** connects drivers whose car breaks down with nearby mechanics in Thailand, like a ride-hailing app for car repair.
+A customer requests help. The system offers the job to the closest available mechanics. The mechanic quotes a price, which the customer approves before any work starts. The customer then pays by cash or by Thai QR PromptPay.
 
-## โครงสร้าง
+The platform has three parts: a customer app, a mechanic app ("FixGo Fixer") and an admin console. All of it is built from one codebase and deployable with a single command.
+
+[ภาษาไทยด้านล่าง](#ภาษาไทย)
+
+| Home | Booking | Live tracking | PromptPay + slip | Used-car report | Mechanic app |
+|:-:|:-:|:-:|:-:|:-:|:-:|
+| <img src="docs/screenshots/customer-home.png" width="150"> | <img src="docs/screenshots/customer-booking.png" width="150"> | <img src="docs/screenshots/customer-tracking.png" width="150"> | <img src="docs/screenshots/customer-promptpay.png" width="150"> | <img src="docs/screenshots/customer-inspection-report.png" width="150"> | <img src="docs/screenshots/provider-home.png" width="150"> |
+
+*Screenshots are from the interactive web demo, which uses sample data. That is why they carry a "ตัวอย่าง" (demo) ribbon.*
+
+## Highlights
+
+- **Dispatch engine.** It offers each job to the nearest online mechanics in batches of 4, with a 90-second accept window per batch, a 25 km radius and up to 12 candidates. The first mechanic to accept wins, and this is safe under concurrent accepts. If nobody accepts, an admin gets a LINE alert and can re-dispatch or cancel the job.
+- **Price approval before work.** The mechanic proposes a quote, and the customer approves or rejects it. Every state transition is validated on the server.
+- **Payments that can't be faked.**
+  - Thai QR PromptPay payloads (EMVCo + CRC-16) go straight to the owner's account.
+  - A customer can upload a slip, but an order becomes `PAID` only when an admin confirms the money arrived or a signed Stripe webhook confirms it. Displaying a QR or pressing a button never marks an order paid.
+  - The wallet is an idempotent ledger. For cash jobs the mechanic keeps the cash and is charged the platform fee instead of being credited twice.
+- **Real-time tracking** uses Server-Sent Events, falls back to polling, and sends push notifications through FCM HTTP v1 with a self-signed JWT.
+- **Used-car inspection mode.** A 134-point checklist in 11 categories, with measured values (paint thickness, tread, brake pads, battery), required photo evidence, weighted A–E grading and red flags for flood, crash, odometer and paperwork problems.
+- **Security and privacy (PDPA).**
+  - OTP login is rate-limited.
+  - Order ownership and role guards return 404 to strangers.
+  - Upload URLs must be signed and are write-once. Files are checked by magic bytes and served with `nosniff` and a CSP.
+  - Internal fields such as the commission rate are stripped from API responses.
+  - Account deletion removes personal data and files.
+  - Admin alerts contain no customer PII.
+- **Production-ready ops.**
+  - Docker (API, Postgres and Caddy with auto-HTTPS).
+  - `deploy/install.sh` does a one-command install on a fresh Ubuntu VPS.
+  - Nightly backups.
+  - The API refuses to start with missing or placeholder secrets.
+  - A trial mode lets the team test before SMS is paid for.
+- **CI (GitHub Actions)** runs:
+  - backend typecheck and tests (86 unit tests)
+  - Flutter analyze and tests
+  - a Docker boot test
+  - a web image smoke test through the real Caddyfile
+  - Android APK/AAB builds and an iOS build
+
+## Architecture
+
+```mermaid
+flowchart LR
+  C[Customer app<br/>Flutter · iOS / Android / Web] -->|HTTPS + SSE| API
+  P[Mechanic app<br/>Flutter · iOS / Android / Web] -->|HTTPS| API
+  A[Admin console<br/>HTML/JS] -->|HTTPS| API
+  subgraph Server [VPS · Docker Compose]
+    Caddy[Caddy<br/>auto-HTTPS + static web] --> API[NestJS API]
+    API --> DB[(PostgreSQL<br/>Prisma)]
+    API --> FS[(Uploads<br/>disk or S3/R2)]
+  end
+  API --> FCM[FCM push]
+  API --> SMS[SMS OTP<br/>ThaiBulkSMS / Twilio]
+  API --> LINE[LINE admin alerts]
+  API -.optional.-> Stripe[Stripe PromptPay]
+```
+
+| Layer | Tech |
+|---|---|
+| Mobile & web apps | Flutter 3 (Dart), shared `fixgo_core` package: theme, models, API client, location |
+| Backend | NestJS 11, TypeScript, Prisma 5, PostgreSQL 16, RxJS (SSE) |
+| Infrastructure | Docker, Caddy, GitHub Actions |
+| Integrations | FCM, ThaiBulkSMS/Twilio, Stripe (optional), LINE Messaging API, OpenStreetMap Nominatim |
 
 ```text
-backend/                 NestJS + Prisma + PostgreSQL
-apps/customer/           Flutter ลูกค้า (มือถือและ Web)
-apps/provider/           Flutter ช่างรับงาน
-admin/                    เว็บหลังบ้าน
-packages/fixgo_core/     ธีม โมเดล API client และบริการตำแหน่งที่ใช้ร่วมกัน
-docs/                     Product/UX specification
+backend/                NestJS + Prisma API
+apps/customer/          Flutter customer app (mobile + web)
+apps/provider/          Flutter mechanic app (mobile + web)
+admin/                  Admin console
+packages/fixgo_core/    Shared Flutter code
+deploy/                 Docker Compose, Caddyfile, install & backup scripts
+docs/                   Product spec, deploy, payments, push, build guides
 ```
 
-## ความสามารถที่มีแล้ว
-
-### ลูกค้า
-
-- ล็อกอินด้วยเบอร์โทรและ OTP พร้อมเก็บ session แบบ secure storage
-- เลือกบริการ ประเภทรถ และส่งตำแหน่ง GPS ปัจจุบัน
-- เขียนรายละเอียดและอัปโหลดรูปปัญหารถได้สูงสุด 5 รูป
-- เปิดตำแหน่งใน Google Maps และโทรหาช่างจากหน้าติดตามงาน
-- ดูสถานะงานและราคาประเมินแบบอัปเดตต่อเนื่อง
-- อนุมัติหรือปฏิเสธราคาที่ช่างเสนอ ก่อนเริ่มซ่อม
-- ชำระเงินสด หรือแสดง PromptPay QR เมื่อเชื่อม payment gateway
-- จองตรวจรถมือสองราคาเดียว 1,990 บาท: กรอกยี่ห้อ/รุ่น/ปี ลิงก์ประกาศ ข้อมูลผู้ขาย และวันเวลานัด
-- ดูรายงานตรวจรถ: เกรด A–E, คำแนะนำควรซื้อหรือไม่, ธงความเสี่ยงรถจมน้ำ/ชนหนัก/กรอไมล์/เอกสาร, จุดที่พบพร้อมรูป และคะแนนรายหมวด
-
-### ช่าง
-
-- ลงทะเบียนด้วยชื่อ เบอร์โทร ประสบการณ์ พื้นที่ เวลาให้บริการ ประเภทรถ และบริการที่รับ
-- อัปโหลดรูปเครื่องมือจริงเพื่อให้แอดมินตรวจสอบ
-- เปิด/ปิดรับงาน ส่ง heartbeat และตำแหน่งล่าสุด
-- รับข้อเสนอเป็นชุดตามระยะทาง ป้องกันช่างที่กำลังมีงานรับซ้อน
-- เสนอราคาและหมายเหตุ รอลูกค้ายืนยันก่อนเริ่มงาน
-- อัปเดตสถานะ เดินทาง/กำลังซ่อม/เสร็จสิ้น และยืนยันรับเงินสด
-- กระเป๋ารายได้แบบ ledger และคำขอถอนเงิน
-
-- ทำรายงานตรวจรถมือสอง 134 จุด 11 หมวด บันทึกอัตโนมัติ กรอกค่าวัด (ความหนาสี ดอกยาง ผ้าเบรก แบต ฯลฯ) แล้วระบบตัดสินผ่าน/ไม่ผ่านให้ ข้อที่ไม่ผ่านต้องถ่ายรูปประกอบ และต้องส่งรายงานก่อนปิดงาน
-
-### ผู้ดูแลและเซิร์ฟเวอร์
-
-- อนุมัติช่าง ดูงาน และจัดการคำขอถอนเงิน
-- ป้องกันการเข้าถึงออเดอร์ของผู้อื่น (ownership/role checks)
-- Dispatch ช่างออนไลน์ที่ heartbeat ไม่เก่า ตามระยะทางและเวลาทำงาน
-- เสนองานครั้งละ 4 คน รอบละ 90 วินาที สูงสุด 12 คน ภายใน 25 กม.
-- บันทึกรายได้แบบ idempotent ป้องกันเครดิตซ้ำ
-- จำกัดการขอ/เดา OTP และไม่ส่ง OTP กลับใน production
-- CORS allow-list, secret validation, signed webhook และ health check
-- Presigned upload สำหรับ S3-compatible storage
-- SMS จริงผ่าน Twilio หรือ console ใน development
-- Migration เริ่มต้น, unit tests และ GitHub Actions CI
-
-## โหมดตรวจรถมือสอง
-
-- รายการตรวจอยู่ที่ `backend/src/inspections/checklist.ts` เป็นแหล่งข้อมูลเดียว แอปดึงผ่าน `GET /api/inspections/checklist` ไม่ hardcode ในแอป
-- หมวด: เอกสารและตัวตนรถ, โครงสร้างตัวถัง, สีและตัวถัง (วัดความหนาสี 11 ชิ้น), ร่องรอยรถจมน้ำ, ห้องเครื่อง, สแกน OBD2, ระบบไฮบริด/EV, ช่วงล่างและเบรก, ยางและล้อ, ห้องโดยสารและไฟฟ้า, ทดลองขับ
-- การให้คะแนน (`grading.ts`): ข้อสำคัญมีน้ำหนัก 3 เท่า ข้อสำคัญไม่ผ่านแม้ข้อเดียว, สงสัยรถจมน้ำ หรือเอกสารไม่ตรง = ไม่แนะนำให้ซื้อ
-- API: `GET/PATCH /api/orders/:id/inspection`, `POST /api/orders/:id/inspection/submit` ลูกค้าเห็นผลรายข้อเฉพาะหลังช่างส่งรายงาน
-- ถ้าแก้ความหมายของรายการตรวจ ให้เพิ่ม `CHECKLIST_VERSION`
-
-## ส่วนที่ต้องเชื่อมก่อนเปิด production
-
-โค้ดเตรียมจุดเชื่อมไว้แล้ว แต่ต้องมีบัญชีและ credential ของเจ้าของระบบ:
-
-1. **Push notification** — ตอนนี้แอปช่างตรวจงานใหม่ทุก 10 วินาที ต้องสร้าง Firebase project และเพิ่ม FCM/APNs เพื่อแจ้งเตือนเมื่อแอปอยู่เบื้องหลัง
-2. **Payment gateway** — เงินสดใช้งานได้ แต่ PromptPay production ถูกปิดไว้จนกว่าจะเชื่อม gateway จริงและใช้ webhook secret ของผู้ให้บริการ
-3. **SMS** — ตั้งค่า Twilio หรือเปลี่ยน adapter เป็นผู้ให้บริการ SMS ไทย
-4. **Object storage** — ตั้ง S3/R2/Spaces และ CORS ของ bucket เพื่อรับรูปจาก Flutter Web
-5. **แผนที่เชิงภาพ** — แชร์ GPS และเปิด Google Maps ได้แล้ว แต่ยังไม่ได้ฝังแผนที่/เส้นทางแบบ live ในแอป
-6. **Store release** — ต้องมี Apple Developer/Google Play Console, signing key, privacy policy และ Firebase config ของแอปจริง
-
-อย่าเปิด production ด้วย development fallback ระบบจะตรวจ secret ที่จำเป็นและหยุดทำงานทันทีหากตั้งค่าไม่ครบ
-
-## วิธีรัน Backend
+## Run locally
 
 ```bash
+# database
+docker run --name fixgo-db -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:16
+
+# API
 cd backend
 cp .env.example .env
-npm ci
-npm run prisma:generate
-npx prisma migrate deploy
-npm run prisma:seed
-npx ts-node prisma/create-admin.ts 0812345678 "แอดมิน" รหัสผ่านที่ปลอดภัย
-npm run start:dev
-```
+npm ci && npm run prisma:generate
+npx prisma migrate deploy && npm run prisma:seed
+npx ts-node prisma/create-admin.ts 0812345678 "Admin" '<a long password>'
+npm run start:dev        # http://localhost:3000/api/health
 
-ขึ้น production ด้วย Docker ดู [docs/DEPLOY.md](docs/DEPLOY.md)
-
-ต้องมี PostgreSQL ก่อน เช่น:
-
-```bash
-docker run --name fixgo-db -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:16
-```
-
-ตรวจคุณภาพ:
-
-```bash
-npm run typecheck
-npm test
-npm run build
-```
-
-## วิธีรัน Flutter
-
-```bash
-cd apps/customer        # หรือ apps/provider
-flutter pub get
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000
-```
-
-สำหรับ Web:
-
-```bash
+# apps (web)
+cd apps/customer         # or apps/provider
 flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:3000
 ```
 
-`10.0.2.2` คือ localhost ของเครื่องแม่จาก Android emulator หากใช้มือถือจริงให้เปลี่ยนเป็น IP/HTTPS API ที่มือถือเข้าถึงได้
+In development, OTP codes are returned by the API, so no SMS account is needed.
+Quality checks: `npm run typecheck && npm test` (backend), `flutter analyze && flutter test` (Flutter).
 
-## หลังบ้าน
+**Deploy to a VPS:** `sudo bash deploy/install.sh`. See [docs/DEPLOY.md](docs/DEPLOY.md).
 
-เปิด `admin/index.html` ผ่าน web server และตั้ง API base URL เมื่อต้องการ:
+---
 
-```js
-localStorage.setItem('fixgo_api_base', 'https://api.example.com')
-```
+## ภาษาไทย
 
-โทเคนแอดมินเก็บใน `sessionStorage` และ dynamic HTML ถูก escape เพื่อลดความเสี่ยง XSS
+**FixGo** แพลตฟอร์มเรียกช่างซ่อมรถฉุกเฉินนอกสถานที่ 24 ชม. ประกอบด้วย 3 ส่วน:
+- **แอปลูกค้า:** เรียกช่าง ติดตามงานแบบเรียลไทม์ ยืนยันราคาก่อนซ่อม จ่ายเงินสดหรือพร้อมเพย์ และจองตรวจรถมือสอง 134 จุด
+- **แอปช่าง FixGo Fixer:** รับงานตามระยะทาง เสนอราคา อัปเดตสถานะ ดูกระเป๋ารายได้ และทำรายงานตรวจรถพร้อมรูปหลักฐาน
+- **หน้าแอดมิน:** อนุมัติช่าง ตรวจสลิปพร้อมเพย์ จัดการงานที่ไม่มีช่างรับ และจัดการคำขอเบิกเงิน
 
-## ค่าธุรกิจหลัก
+**จุดเด่นทางเทคนิค**
+- ระบบจับคู่ช่างแบบส่งเป็นกลุ่มตามระยะทาง
+- สถานะงานอัปเดตทันทีด้วย SSE
+- สร้าง QR พร้อมเพย์มาตรฐาน EMVCo เอง เงินเข้าบัญชีเจ้าของโดยตรง
+- สถานะ "ชำระแล้ว" ต้องผ่านการยืนยันจริงเท่านั้น
+- บัญชีรายได้แบบ ledger ป้องกันการเครดิตซ้ำ
+- รองรับ PDPA: ลบบัญชีแล้วลบข้อมูลและไฟล์ให้ด้วย
+- ติดตั้งขึ้นเซิร์ฟเวอร์ได้ด้วยคำสั่งเดียว
+- CI ตรวจทุก push
 
-| เรื่อง | ค่า |
-|---|---:|
-| ค่าธรรมเนียมแพลตฟอร์ม | 35% |
-| รอบเวลารับงาน | 90 วินาที |
-| ช่างต่อรอบ | 4 คน |
-| ช่างสูงสุดต่อออเดอร์ | 12 คน |
-| รัศมีค้นหา | 25 กม. |
-| ตรวจรถมือสอง | 1,990 บาท ราคาเดียว |
-| ราคาบริการอื่น | ถูกกว่า 24CarFix 101 บาททุกรายการ (`DISCOUNT_VS_24CARFIX` ใน `backend/prisma/seed.ts`) |
+**สถานะ:** โค้ดพร้อมใช้งานและผ่านการทดสอบทั้งหมด กำลังเตรียมเซิร์ฟเวอร์เพื่อเปิดให้บริการจริง
 
-จำนวนเงินในฐานข้อมูลเก็บเป็น **สตางค์ (integer)** เพื่อไม่ให้เกิดความคลาดเคลื่อนจากเลขทศนิยม
+เอกสารเพิ่มเติม:
+- [การติดตั้ง](docs/DEPLOY.md)
+- [ระบบชำระเงิน](docs/PAYMENTS.md)
+- [การแจ้งเตือน](docs/PUSH.md)
+- [การ build แอป](docs/BUILD.md)
+- [สเปกผลิตภัณฑ์](docs/01-overview-and-personas.md)
 
 ## Attribution
 
-- ไอคอนหมวดบริการ 3D ชุดหลัก (ซ่อมรถ แบตเตอรี่ ยาง กุญแจ น้ำมัน รถยก รถ EV ตรวจรถ) จัดทำโดยเจ้าของโปรเจกต์
-- ไอคอนสายฟ้า ไซเรน และช่าง มาจาก [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT License) เก็บ license ไว้ที่ `packages/fixgo_core/assets/icons/licenses/fluentui-emoji-LICENSE.txt`
-- ฟอนต์ Noto Sans Thai สัญญาอนุญาต SIL Open Font License อยู่ที่ `packages/fixgo_core/assets/fonts/OFL.txt`
+- The main 3D service icons were made by the project owner.
+- Lightning, siren and mechanic icons come from [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT). The license is in `packages/fixgo_core/assets/icons/licenses/`.
+- Noto Sans Thai is used under the SIL Open Font License (`packages/fixgo_core/assets/fonts/OFL.txt`).

@@ -1,3 +1,4 @@
+import { commissionRate } from '../common/constants';
 const PLACEHOLDER_VALUES = new Set([
   'change-me-in-production',
   'dev-jwt-secret',
@@ -58,6 +59,9 @@ export function validateEnvironment(
       );
     }
   }
+
+  // ตรวจตอนเริ่มระบบ ไม่ให้ไปพังตอนลูกค้าสร้างงาน
+  commissionRate({ COMMISSION_RATE: String(config.COMMISSION_RATE ?? '') });
 
   const corsOrigin = String(config.CORS_ORIGIN ?? '').trim();
   if (!corsOrigin || corsOrigin === '*') {

@@ -1,5 +1,21 @@
-/** คอมมิชชันที่แอปหักจากทุกงาน */
+/** ค่าบริการแพลตฟอร์มเริ่มต้น ใช้เมื่อไม่ได้ตั้ง COMMISSION_RATE */
 export const DEFAULT_COMMISSION_RATE = 0.35;
+
+/**
+ * ค่าบริการแพลตฟอร์มที่หักจากงานใหม่ (0–1) ตั้งได้ด้วย env COMMISSION_RATE
+ * อัตราจริงจึงไม่ต้องอยู่ในโค้ดหรือเอกสารสาธารณะ งานเดิมเก็บอัตราของตัวเองไว้ใน order.commissionRate
+ */
+export function commissionRate(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.COMMISSION_RATE?.trim();
+  if (!raw) return DEFAULT_COMMISSION_RATE;
+  const rate = Number(raw);
+  if (!Number.isFinite(rate) || rate <= 0 || rate >= 1) {
+    throw new Error(
+      'COMMISSION_RATE must be a number between 0 and 1, e.g. 0.3',
+    );
+  }
+  return rate;
+}
 
 /** เวลาที่ช่างมีให้กดรับงาน ช่วงสั้นเพื่อให้ลูกค้าไม่รอนานในเหตุฉุกเฉิน */
 export const DISPATCH_OFFER_TIMEOUT_MS = 90 * 1000;

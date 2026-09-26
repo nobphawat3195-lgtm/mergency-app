@@ -139,6 +139,22 @@ describe('environment safety', () => {
       ).not.toThrow();
     });
 
+    it('rejects an invalid COMMISSION_RATE at startup', () => {
+      const ok = {
+        ...base,
+        SMS_PROVIDER: 'twilio',
+        TWILIO_ACCOUNT_SID: 'a',
+        TWILIO_AUTH_TOKEN: 't',
+        TWILIO_FROM: '+1',
+      };
+      expect(() =>
+        validateEnvironment({ ...ok, COMMISSION_RATE: '35' }),
+      ).toThrow('COMMISSION_RATE');
+      expect(() =>
+        validateEnvironment({ ...ok, COMMISSION_RATE: '0.3' }),
+      ).not.toThrow();
+    });
+
     it('rejects console SMS in production', () => {
       expect(() =>
         validateEnvironment({ ...base, SMS_PROVIDER: 'console' }),

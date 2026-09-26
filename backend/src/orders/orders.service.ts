@@ -12,7 +12,7 @@ import { CatalogService } from '../catalog/catalog.service';
 import { DispatchService } from '../dispatch/dispatch.service';
 import { PushService } from '../notifications/push.service';
 import { UploadsService } from '../uploads/uploads.service';
-import { DEFAULT_COMMISSION_RATE } from '../common/constants';
+import { commissionRate } from '../common/constants';
 import {
   INSPECTION_CATEGORY_SLUG,
   InspectionsService,
@@ -81,7 +81,7 @@ export class OrdersService {
           pickupAddress: dto.pickupAddress,
           note: dto.note,
           priceEstimated: quote.price,
-          commissionRate: DEFAULT_COMMISSION_RATE,
+          commissionRate: commissionRate(),
           status: OrderStatus.CREATED,
           // บริการราคาเดียว (เช่น ตรวจรถ 1,990) ลูกค้ายอมรับราคาแล้วตอนจอง
           // ไม่ต้องรอช่างเสนอราคาหน้างาน
