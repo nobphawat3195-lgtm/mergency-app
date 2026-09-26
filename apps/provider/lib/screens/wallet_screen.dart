@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../app_state.dart';
 
-/// กระเป๋าเงินช่าง — ยอดคงเหลือหลังหักค่าธรรมเนียม 35% แล้ว กดขอเบิกได้ตลอดเวลา
+/// กระเป๋าเงินช่าง — ยอดคงเหลือหลังหักค่าบริการแพลตฟอร์มแล้ว กดขอเบิกได้ตลอดเวลา
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
 
@@ -131,21 +131,28 @@ class _WalletScreenState extends State<WalletScreen> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(FixGoSpacing.lg),
-                    color: FixGoColors.navy,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(FixGoRadius.lg),
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF1D3F33), FixGoColors.navy],
+                      ),
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
                           'ยอดคงเหลือ',
-                          style: TextStyle(color: Color(0xFFCBD5E1)),
+                          style: TextStyle(color: Color(0xFFC9DDD4)),
                         ),
                         const SizedBox(height: FixGoSpacing.xs),
                         Text(
                           formatSatang(_balance ?? 0),
                           style: const TextStyle(
                             fontSize: 36,
-                            fontWeight: FontWeight.w900,
-                            color: FixGoColors.accent,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFFC7EE77),
                           ),
                         ),
                       ],

@@ -5,13 +5,20 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { readSecret } from '../config/environment';
 
 @Module({
   imports: [
+    NotificationsModule,
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'dev-jwt-secret',
-      signOptions: { expiresIn: process.env.JWT_EXPIRES_IN ?? '30d' },
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: readSecret('JWT_SECRET', 'dev-jwt-secret'),
+        signOptions: {
+          expiresIn: Number(process.env.JWT_EXPIRES_SECONDS ?? 2_592_000),
+        },
+      }),
     }),
   ],
   providers: [AuthService, JwtStrategy],

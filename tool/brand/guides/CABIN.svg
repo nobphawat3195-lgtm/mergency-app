@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+  <title>ภายในห้องโดยสาร</title>
+  <rect id="background" width="320" height="200" rx="18" fill="#ECF8F1"/>
+  <path d="M20 96 Q160 60 300 96 L300 120 L20 120 Z" fill="white" stroke="#7F968D" stroke-width="4"/>
+  <circle cx="112" cy="128" r="42" fill="none" stroke="#0B5F45" stroke-width="8"/><circle cx="112" cy="128" r="12" fill="#0B5F45"/>
+  <path d="M112 128 L76 118 M112 128 L148 118 M112 128 L112 166" stroke="#0B5F45" stroke-width="6"/>
+  <rect x="196" y="104" width="64" height="74" rx="8" fill="#C7EE77" stroke="#0B5F45" stroke-width="4"/>
+  <rect x="208" y="116" width="40" height="22" rx="3" fill="#CFE3DA"/>
+</svg>

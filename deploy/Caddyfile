@@ -1,0 +1,64 @@
+# Caddy ขอใบรับรอง HTTPS จาก Let's Encrypt ให้อัตโนมัติ (DNS ต้องชี้มาที่เครื่องนี้ก่อน)
+
+{$API_DOMAIN} {
+	encode gzip
+	# คำขอทั่วไปจำกัด body เล็ก ยกเว้นการอัปโหลดรูปในโหมด STORAGE_PROVIDER=local (ไม่เกิน 10MB)
+	@upload path /api/uploads/local/*
+	@notUpload not path /api/uploads/local/*
+	request_body @upload {
+		max_size 11MB
+	}
+	request_body @notUpload {
+		max_size 2MB
+	}
+	reverse_proxy api:3000
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+}
+
+{$ADMIN_DOMAIN} {
+	encode gzip
+	root * /srv/admin
+	file_server
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		-Server
+	}
+}
+
+# เว็บแอปลูกค้าและแอปช่าง (Flutter web) เปิดจากเบราว์เซอร์ หรือกด "เพิ่มลงหน้าจอโฮม" ให้ใช้เหมือนแอป
+(flutter_web) {
+	encode gzip
+	# ไฟล์ที่ชื่อไม่เปลี่ยนตามเวอร์ชันต้องไม่ถูก cache ไม่อย่างนั้นผู้ใช้จะค้างเวอร์ชันเก่า
+	@nocache path / /index.html /flutter_bootstrap.js /flutter_service_worker.js /manifest.json /version.json
+	header @nocache Cache-Control "no-cache"
+	# ขอตำแหน่งได้เฉพาะจากเว็บนี้เอง
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Permissions-Policy "geolocation=(self), camera=(self)"
+		-Server
+	}
+	try_files {path} /index.html
+	file_server
+}
+
+{$WEB_DOMAIN} {
+	root * /srv/web
+	# หน้าแรก HTML ของเว็บลูกค้ามีเบอร์ติดต่อและลิงก์นโยบายจาก env (LEGAL_CONTACT_PHONE, API_DOMAIN)
+	templates /index.html {
+		mime text/html
+	}
+	import flutter_web
+}
+
+{$FIXER_DOMAIN} {
+	root * /srv/fixer
+	import flutter_web
+}

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 
@@ -15,45 +17,104 @@ class ProviderShellScreen extends StatefulWidget {
 
 class _ProviderShellScreenState extends State<ProviderShellScreen> {
   int _index = 0;
+  Timer? _heartbeatTimer;
+  StreamSubscription<PushEvent>? _pushOpened;
+  StreamSubscription<PushEvent>? _pushReceived;
+  late final List<Widget> _pages = [
+    OffersScreen(onOpenTab: (tab) => setState(() => _index = tab)),
+    const JobsScreen(),
+    const WalletScreen(),
+    const _ProviderProfileTab(),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final push = PushNotifications.instance;
+    _pushOpened = push.onOpened.listen(_openFromPush);
+    _pushReceived = push.onReceived.listen(_showPushBanner);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final launch = push.takeLaunchEvent();
+      if (launch != null && mounted) _openFromPush(launch);
+    });
+  }
+
+  /// งานใหม่อยู่หน้าหลัก สถานะงานที่รับแล้ว/การชำระเงินอยู่หน้างานของฉัน
+  int _tabFor(PushEvent event) => event.type == 'OFFER' ? 0 : 1;
+
+  void _openFromPush(PushEvent event) {
+    setState(() => _index = _tabFor(event));
+  }
+
+  void _showPushBanner(PushEvent event) {
+    if (!mounted || event.title == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          [event.title, if (event.body != null) event.body].join('\n'),
+        ),
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+          label: 'ดู',
+          onPressed: () => _openFromPush(event),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+      final state = ProviderAppScope.of(context);
+      if (state.isOnline) {
+        unawaited(state.api.sendProviderHeartbeat());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _heartbeatTimer?.cancel();
+    _pushOpened?.cancel();
+    _pushReceived?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      const OffersScreen(),
-      const JobsScreen(),
-      const WalletScreen(),
-      const _ProviderProfileTab(),
-    ];
-
     return Scaffold(
-      body: pages[_index],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
-        backgroundColor: Colors.white,
-        indicatorColor: FixGoColors.accent.withValues(alpha: 0.3),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.notifications_outlined),
-            selectedIcon: Icon(Icons.notifications),
-            label: 'งานเข้า',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.build_outlined),
-            selectedIcon: Icon(Icons.build),
-            label: 'งานของฉัน',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            selectedIcon: Icon(Icons.account_balance_wallet),
-            label: 'กระเป๋าเงิน',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'โปรไฟล์',
-          ),
-        ],
+      body: IndexedStack(index: _index, children: _pages),
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: FixGoColors.hairline)),
+        ),
+        child: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (value) => setState(() => _index = value),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home_rounded),
+              label: 'หน้าหลัก',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.build_outlined),
+              selectedIcon: Icon(Icons.build),
+              label: 'งานของฉัน',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.account_balance_wallet_outlined),
+              selectedIcon: Icon(Icons.account_balance_wallet),
+              label: 'กระเป๋าเงิน',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'โปรไฟล์',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -78,8 +139,8 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
   Future<void> _editPayoutInfo(Map<String, dynamic> profile) async {
     final bankNameController =
         TextEditingController(text: profile['bankName'] as String? ?? '');
-    final accountNameController =
-        TextEditingController(text: profile['bankAccountName'] as String? ?? '');
+    final accountNameController = TextEditingController(
+        text: profile['bankAccountName'] as String? ?? '');
     final accountNumberController = TextEditingController(
       text: profile['bankAccountNumber'] as String? ?? '',
     );
@@ -192,8 +253,13 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
                 ),
                 const Divider(),
               ],
+              AccountSettingsTiles(
+                api: ProviderAppScope.of(context).api,
+                onDeleted: ProviderAppScope.of(context).signOut,
+              ),
+              const Divider(),
               ListTile(
-                leading: const Icon(Icons.logout, color: FixGoColors.error),
+                leading: const Icon(Icons.logout),
                 title: const Text('ออกจากระบบ'),
                 onTap: () => ProviderAppScope.of(context).signOut(),
               ),

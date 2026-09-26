@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+  <title>ด้านหลังตรง</title>
+  <rect id="background" width="320" height="200" rx="18" fill="#ECF8F1"/>
+  <g id="car-rear">
+    <path d="M96 92 L118 50 Q122 44 130 44 L190 44 Q198 44 202 50 L224 92 Z" fill="white" stroke="#0B5F45" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M114 86 L130 56 L190 56 L206 86 Z" fill="#CFE3DA"/>
+    <rect x="52" y="90" width="216" height="58" rx="14" fill="white" stroke="#0B5F45" stroke-width="5"/>
+    <rect x="62" y="100" width="44" height="16" rx="4" fill="#E57373"/><rect x="214" y="100" width="44" height="16" rx="4" fill="#E57373"/>
+    <path d="M112 100 L208 100" stroke="#7F968D" stroke-width="3"/>
+    <rect x="136" y="110" width="48" height="16" rx="3" fill="white" stroke="#7F968D" stroke-width="2"/>
+    <path d="M60 134 L260 134" stroke="#7F968D" stroke-width="3"/>
+    <ellipse cx="232" cy="146" rx="9" ry="4" fill="#33443D"/>
+    <rect x="64" y="148" width="32" height="22" rx="6" fill="#33443D"/><rect x="224" y="148" width="32" height="22" rx="6" fill="#33443D"/>
+  </g>
+</svg>

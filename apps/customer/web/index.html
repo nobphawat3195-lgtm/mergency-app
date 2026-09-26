@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="th">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -17,30 +17,108 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="FixGo เรียกช่างช่วยเหลือรถฉุกเฉินใกล้คุณ ติดตามงาน และยืนยันราคาก่อนเริ่มซ่อม">
+  <meta name="theme-color" content="#0B5F45">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="fixgo_customer">
+  <meta name="apple-mobile-web-app-title" content="FixGo">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>fixgo_customer</title>
+  <title>FixGo — เรียกช่างใกล้คุณ</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
   <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
+    หน้าแรกแบบ HTML ล้วน: ขึ้นทันทีแม้เน็ตช้า อ่านด้วย screen reader ได้ และให้ search engine อ่านได้
+    เมื่อแอป Flutter วาดเฟรมแรกเสร็จ (event flutter-first-frame) ส่วนนี้จะถูกซ่อน
+    ค่า {{env "..."}} ถูกแทนโดย Caddy templates บนเซิร์ฟเวอร์ (ดู deploy/Caddyfile)
   -->
+  <style>
+    #landing { position: fixed; inset: 0; overflow-y: auto; z-index: 10; background: #ECF8F1; color: #122821;
+      font-family: "Noto Sans Thai", "Sukhumvit Set", "Leelawadee UI", Tahoma, sans-serif; line-height: 1.6; }
+    #landing .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px 40px; }
+    #landing header { display: flex; align-items: center; gap: 12px; }
+    #landing header img { width: 56px; height: 56px; border-radius: 14px; }
+    #landing h1 { font-size: 26px; margin: 0; }
+    #landing h2 { font-size: 18px; margin: 28px 0 8px; }
+    #landing p { margin: 8px 0; }
+    #landing .lead { font-size: 18px; margin-top: 20px; }
+    #landing .status { display: flex; align-items: center; gap: 10px; margin-top: 20px; padding: 14px 16px;
+      background: #fff; border: 1px solid #D5E8DE; border-radius: 14px; }
+    #landing .spinner { width: 22px; height: 22px; flex: none; border-radius: 50%; border: 3px solid #C7EE77;
+      border-top-color: #0B5F45; animation: fg-spin .9s linear infinite; }
+    @keyframes fg-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #landing .spinner { animation: none; } }
+    #landing .call { display: block; margin-top: 12px; padding: 14px 16px; min-height: 48px; text-align: center;
+      background: #0B5F45; color: #fff; font-weight: 700; font-size: 18px; border-radius: 14px; text-decoration: none; }
+    #landing .call:focus-visible, #landing a:focus-visible { outline: 3px solid #122821; outline-offset: 2px; }
+    #landing ul { padding-left: 20px; margin: 8px 0; }
+    #landing footer { margin-top: 28px; font-size: 14px; color: #4A6259; }
+    #landing footer a { color: #0B5F45; }
+    #landing[hidden] { display: none; }
+  </style>
+  <main id="landing" aria-busy="true">
+    <div class="wrap">
+      <header>
+        <img src="icons/Icon-192.png" alt="" width="56" height="56">
+        <div>
+          <h1>FixGo</h1>
+          <p style="margin:0">เรียกช่างช่วยเหลือรถฉุกเฉิน 24 ชั่วโมง</p>
+        </div>
+      </header>
+      <p class="lead">รถสตาร์ทไม่ติด ยางรั่ว แบตหมด น้ำมันหมด หรือต้องการรถยก เรียกช่างใกล้คุณได้จากเว็บนี้ ไม่ต้องติดตั้งแอป เห็นราคาก่อนเริ่มงานทุกครั้ง</p>
+      <div class="status" role="status">
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="landing-status">กำลังเปิดระบบเรียกช่าง...</span>
+      </div>
+      {{if env "LEGAL_CONTACT_PHONE"}}<a class="call" href="tel:{{env "LEGAL_CONTACT_PHONE"}}">โทรหาทีมงาน {{env "LEGAL_CONTACT_PHONE"}}</a>{{end}}
+      <h2>บริการ</h2>
+      <ul>
+        <li>จั๊มแบต เปลี่ยนแบตเตอรี่</li>
+        <li>ปะยาง เปลี่ยนยาง</li>
+        <li>ช่างซ่อมรถถึงที่ ไดนาโม ระบบไฟ</li>
+        <li>รถยก รถสไลด์</li>
+        <li>ส่งน้ำมันถึงที่ ช่างกุญแจ ช่างรถ EV</li>
+        <li>ตรวจรถมือสองก่อนซื้อ 134 จุด</li>
+      </ul>
+      <h2>ใช้งานอย่างไร</h2>
+      <ul>
+        <li>ล็อกอินด้วยเบอร์โทรและรหัส OTP</li>
+        <li>เลือกบริการ ระบบหาช่างที่ใกล้ที่สุดให้</li>
+        <li>ช่างเสนอราคา คุณยืนยันก่อนเริ่มงาน</li>
+        <li>จ่ายเงินสดกับช่าง หรือโอนพร้อมเพย์</li>
+      </ul>
+      <p>แนะนำ: กด "เพิ่มลงหน้าจอโฮม" ในเมนูของเบราว์เซอร์ จะได้เปิดใช้ได้เหมือนแอป</p>
+      <footer>
+        <a href="https://{{env "API_DOMAIN"}}/api/legal/privacy">นโยบายความเป็นส่วนตัว</a> ·
+        <a href="https://{{env "API_DOMAIN"}}/api/legal/terms">ข้อตกลงการใช้งาน</a>
+      </footer>
+    </div>
+  </main>
+  <noscript>
+    <p style="padding:16px">ระบบเรียกช่างต้องเปิด JavaScript ในเบราว์เซอร์</p>
+  </noscript>
+  <script>
+    (function () {
+      var landing = document.getElementById('landing');
+      var status = document.getElementById('landing-status');
+      window.addEventListener('flutter-first-frame', function () {
+        landing.hidden = true;
+        landing.setAttribute('aria-busy', 'false');
+      });
+      // เน็ตช้ามาก: บอกผู้ใช้ว่ายังโหลดอยู่ และให้ช่องทางโทรแทน
+      setTimeout(function () {
+        if (!landing.hidden) status.textContent = 'เน็ตช้า กำลังโหลดต่อ... ถ้ารีบ โทรหาทีมงานได้เลย';
+      }, 15000);
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

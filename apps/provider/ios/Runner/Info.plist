@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Fixgo Provider</string>
+	<string>FixGo Fixer</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -24,10 +24,16 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>FixGo Fixer ใช้ตำแหน่งของคุณเพื่อส่งงานที่อยู่ใกล้คุณที่สุด กรุณาเปิดแอปทิ้งไว้ระหว่างออนไลน์รับงาน</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>FixGo Fixer ใช้รูปที่คุณเลือกจากคลังรูปเพื่อยืนยันเครื่องมือของช่าง และแนบเป็นหลักฐานในรายงานตรวจรถ</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

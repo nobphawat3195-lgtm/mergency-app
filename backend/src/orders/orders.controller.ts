@@ -2,22 +2,30 @@ import {
   Body,
   Controller,
   Get,
+  MessageEvent,
   Param,
   Patch,
   Post,
+  Sse,
   UseGuards,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
 import { OrderStatus, Role } from '@prisma/client';
 
 import { OrdersService } from './orders.service';
-import { CompleteOrderDto, CreateOrderDto, RateOrderDto } from './dto/order.dto';
+import { CreateOrderDto, ProposeQuoteDto, RateOrderDto } from './dto/order.dto';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
 import { JwtPayload } from '../auth/auth.service';
+import { OrderEventsService } from '../notifications/order-events.service';
+import { OrderAccessGuard } from './order-access.guard';
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class OrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  constructor(
+    private readonly orders: OrdersService,
+    private readonly orderEvents: OrderEventsService,
+  ) {}
 
   @Post()
   @Roles(Role.CUSTOMER)
@@ -39,8 +47,19 @@ export class OrdersController {
 
   @Get(':id')
   @Roles(Role.CUSTOMER, Role.PROVIDER)
-  findOne(@Param('id') id: string) {
-    return this.orders.findById(id);
+  findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.orders.findAccessibleById(id, user);
+  }
+
+  /**
+   * Server-Sent Events: แจ้งเมื่องานนี้เปลี่ยน (สถานะ ราคา ตำแหน่งช่าง) ให้แอปดึง GET /orders/:id ใหม่
+   * ตรวจสิทธิ์ก่อนเปิด stream ผู้ที่ไม่เกี่ยวกับงานได้ 404 เหมือน GET ปกติ
+   */
+  @Sse(':id/events')
+  @Roles(Role.CUSTOMER, Role.PROVIDER)
+  @UseGuards(OrderAccessGuard)
+  events(@Param('id') id: string): Observable<MessageEvent> {
+    return this.orderEvents.stream(id);
   }
 
   @Post(':id/cancel')
@@ -69,14 +88,32 @@ export class OrdersController {
     );
   }
 
-  @Post(':id/complete')
+  @Post(':id/quote')
   @Roles(Role.PROVIDER)
-  complete(
+  proposeQuote(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
-    @Body() dto: CompleteOrderDto,
+    @Body() dto: ProposeQuoteDto,
   ) {
-    return this.orders.completeByProvider(user.sub, id, dto);
+    return this.orders.proposeQuote(user.sub, id, dto);
+  }
+
+  @Post(':id/quote/approve')
+  @Roles(Role.CUSTOMER)
+  approveQuote(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.orders.respondToQuote(user.sub, id, true);
+  }
+
+  @Post(':id/quote/reject')
+  @Roles(Role.CUSTOMER)
+  rejectQuote(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.orders.respondToQuote(user.sub, id, false);
+  }
+
+  @Post(':id/complete')
+  @Roles(Role.PROVIDER)
+  complete(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.orders.completeByProvider(user.sub, id);
   }
 
   @Post(':id/rate')

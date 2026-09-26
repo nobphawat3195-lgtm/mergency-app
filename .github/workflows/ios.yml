@@ -1,0 +1,43 @@
+name: iOS build
+
+# ตรวจว่าแอป iOS คอมไพล์ผ่าน (รวม CocoaPods ของ Firebase) แบบยังไม่เซ็น
+# runner macOS ใช้นาทีมากกว่า Linux 10 เท่า จึงรันเฉพาะเมื่อไฟล์ iOS/dependency เปลี่ยน
+# เซ็นและอัปโหลด TestFlight ทำบน Mac หรือเพิ่ม job หลังมีบัญชี Apple Developer ดู docs/BUILD.md
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/*/ios/**'
+      - '**/pubspec.yaml'
+      - '.github/workflows/ios.yml'
+  pull_request:
+    paths:
+      - 'apps/*/ios/**'
+      - '**/pubspec.yaml'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [customer, provider]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign --dart-define=API_BASE_URL=${{ vars.API_BASE_URL || 'https://api.example.com' }}

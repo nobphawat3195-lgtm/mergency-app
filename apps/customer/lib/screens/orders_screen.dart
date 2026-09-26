@@ -71,8 +71,21 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       order.subServiceName ?? order.categoryName ?? 'บริการ',
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
-                    subtitle: Text(
-                      '${order.orderNo} · ${orderStatusLabel(order.status)}',
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: FixGoSpacing.xs),
+                      child: Row(
+                        children: [
+                          OrderStatusChip(status: order.status),
+                          const SizedBox(width: FixGoSpacing.sm),
+                          Flexible(
+                            child: Text(
+                              order.orderNo,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     trailing: Text(
                       formatSatang(order.priceFinal ?? order.priceEstimated),

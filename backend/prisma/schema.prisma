@@ -31,11 +31,13 @@ model OtpCode {
 // ---------- Customer ----------
 
 model Customer {
-  id        String   @id @default(uuid())
-  phone     String   @unique
+  id        String    @id @default(uuid())
+  phone     String    @unique
   name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  /// ลบบัญชีแล้ว: ข้อมูลส่วนตัวถูกลบ/ปิดบัง เก็บเฉพาะประวัติธุรกรรมตามกฎหมายบัญชี
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   orders Order[]
 }
@@ -49,10 +51,11 @@ enum ProviderStatus {
 }
 
 model Provider {
-  id       String @id @default(uuid())
-  phone    String @unique
-  realName String
-  nickname String
+  id              String @id @default(uuid())
+  phone           String @unique
+  realName        String
+  nickname        String
+  experienceYears Int
 
   shopName     String?
   facebookPage String?
@@ -79,6 +82,9 @@ model Provider {
 
   ratingAvg   Float @default(0)
   ratingCount Int   @default(0)
+
+  /// ลบบัญชีแล้ว: ข้อมูลส่วนตัวถูกลบ/ปิดบัง เก็บเฉพาะประวัติงานและกระเป๋าเงินตามกฎหมายบัญชี
+  deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -152,6 +158,7 @@ model SubService {
   name        String
   description String?
   basePrice   Int // หน่วยเป็นสตางค์ เก็บเป็น integer กัน floating point error
+  fixedPrice  Boolean   @default(false) // true = ไม่คูณตามประเภทรถ เช่น ตรวจรถ 1,990 บาททุกกรณี
   priceType   PriceType
   infoNote    String? // เนื้อหาใน bottom sheet ปุ่ม (i)
   sortOrder   Int       @default(0)
@@ -188,6 +195,13 @@ enum OrderStatus {
   NO_MATCH // ไล่ครบทุกคนแล้วไม่มีใครรับ -> escalate ให้แอดมิน
 }
 
+enum QuoteStatus {
+  NOT_REQUESTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model Order {
   id         String @id @default(uuid())
   orderNo    String @unique
@@ -207,13 +221,21 @@ model Order {
   note          String?
 
   priceEstimated Int // สตางค์
+  priceProposed  Int? // ราคาที่ช่างเสนอและต้องรอลูกค้ายืนยันก่อนเริ่มงาน
   priceFinal     Int? // สตางค์ ใส่ตอนปิดงาน
   commissionRate Float // บันทึกเรตคอมมิชชัน ณ เวลาที่สร้างออเดอร์ (ค่าเริ่มต้น 0.35)
+
+  quoteStatus      QuoteStatus @default(NOT_REQUESTED)
+  quoteNote        String?
+  quoteProposedAt  DateTime?
+  quoteRespondedAt DateTime?
 
   createdAt   DateTime  @default(now())
   matchedAt   DateTime?
   completedAt DateTime?
   cancelledAt DateTime?
+  /// เหตุผลที่ทีมงานยกเลิกงาน (ลูกค้ายกเลิกเองจะเป็น null)
+  cancelReason String?
 
   customer    Customer        @relation(fields: [customerId], references: [id])
   provider    Provider?       @relation(fields: [providerId], references: [id])
@@ -226,10 +248,100 @@ model Order {
   payment          Payment?
   walletEntries    WalletEntry[]
   rating           Rating?
+  inspection       InspectionReport?
 
   @@index([customerId])
   @@index([providerId])
   @@index([status])
+}
+
+// ---------- ตรวจรถมือสองนอกสถานที่ ----------
+
+enum InspectionItemStatus {
+  PASS
+  ATTENTION
+  FAIL
+  NOT_APPLICABLE
+}
+
+enum InspectionVerdict {
+  RECOMMENDED // แนะนำให้ซื้อ
+  CAUTION // ซื้อได้แต่ควรต่อรอง/ซ่อมบางจุด
+  NOT_RECOMMENDED // ไม่แนะนำ (โครงสร้าง/น้ำท่วม/เอกสารมีปัญหา)
+}
+
+/// รายงานตรวจรถ 1 ใบต่อ 1 ออเดอร์ รายการตรวจอยู่ใน src/inspections/checklist.ts
+model InspectionReport {
+  id               String @id @default(uuid())
+  orderId          String @unique
+  checklistVersion Int
+
+  // ข้อมูลนัดหมายที่ลูกค้ากรอกตอนจอง
+  listingUrl    String?
+  sellerName    String?
+  sellerPhone   String?
+  appointmentAt DateTime?
+
+  // ข้อมูลรถที่ช่างบันทึกหน้างาน
+  brand         String?
+  model         String?
+  year          Int?
+  color         String?
+  plateNo       String?
+  plateProvince String?
+  vin           String?
+  engineNo      String?
+  mileageKm     Int?
+  powertrain    String? // combustion | electrified | hybrid
+  transmission  String? // manual | automatic
+
+  // ผลสรุป คำนวณตอนช่างกดส่งรายงาน
+  score             Int?
+  grade             String?
+  verdict           InspectionVerdict?
+  floodSuspected    Boolean            @default(false)
+  accidentSuspected Boolean            @default(false)
+  odometerSuspected Boolean            @default(false)
+  legalIssue        Boolean            @default(false)
+  summary           String?
+  submittedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order  Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items  InspectionItemResult[]
+  photos InspectionPhoto[]
+}
+
+/// ภาพหลักฐานแยกตามช่อง (ดู src/inspections/photo-slots.ts)
+model InspectionPhoto {
+  id        String   @id @default(uuid())
+  reportId  String
+  slotCode  String
+  url       String
+  caption   String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  report InspectionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, slotCode])
+}
+
+model InspectionItemResult {
+  id          String                @id @default(uuid())
+  reportId    String
+  itemCode    String
+  status      InspectionItemStatus?
+  measurement Float?
+  note        String?
+  photoUrls   String[]
+  updatedAt   DateTime              @updatedAt
+
+  report InspectionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, itemCode])
 }
 
 model OrderPhoto {
@@ -260,7 +372,7 @@ model DispatchAttempt {
   distanceKm  Float
   status      DispatchStatus @default(OFFERED)
   offeredAt   DateTime       @default(now())
-  expiresAt   DateTime // offeredAt + 5 นาที
+  expiresAt   DateTime // offeredAt + 90 วินาที (ดูค่าจริงที่ common/constants.ts)
   respondedAt DateTime?
 
   order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -282,6 +394,7 @@ enum PaymentStatus {
 enum PaymentMethod {
   PROMPTPAY
   CARD
+  CASH
 }
 
 model Payment {
@@ -293,6 +406,11 @@ model Payment {
   chargeId String? // reference จาก payment gateway
   paidAt   DateTime?
 
+  /// พร้อมเพย์แบบโอนเข้าบัญชีบริษัท: สลิปที่ลูกค้าแนบ รอแอดมินตรวจยอดเข้าจริงก่อนเป็น PAID
+  slipUrl          String?
+  slipSubmittedAt  DateTime?
+  slipRejectReason String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -303,6 +421,7 @@ enum WalletEntryType {
   ORDER_EARNING // ยอดสุทธิที่ช่างได้หลังหักคอมมิชชันแล้ว (65%)
   WITHDRAWAL // กันยอดไว้ทันทีที่ช่างกดขอเบิก (ค่าติดลบ)
   ADJUSTMENT // คืนยอดเมื่อแอดมินปฏิเสธคำขอเบิก หรือแอดมินปรับยอดเอง
+  COMMISSION_DUE // งานเงินสด: ช่างถือเงินเต็มจำนวน จึงหักค่าธรรมเนียมที่ต้องคืนบริษัท (ค่าติดลบ)
 }
 
 // หมายเหตุ: คอมมิชชัน 35% ไม่ถูกบันทึกในกระเป๋าช่าง
@@ -311,14 +430,15 @@ enum WalletEntryType {
 
 // Ledger แบบ append-only ยอดคงเหลือ = ผลรวม amount ทั้งหมดของช่างคนนั้น
 model WalletEntry {
-  id           String          @id @default(uuid())
-  providerId   String
-  type         WalletEntryType
-  amount       Int // สตางค์ บวก = เงินเข้า ลบ = เงินออก
-  orderId      String?
-  withdrawalId String?
-  memo         String?
-  createdAt    DateTime        @default(now())
+  id             String          @id @default(uuid())
+  idempotencyKey String?         @unique
+  providerId     String
+  type           WalletEntryType
+  amount         Int // สตางค์ บวก = เงินเข้า ลบ = เงินออก
+  orderId        String?
+  withdrawalId   String?
+  memo           String?
+  createdAt      DateTime        @default(now())
 
   provider   Provider           @relation(fields: [providerId], references: [id], onDelete: Cascade)
   order      Order?             @relation(fields: [orderId], references: [id])
@@ -376,4 +496,24 @@ model AdminUser {
   name         String
   passwordHash String
   createdAt    DateTime @default(now())
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+/// โทเคน push (FCM) ของเครื่องที่ล็อกอินอยู่ หนึ่งผู้ใช้มีได้หลายเครื่อง
+/// โทเคนเดียวผูกได้ผู้ใช้เดียว เปลี่ยนบัญชีบนเครื่องเดิมจะย้ายเจ้าของให้อัตโนมัติ
+model DeviceToken {
+  id         String         @id @default(uuid())
+  token      String         @unique
+  platform   DevicePlatform
+  role       Role
+  /// id ของ Customer หรือ Provider ตาม role
+  userId     String
+  createdAt  DateTime       @default(now())
+  lastSeenAt DateTime       @default(now())
+
+  @@index([role, userId])
 }

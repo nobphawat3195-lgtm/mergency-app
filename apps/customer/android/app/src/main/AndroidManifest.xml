@@ -1,10 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+: ต้องขอสิทธิ์ก่อนแสดงแจ้งเตือน (แอปขอผ่าน firebase_messaging.requestPermission) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
-        android:label="fixgo_customer"
+        android:label="FixGo"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- ช่องแจ้งเตือนสำคัญ (เด้งบนจอ) สร้างใน MainActivity ใช้กับ push จาก FCM ทุกข้อความ -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="fixgo_updates" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -2,14 +2,15 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 # Node / backend
 node_modules/
 dist/
+dist-scripts/
 npm-debug.log*
 
-# Prisma
-backend/prisma/migrations/
+# Prisma migrations เป็นประวัติ schema ที่ต้อง commit เพื่อ deploy ฐานข้อมูลได้ซ้ำ
 
 # Flutter / Dart
 **/.dart_tool/
@@ -33,3 +34,5 @@ backend/prisma/migrations/
 *.swp
 .vscode/
 .idea/
+deploy/backups/
+deploy/.admin-created

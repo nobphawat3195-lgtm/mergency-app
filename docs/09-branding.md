@@ -3,7 +3,7 @@
 ## ชื่อแบรนด์
 
 **FixGo** — ชื่อแอปที่จะขึ้น App Store / Play Store
-- Tagline แนะนำ: "รถเสีย ไม่ต้องรอ — FixGo ไปหาคุณ"
+- Tagline แนะนำ: "เรียกช่างทันที ช่างใกล้คุณพร้อมช่วย"
 - Package/Bundle ID แนะนำ: `com.fixgo.customer`, `com.fixgo.provider`, `com.fixgo.admin`
 
 ## Design Direction (อ้างอิงจากภาพ Antixor Taxi ที่เลือก)

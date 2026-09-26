@@ -1,14 +1,26 @@
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_state.dart';
 import '../order_tracking_screen.dart';
+import 'inspection_booking_card.dart';
 
 /// Booking wizard 4 ขั้นตอน: บริการ -> บริการย่อย -> ประเภทรถ -> ยืนยัน
 class BookingFlow extends StatefulWidget {
-  const BookingFlow({super.key, this.initialCategory, this.pickupLocation});
+  const BookingFlow({
+    super.key,
+    this.initialCategory,
+    this.pickupLocation,
+    this.initialSubServiceKeyword,
+  });
 
   final ServiceCategory? initialCategory;
+
+  /// ทางลัดจากหน้าแรก เช่น "จั๊ม" สำหรับเมนูจั๊มแบต: เลือกบริการย่อยที่ชื่อมีคำนี้ให้เลย
+  /// แล้วข้ามไปขั้นเลือกประเภทรถทันที ผู้ใช้ไม่ต้องเลือกซ้ำ ถ้าหาไม่เจอจะกลับไปขั้นบริการย่อยตามปกติ
+  final String? initialSubServiceKeyword;
 
   /// ตำแหน่งที่ดึงมาจากหน้า Home แล้ว — ถ้า null (เช่น ผู้ใช้ปฏิเสธสิทธิ์ตอนนั้น)
   /// จะลองขอใหม่อีกครั้งตอนยืนยันออเดอร์
@@ -27,6 +39,12 @@ class _BookingFlowState extends State<BookingFlow> {
   VehicleType? _vehicleType;
   bool _submitting = false;
   LocationResult? _pickupLocation;
+  String _note = '';
+  final List<String> _photoUrls = [];
+  bool _uploadingPhotos = false;
+  InspectionBooking _inspection = const InspectionBooking();
+
+  bool get _isInspection => _category?.slug == 'used-car-inspection';
 
   @override
   void initState() {
@@ -35,6 +53,34 @@ class _BookingFlowState extends State<BookingFlow> {
     if (widget.initialCategory != null) {
       _category = widget.initialCategory;
       _step = 1;
+      if (widget.initialSubServiceKeyword != null) {
+        _preselecting = true;
+        _preselectSubService(widget.initialSubServiceKeyword!);
+      }
+    }
+  }
+
+  bool _preselecting = false;
+
+  Future<void> _preselectSubService(String keyword) async {
+    try {
+      // initState ยังอ่าน InheritedWidget ไม่ได้ รอ frame แรกก่อน
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
+      final subs =
+          await AppStateScope.of(context).api.listSubServices(_category!.id);
+      if (!mounted) return;
+      final match = subs.where((sub) => sub.name.contains(keyword)).firstOrNull;
+      setState(() {
+        if (match != null) {
+          _subService = match;
+          _step = 2;
+        }
+      });
+    } on ApiException {
+      // โหลดไม่สำเร็จ ให้ผู้ใช้เลือกเองในขั้นบริการย่อยซึ่งมีปุ่มลองใหม่อยู่แล้ว
+    } finally {
+      if (mounted) setState(() => _preselecting = false);
     }
   }
 
@@ -46,11 +92,68 @@ class _BookingFlowState extends State<BookingFlow> {
     setState(() => _step -= 1);
   }
 
+  String _contentTypeFor(XFile file) {
+    final mimeType = file.mimeType;
+    if (mimeType == 'image/png' ||
+        mimeType == 'image/webp' ||
+        mimeType == 'image/jpeg') {
+      return mimeType!;
+    }
+    return file.name.toLowerCase().endsWith('.png')
+        ? 'image/png'
+        : file.name.toLowerCase().endsWith('.webp')
+            ? 'image/webp'
+            : 'image/jpeg';
+  }
+
+  Future<void> _pickPhotos() async {
+    final remaining = 5 - _photoUrls.length;
+    if (remaining <= 0) return;
+    final picked = await ImagePicker().pickMultiImage(
+      imageQuality: 82,
+      maxWidth: 1920,
+    );
+    if (picked.isEmpty || !mounted) return;
+
+    setState(() => _uploadingPhotos = true);
+    try {
+      final api = AppStateScope.of(context).api;
+      for (final file in picked.take(remaining)) {
+        final bytes = await file.readAsBytes();
+        final url = await api.uploadImage(
+          bytes: bytes,
+          fileName: file.name,
+          contentType: _contentTypeFor(file),
+          scope: 'ORDER',
+        );
+        if (!mounted) return;
+        setState(() => _photoUrls.add(url));
+      }
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('อ่านหรืออัปโหลดรูปไม่สำเร็จ')),
+      );
+    } finally {
+      if (mounted) setState(() => _uploadingPhotos = false);
+    }
+  }
+
   Future<void> _submit() async {
     final category = _category;
     final subService = _subService;
     final vehicleType = _vehicleType;
     if (category == null || subService == null || vehicleType == null) return;
+    if (_isInspection && _inspection.appointmentAt == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('เลือกวันและเวลานัดตรวจรถก่อน')),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
@@ -69,6 +172,9 @@ class _BookingFlowState extends State<BookingFlow> {
         pickupLat: location.latitude,
         pickupLng: location.longitude,
         pickupAddress: location.address,
+        note: _note.trim().isEmpty ? null : _note.trim(),
+        photoUrls: _photoUrls,
+        inspection: _isInspection ? _inspection : null,
       );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
@@ -113,6 +219,9 @@ class _BookingFlowState extends State<BookingFlow> {
   }
 
   Widget _buildStep() {
+    if (_preselecting) {
+      return const Center(child: CircularProgressIndicator());
+    }
     switch (_step) {
       case 0:
         return _CategoryStep(
@@ -144,6 +253,18 @@ class _BookingFlowState extends State<BookingFlow> {
           submitting: _submitting,
           onConfirm: _submit,
           pickupLocation: _pickupLocation,
+          initialNote: _note,
+          onNoteChanged: (value) => _note = value,
+          photoUrls: _photoUrls,
+          uploadingPhotos: _uploadingPhotos,
+          onAddPhotos: _pickPhotos,
+          onRemovePhoto: (url) => setState(() => _photoUrls.remove(url)),
+          header: _isInspection
+              ? InspectionBookingCard(
+                  value: _inspection,
+                  onChanged: (value) => setState(() => _inspection = value),
+                )
+              : null,
         );
     }
   }
@@ -191,10 +312,9 @@ class _CategoryStepState extends State<_CategoryStep> {
                   horizontal: FixGoSpacing.md,
                   vertical: FixGoSpacing.sm,
                 ),
-                leading: Image.asset(
-                  categoryIconAsset(category.iconKey),
-                  height: 40,
-                  width: 40,
+                leading: CategoryIconArt(
+                  iconKey: category.iconKey,
+                  size: 40,
                 ),
                 title: Text(
                   category.name,
@@ -279,7 +399,7 @@ class _SubServiceStepState extends State<_SubServiceStep> {
             final subService = subServices[index];
             return Card(
               child: InkWell(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(FixGoRadius.lg),
                 onTap: () => widget.onSelected(subService),
                 child: Padding(
                   padding: const EdgeInsets.all(FixGoSpacing.md),
@@ -300,8 +420,7 @@ class _SubServiceStepState extends State<_SubServiceStep> {
                               const SizedBox(height: FixGoSpacing.xs),
                               Text(
                                 subService.description!,
-                                style:
-                                    Theme.of(context).textTheme.bodySmall,
+                                style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],
                           ],
@@ -369,23 +488,39 @@ class _VehicleTypeStepState extends State<_VehicleTypeStep> {
             crossAxisCount: 2,
             mainAxisSpacing: FixGoSpacing.sm,
             crossAxisSpacing: FixGoSpacing.sm,
-            childAspectRatio: 1.6,
+            childAspectRatio: 1.35,
           ),
           itemCount: vehicleTypes.length,
           itemBuilder: (context, index) {
             final vehicleType = vehicleTypes[index];
             return Card(
               child: InkWell(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(FixGoRadius.lg),
                 onTap: () => widget.onSelected(vehicleType),
-                child: Center(
-                  child: Text(
-                    vehicleType.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      height: 44,
+                      width: 44,
+                      decoration: const BoxDecoration(
+                        color: FixGoColors.accentSoft,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _vehicleIcon(vehicleType.slug),
+                        color: FixGoColors.accent,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: FixGoSpacing.sm),
+                    Text(
+                      vehicleType.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -393,6 +528,25 @@ class _VehicleTypeStepState extends State<_VehicleTypeStep> {
         );
       },
     );
+  }
+}
+
+/// ไอคอนประกอบประเภทรถ (slug มาจาก seed ของ backend)
+IconData _vehicleIcon(String slug) {
+  switch (slug) {
+    case 'motorcycle':
+      return Icons.two_wheeler;
+    case 'van':
+      return Icons.airport_shuttle;
+    case 'pickup':
+    case 'truck':
+      return Icons.local_shipping;
+    case 'ev':
+      return Icons.electric_car;
+    case 'machinery':
+      return Icons.agriculture;
+    default:
+      return Icons.directions_car;
   }
 }
 
@@ -404,14 +558,29 @@ class _ConfirmStep extends StatefulWidget {
     required this.submitting,
     required this.onConfirm,
     required this.pickupLocation,
+    required this.initialNote,
+    required this.onNoteChanged,
+    required this.photoUrls,
+    required this.uploadingPhotos,
+    required this.onAddPhotos,
+    required this.onRemovePhoto,
+    this.header,
   });
 
+  /// ส่วนเพิ่มเติมเฉพาะบางหมวด เช่น ข้อมูลรถที่จะตรวจของงานตรวจรถมือสอง
+  final Widget? header;
   final ServiceCategory category;
   final SubService subService;
   final VehicleType vehicleType;
   final bool submitting;
   final VoidCallback onConfirm;
   final LocationResult? pickupLocation;
+  final String initialNote;
+  final ValueChanged<String> onNoteChanged;
+  final List<String> photoUrls;
+  final bool uploadingPhotos;
+  final VoidCallback onAddPhotos;
+  final ValueChanged<String> onRemovePhoto;
 
   @override
   State<_ConfirmStep> createState() => _ConfirmStepState();
@@ -419,6 +588,30 @@ class _ConfirmStep extends StatefulWidget {
 
 class _ConfirmStepState extends State<_ConfirmStep> {
   Future<int>? _quoteFuture;
+  late final TextEditingController _noteController = TextEditingController(
+    text: widget.initialNote,
+  );
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openPickupInMaps() async {
+    final location = widget.pickupLocation;
+    if (location == null) return;
+    final uri = Uri.https('www.google.com', '/maps/search/', {
+      'api': '1',
+      'query': '${location.latitude},${location.longitude}',
+    });
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ไม่สามารถเปิด Google Maps ได้')),
+      );
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -437,6 +630,10 @@ class _ConfirmStepState extends State<_ConfirmStep> {
           child: ListView(
             padding: const EdgeInsets.all(FixGoSpacing.md),
             children: [
+              if (widget.header != null) ...[
+                widget.header!,
+                const SizedBox(height: FixGoSpacing.md),
+              ],
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(FixGoSpacing.md),
@@ -469,7 +666,125 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                 ),
               ),
               const SizedBox(height: FixGoSpacing.md),
-              // TODO: เพิ่มปุ่มแนบรูปปัญหารถ และช่องกรอกหมายเหตุ
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(FixGoSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'รูปอาการรถ (ไม่เกิน 5 รูป)',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: widget.uploadingPhotos ||
+                                    widget.photoUrls.length >= 5
+                                ? null
+                                : widget.onAddPhotos,
+                            icon: widget.uploadingPhotos
+                                ? const SizedBox(
+                                    height: 16,
+                                    width: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.add_a_photo_outlined),
+                            label: Text(
+                              widget.uploadingPhotos
+                                  ? 'กำลังอัปโหลด'
+                                  : 'เพิ่มรูป',
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (widget.photoUrls.isEmpty)
+                        Text(
+                          'ช่วยให้ช่างเตรียมเครื่องมือและอะไหล่ได้ตรงจุด',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        )
+                      else
+                        Wrap(
+                          spacing: FixGoSpacing.sm,
+                          runSpacing: FixGoSpacing.sm,
+                          children: [
+                            for (final url in widget.photoUrls)
+                              Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(
+                                      url,
+                                      height: 78,
+                                      width: 78,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    right: -7,
+                                    top: -7,
+                                    child: InkWell(
+                                      onTap: () => widget.onRemovePhoto(url),
+                                      child: const CircleAvatar(
+                                        radius: 11,
+                                        backgroundColor: FixGoColors.error,
+                                        child: Icon(
+                                          Icons.close,
+                                          size: 14,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: FixGoSpacing.md),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(FixGoSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'รายละเอียดจุดนัดหมายและอาการรถ',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: FixGoSpacing.sm),
+                      TextField(
+                        controller: _noteController,
+                        onChanged: widget.onNoteChanged,
+                        maxLines: 4,
+                        maxLength: 1000,
+                        decoration: const InputDecoration(
+                          hintText:
+                              'เช่น อยู่ชั้น B2 เสา C12 / รถสตาร์ทไม่ติด มีเสียงแชะ',
+                        ),
+                      ),
+                      const SizedBox(height: FixGoSpacing.sm),
+                      FixGoSecondaryButton(
+                        label: widget.pickupLocation == null
+                            ? 'จะตรวจตำแหน่งเมื่อยืนยัน'
+                            : 'เปิดตรวจสอบจุดนัดหมายใน Google Maps',
+                        onPressed: widget.pickupLocation == null
+                            ? null
+                            : _openPickupInMaps,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: FixGoSpacing.md),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(FixGoSpacing.md),

@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsBoolean,
@@ -21,6 +22,11 @@ export class RegisterProviderDto {
   @IsString()
   @Length(1, 60)
   nickname!: string;
+
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  experienceYears!: number;
 
   @IsOptional()
   @IsString()
@@ -62,6 +68,7 @@ export class RegisterProviderDto {
   /** รูปเครื่องมือช่าง ใช้ยืนยันว่าเป็นช่างจริง */
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(6)
   @IsString({ each: true })
   toolPhotoUrls!: string[];
 }

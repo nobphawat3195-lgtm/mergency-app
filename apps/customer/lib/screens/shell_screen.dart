@@ -14,49 +14,51 @@ class ShellScreen extends StatefulWidget {
 
 class _ShellScreenState extends State<ShellScreen> {
   int _index = 0;
+  late final List<Widget> _pages = const [
+    HomeScreen(),
+    OrdersScreen(),
+    _ComingSoonTab(
+      icon: Icons.chat_bubble_outline,
+      title: 'ผู้ช่วย AI',
+      subtitle: 'ถาม-ตอบปัญหารถ เร็วๆ นี้',
+    ),
+    _ProfileTab(),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      const HomeScreen(),
-      const OrdersScreen(),
-      const _ComingSoonTab(
-        icon: Icons.chat_bubble_outline,
-        title: 'ผู้ช่วย AI',
-        subtitle: 'ถาม-ตอบปัญหารถ เร็วๆ นี้',
-      ),
-      const _ProfileTab(),
-    ];
-
     return Scaffold(
-      body: pages[_index],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
-        backgroundColor: Colors.white,
-        indicatorColor: FixGoColors.accent.withValues(alpha: 0.3),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'หน้าหลัก',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'รายการ',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline),
-            selectedIcon: Icon(Icons.chat_bubble),
-            label: 'แชท AI',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'โปรไฟล์',
-          ),
-        ],
+      body: IndexedStack(index: _index, children: _pages),
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: FixGoColors.hairline)),
+        ),
+        child: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (value) => setState(() => _index = value),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home),
+              label: 'หน้าหลัก',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.receipt_long_outlined),
+              selectedIcon: Icon(Icons.receipt_long),
+              label: 'รายการ',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.chat_bubble_outline),
+              selectedIcon: Icon(Icons.chat_bubble),
+              label: 'แชท AI',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'โปรไฟล์',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -101,8 +103,13 @@ class _ProfileTab extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(FixGoSpacing.md),
         children: [
+          AccountSettingsTiles(
+            api: AppStateScope.of(context).api,
+            onDeleted: AppStateScope.of(context).signOut,
+          ),
+          const Divider(),
           ListTile(
-            leading: const Icon(Icons.logout, color: FixGoColors.error),
+            leading: const Icon(Icons.logout),
             title: const Text('ออกจากระบบ'),
             onTap: () => AppStateScope.of(context).signOut(),
           ),

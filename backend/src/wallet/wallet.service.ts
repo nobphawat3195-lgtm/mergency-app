@@ -3,17 +3,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  Prisma,
-  WalletEntryType,
-  WithdrawalStatus,
-} from '@prisma/client';
+import { Prisma, WalletEntryType, WithdrawalStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { AdminAlertService } from '../notifications/admin-alert.service';
+import { formatBaht } from '../common/money';
 
 @Injectable()
 export class WalletService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly adminAlert: AdminAlertService,
+  ) {}
 
   /** ยอดคงเหลือ = ผลรวมทุกรายการใน ledger ของช่างคนนั้น */
   async getBalance(providerId: string): Promise<number> {
@@ -53,22 +54,64 @@ export class WalletService {
     const net = gross - commission;
     const providerId = order.providerId;
 
-    await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.walletEntry.findFirst({
-        where: { orderId, type: WalletEntryType.ORDER_EARNING },
-      });
-      if (existing) return;
-
-      await tx.walletEntry.create({
+    try {
+      await this.prisma.walletEntry.create({
         data: {
+          idempotencyKey: `order-earning:${orderId}`,
           providerId,
           type: WalletEntryType.ORDER_EARNING,
           amount: net,
           orderId,
-          memo: `รายได้งาน ${order.orderNo} (หักค่าธรรมเนียม ${Math.round(order.commissionRate * 100)}%)`,
+          memo: `รายได้งาน ${order.orderNo}`,
         },
       });
+    } catch (error) {
+      // webhook/payment confirmation อาจมาซ้ำหรือชนกัน ให้เครดิตเพียงครั้งเดียว
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * งานที่ลูกค้าจ่ายเงินสดให้ช่าง: ช่างถือเงินเต็มจำนวนอยู่แล้ว
+   * จึงบันทึกค่าธรรมเนียมที่ช่างต้องคืนบริษัทเป็นยอดติดลบ (หักจากรายได้งานพร้อมเพย์ครั้งถัดไป)
+   * ห้ามเครดิตรายได้ให้ซ้ำ ไม่งั้นช่างจะเบิกเงินที่บริษัทไม่เคยได้รับ
+   */
+  async chargeCashCommission(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
     });
+    if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
+    if (!order.providerId) {
+      throw new BadRequestException('ออเดอร์นี้ไม่มีช่างรับผิดชอบ');
+    }
+    const gross = order.priceFinal ?? order.priceEstimated;
+    const commission = Math.round(gross * order.commissionRate);
+    try {
+      await this.prisma.walletEntry.create({
+        data: {
+          idempotencyKey: `cash-commission:${orderId}`,
+          providerId: order.providerId,
+          type: WalletEntryType.COMMISSION_DUE,
+          amount: -commission,
+          orderId,
+          memo: `ค่าบริการแพลตฟอร์ม งาน ${order.orderNo} (ลูกค้าจ่ายเงินสดกับช่าง)`,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return;
+      }
+      throw error;
+    }
   }
 
   /**
@@ -80,7 +123,7 @@ export class WalletService {
       throw new BadRequestException('จำนวนเงินที่ขอเบิกต้องมากกว่า 0');
     }
 
-    return this.prisma.$transaction(
+    const withdrawal = await this.prisma.$transaction(
       async (tx) => {
         const provider = await tx.provider.findUnique({
           where: { id: providerId },
@@ -128,10 +171,15 @@ export class WalletService {
           },
         });
 
-        return withdrawal;
+        return { withdrawal, nickname: provider.nickname };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+    void this.adminAlert.withdrawalRequested(
+      withdrawal.nickname,
+      formatBaht(amount),
+    );
+    return withdrawal.withdrawal;
   }
 
   listWithdrawals(providerId: string) {

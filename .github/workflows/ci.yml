@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run build:scripts
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build -t fixgo-api:ci ./backend
+      - name: Boot image against PostgreSQL and check health
+        run: |
+          docker network create fixgo
+          docker run -d --name db --network fixgo \
+            -e POSTGRES_DB=fixgo -e POSTGRES_USER=fixgo -e POSTGRES_PASSWORD=ci postgres:16-alpine
+          for i in $(seq 1 30); do docker exec db pg_isready -U fixgo -d fixgo && break; sleep 1; done
+          docker run -d --name api --network fixgo -p 3000:3000 \
+            -e DATABASE_URL='postgresql://fixgo:ci@db:5432/fixgo?schema=public' \
+            -e JWT_SECRET=ci-jwt-secret-value -e OTP_SECRET=ci-otp-secret-value \
+            -e PAYMENT_WEBHOOK_SECRET=ci-webhook-secret-value \
+            -e CORS_ORIGIN=https://admin.example.com \
+            -e S3_BUCKET=ci -e S3_ACCESS_KEY_ID=ci -e S3_SECRET_ACCESS_KEY=ci \
+            -e S3_PUBLIC_BASE_URL=https://files.example.com \
+            -e SMS_PROVIDER=thaibulksms -e THAIBULKSMS_API_KEY=ci -e THAIBULKSMS_API_SECRET=ci -e THAIBULKSMS_SENDER=FixGo \
+            fixgo-api:ci
+          for i in $(seq 1 60); do curl -sf localhost:3000/api/health && break; sleep 2; done
+          curl -sf localhost:3000/api/health
+          docker exec api node dist-scripts/prisma/seed.js
+          curl -sf localhost:3000/api/catalog/categories > /dev/null
+      - name: API logs
+        if: failure()
+        run: docker logs api || true
+
+  web-image:
+    # อิมเมจ Caddy + เว็บแอปที่ docker compose build บนเซิร์ฟเวอร์จริง
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build web image
+        run: docker build -f deploy/web.Dockerfile --build-arg API_BASE_URL=https://api.example.com -t fixgo-web:ci .
+      - name: Serve both web apps through the real Caddyfile
+        run: |
+          docker run -d --name web -p 8081:8081 -p 8082:8082 \
+            -e API_DOMAIN=http://localhost:8090 -e ADMIN_DOMAIN=http://localhost:8091 \
+            -e WEB_DOMAIN=http://localhost:8081 -e FIXER_DOMAIN=http://localhost:8082 \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" -v "$PWD/admin:/srv/admin:ro" fixgo-web:ci
+          sleep 3
+          curl -fsS http://localhost:8081/ | grep -q "FixGo"
+          curl -fsS http://localhost:8082/ | grep -q "FixGo Fixer"
+          # ลิงก์ตรงเข้าหน้าในแอปต้องได้ index.html ไม่ใช่ 404
+          curl -fsS http://localhost:8081/orders/any | grep -q "flutter_bootstrap.js"
+          docker exec web grep -q "https://api.example.com" /srv/web/main.dart.js
+      - name: Web logs
+        if: failure()
+        run: docker logs web || true
+
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Analyze shared package
+        working-directory: packages/fixgo_core
+        run: flutter pub get && flutter analyze
+      - name: Test shared package
+        working-directory: packages/fixgo_core
+        run: flutter test
+      - name: Analyze customer app
+        working-directory: apps/customer
+        run: flutter pub get && flutter analyze
+      - name: Analyze provider app
+        working-directory: apps/provider
+        run: flutter pub get && flutter analyze
+      # เว็บแอปที่ deploy/web.Dockerfile build ขึ้นเซิร์ฟเวอร์จริง
+      - name: Build customer web
+        working-directory: apps/customer
+        run: flutter build web --release --no-web-resources-cdn --dart-define=API_BASE_URL=https://api.example.com
+      - name: Build provider web
+        working-directory: apps/provider
+        run: flutter build web --release --no-web-resources-cdn --dart-define=API_BASE_URL=https://api.example.com

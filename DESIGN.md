@@ -1,27 +1,28 @@
 ---
-version: alpha
+version: beta
 name: FixGo
 description: >
-  Design system ของแอป FixGo — เรียกช่างซ่อมรถฉุกเฉิน กลุ่มเป้าหมายไม่มีความรู้เรื่องรถ
-  โทนสีอิงจาก BMW corporate design system เต็มรูปแบบ (น้ำเงิน #1c69d4 + พื้นขาว
-  + มุมเหลี่ยมคมทุกจุด ไม่มีมุมมนเลย) เลือกเพราะให้ความรู้สึกมั่นคง เป็นทางการ
-  น่าเชื่อถือ อ่านง่ายแม้ใช้งานตอนเครียด (รถเสีย กลางคืน กลางแดด) — ผ่านการทดลอง
-  โทนม่วง+ทอง (Glenfiddich) มาก่อน แต่ผู้ใช้ตัดสินใจสุดท้ายให้ใช้ BMW เต็มรูปแบบ
+  Design system ของแอป FixGo (ลูกค้า) และ FixGo Fixer (ช่าง) — เรียกช่างซ่อมรถฉุกเฉิน 24 ชม.
+  กลุ่มเป้าหมายไม่มีความรู้เรื่องรถและมักเปิดแอปตอนเครียด โทนเขียว (ปลอดภัย พร้อมช่วยเหลือ)
+  พื้นมิ้นต์อ่อน การ์ดขาวมุมโค้ง เขียวเข้มเป็นสีของทุก action ปุ่มเรียกช่างด่วนเด่นที่สุดบนจอ
 colors:
-  navy: "#1A2129"
-  # primary คือ alias มาตรฐานที่เครื่องมือแปลง (Figma/Tailwind) มองหา
-  # เก็บ navy ไว้เป็นชื่อหลักเพราะโค้ด Dart (FixGoColors.navy) ผูกกับชื่อนี้อยู่แล้ว
-  primary: "{colors.navy}"
-  accent: "#1C69D4"
-  accent-active: "#0653B6"
+  ink: "#122821"          # FixGoColors.navy / textPrimary
+  primary: "{colors.accent}"
+  accent: "#0B5F45"       # เขียวเข้ม ปุ่มหลัก
+  accent-active: "#084A36"
+  jade: "#16A37B"         # เขียวหยก ไอคอน เส้น ขอบเน้น (ห้ามเป็นตัวอักษรเล็กบนขาว)
+  lime: "#C7EE77"         # สีเน้น badge/ปุ่มรองบนพื้นเข้ม คู่กับตัวอักษร ink
+  accent-soft: "#ECF8F1"  # มิ้นต์ chip/พื้นไอคอน
   background: "#FFFFFF"
-  surface: "#F7F7F7"
-  text-primary: "#262626"
-  text-secondary: "#6B6B6B"
-  success: "#22C55E"
-  warning: "#F59E0B"
-  error: "#DC2626"
-  hairline: "#E6E6E6"
+  surface: "#ECF8F1"      # พื้น Scaffold
+  text-primary: "#122821"
+  text-secondary: "#4A6259"
+  success: "#0E7A57"
+  warning: "#9A5B00"
+  error: "#C62828"
+  hairline: "#D5E8DE"
+  disabled-bg: "#E3EBE7"
+  disabled-fg: "#5F7A70"
 typography:
   headline:
     fontFamily: Noto Sans Thai
@@ -44,23 +45,13 @@ typography:
     fontWeight: 400
     lineHeight: 1.4
   price:
-    fontFamily: Inter
-    fontSize: 24px
-    fontWeight: 900
-    lineHeight: 1.2
-  app-bar-title:
     fontFamily: Noto Sans Thai
-    fontSize: 18px
-    fontWeight: 700
+    fontSize: 24px
+    fontWeight: 800
     lineHeight: 1.2
   button:
     fontFamily: Noto Sans Thai
     fontSize: 17px
-    fontWeight: 700
-    lineHeight: 1.2
-  button-secondary:
-    fontFamily: Noto Sans Thai
-    fontSize: 16px
     fontWeight: 700
     lineHeight: 1.2
   label:
@@ -74,7 +65,10 @@ typography:
     fontWeight: 500
     lineHeight: 1.2
 rounded:
-  none: 0px
+  sm: 10px
+  md: 14px
+  lg: 20px
+  pill: 999px
 spacing:
   xs: 4px
   sm: 8px
@@ -86,100 +80,134 @@ components:
     backgroundColor: "{colors.accent}"
     textColor: "#FFFFFF"
     typography: "{typography.button}"
-    rounded: "{rounded.none}"
-    padding: 16px
+    rounded: "{rounded.md}"
+    height: 56px
   button-secondary:
-    backgroundColor: transparent
-    textColor: "{colors.text-primary}"
-    borderColor: "{colors.text-primary}"
-    typography: "{typography.button-secondary}"
-    rounded: "{rounded.none}"
-    padding: 16px
+    backgroundColor: "{colors.background}"
+    textColor: "{colors.accent}"
+    borderColor: "{colors.accent}"
+    rounded: "{rounded.md}"
+    height: 56px
+  button-emergency:
+    background: "linear-gradient(135deg, #0B5F45, #084A36)"
+    textColor: "#FFFFFF"
+    height: 64px
+    rounded: "{rounded.pill}"
+    leading: "วงกลมขาว 48px + ไอคอนโทรศัพท์"
   card:
     backgroundColor: "{colors.background}"
-    borderColor: "{colors.hairline}"
-    rounded: "{rounded.none}"
-    padding: "{spacing.md}"
+    rounded: "{rounded.lg}"
+    shadow: "0 4px 16px rgba(18,40,33,0.08)"
+  hero-banner:
+    image: "apps/customer/assets/images/home_hero.jpg (1672x941 ไม่มีข้อความในภาพ)"
+    aspectRatio: "1672 / 941 — ห้ามครอบ ใบหน้าและรถต้องเห็นครบ"
+    text: "วาดด้วย Flutter บนพื้นเขียวฝั่งซ้าย กว้างไม่เกิน 47%"
   category-icon-tile:
-    # ไอคอน 3D จาก Microsoft Fluent Emoji (MIT License) — รูปมีสีในตัวเองอยู่แล้ว
-    # ไม่ต้องมีพื้นหลังสีคลุม ต่างจากเวอร์ชันก่อนที่ใช้ Material icon + tint พื้นหลัง
-    # ที่มา: github.com/microsoft/fluentui-emoji
-    # สัญญาอนุญาตเต็ม: assets/icons/licenses/fluentui-emoji-LICENSE.txt
-    backgroundColor: transparent
-    icon: "รูป PNG 3D ต่อหมวด (ดู categoryIconAsset ใน fixgo_core)"
+    backgroundColor: "{colors.surface}"
+    size: 64px
+    rounded: 18px
+    icon: "PNG 3D ต่อหมวด (ดู categoryIconAsset ใน fixgo_core)"
     typography: "{typography.label}"
-    rounded: "{rounded.none}"
-  badge-recommended:
-    backgroundColor: "{colors.accent}"
-    textColor: "#FFFFFF"
-    typography: "{typography.label}"
-    rounded: "{rounded.none}"
 ---
 
 ## Overview
 
-FixGo คือแอปเรียกช่างซ่อมรถฉุกเฉิน (Flutter, iOS/Android) กลุ่มผู้ใช้หลักคือคนที่ไม่มีความรู้เรื่องรถและมักใช้งานตอนเครียด (รถเสียกลางทาง) ดีไซน์ทั้งหมดจึงยึดหลัก **"เข้าใจง่ายที่สุด"** เหนือความสวยงามที่ซับซ้อน
+FixGo คือแอปเรียกช่างซ่อมรถฉุกเฉิน (Flutter, iOS/Android) ผู้ใช้ส่วนใหญ่ไม่มีความรู้เรื่องรถและมักเปิดแอปตอนเครียด ดีไซน์ยึดหลัก **"เข้าใจง่ายและกดได้เร็วที่สุด"**
 
-โทนภาพอ้างอิงจาก **BMW corporate design system** เต็มรูปแบบ — น้ำเงิน BMW (`#1c69d4`) บนพื้นขาว มุมเหลี่ยมคมทุกจุด ไม่มีมุมมนเลยทั้งระบบ ให้ความรู้สึกมั่นคง เป็นทางการ น่าเชื่อถือ ต่างจากคู่แข่งกลุ่ม on-demand service ในไทยที่มักใช้โทนส้ม-เหลือง มุมโค้งมนกันหมด (24CarFix เป็นตัวอย่าง)
+2 แอปใช้ design system เดียวกันผ่าน `packages/fixgo_core/lib/src/theme.dart`:
+- **FixGo (ลูกค้า)**: หัวเขียวเข้ม `fixGoBrandGradient` โลโก้พื้น `#0B5F45`
+- **FixGo Fixer (ช่าง)**: หัวไล่จากหมึก `#122821` ไปเขียวเข้ม โลโก้พื้น `#122821` ประแจสีมะนาว และคำว่า "Fixer" สีมะนาว ให้แยกออกทันทีว่าเป็นแอปช่าง
 
-**ประวัติการเปลี่ยนโทน**: เวอร์ชันแรกใช้ navy+เหลือง (อิง Antixor Taxi) → เปลี่ยนเป็นม่วงเข้ม+ทอง (อิงกล่อง Glenfiddich 15 ปี) → เวอร์ชันปัจจุบันเปลี่ยนเป็น BMW เต็มรูปแบบตามการตัดสินใจสุดท้ายของผู้ใช้ ชื่อตัวแปรในโค้ด Dart (`FixGoColors.navy`, `FixGoColors.accent`) ยังคงเดิมทุกเวอร์ชันเพื่อไม่ต้องแก้ทุกไฟล์ที่อ้างอิง มีแค่ค่า hex ที่เปลี่ยน
-
-มี 2 แอปที่ใช้ design system เดียวกัน: **Customer App** (ลูกค้าเรียกช่าง) และ **Provider App / FixGo Fixer** (ช่างรับงาน) — implement อยู่ใน `packages/fixgo_core/lib/src/theme.dart`
+**ประวัติการเปลี่ยนโทน**: navy+เหลือง → ม่วง+ทอง → น้ำเงิน → ส้มสว่าง → **ปัจจุบัน: เขียว** ตาม concept ของเจ้าของโปรเจกต์ ชื่อตัวแปร Dart (`FixGoColors.navy`, `FixGoColors.accent`) คงเดิมทุกเวอร์ชัน
 
 ## Colors
 
-- `primary` เป็น alias ชี้ไปที่ `navy` (`#1A2129`) — เครื่องมือแปลง token ภายนอก (Figma/Tailwind) มองหาชื่อ `primary` เป็นมาตรฐาน โค้ด Dart จริงยังเรียกผ่านชื่อ `navy`
-- `navy` (`#1A2129`) คือพื้นหลังเข้ม (BMW surface-dark) ใช้กับหน้า login, hero card, กระเป๋าเงินช่าง — ไม่ใช่สีข้อความ
-- `accent` (`#1C69D4`) น้ำเงิน BMW **ใช้กับปุ่มสำคัญเท่านั้น** — กฎตายตัวคือทั้งแอปมีปุ่มสีน้ำเงินแบบเดียว ไม่มีปุ่มสีอื่นแข่งความสนใจในหน้าเดียวกัน ตัวหนังสือบนปุ่มเป็นสีขาวเสมอ (ไม่ใช่ navy เหมือนเวอร์ชันก่อน เพราะน้ำเงินเข้มพอที่จะต้องใช้ขาวถึงจะอ่านชัด)
-- `text-primary` (`#262626`, ink) แยกจาก `navy` ชัดเจน — ใช้กับตัวหนังสือบนพื้นขาว ไม่ใช่สีเดียวกับพื้นหลังเข้มเหมือนเวอร์ชันก่อน
-- `success` / `warning` / `error` ใช้เฉพาะสถานะ (เช่น badge สถานะออเดอร์) ห้ามใช้กับปุ่ม action
-- ไอคอนหมวดบริการ (category-icon-tile) ใช้รูป 3D จาก Microsoft Fluent Emoji (MIT License) แทน Material icon แบน — มีสีสันในตัวรูปอยู่แล้ว ไม่ต้องคุมด้วย color token ดู mapping เต็มใน `fixgo_core` ฟังก์ชัน `categoryIconAsset`
+| token | ค่า | ใช้กับ |
+|---|---|---|
+| `accent` | `#0B5F45` | ปุ่มหลัก แท็บที่เลือก สถานะกำลังทำ ตัวอักษรบนพื้นนี้เป็นขาวเสมอ |
+| `accentActive` | `#084A36` | ปลาย gradient และสถานะกด |
+| `jade` | `#16A37B` | ไอคอนเช็ก สวิตช์เปิด เส้นเน้น (ตัวอักษรขาวบน jade ได้เฉพาะตัวใหญ่) |
+| `lime` | `#C7EE77` | ป้ายราคา ปุ่มรองบนพื้นเข้ม ตัวอักษรบนพื้นนี้ใช้ `ink` |
+| `accentSoft`/`surface` | `#ECF8F1` | พื้นหน้าจอ chip พื้นไอคอน indicator ของ bottom nav |
+| `navy`/`textPrimary` | `#122821` | หัวข้อ ตัวเลข การ์ดเข้มฝั่งช่าง |
+| `textSecondary` | `#4A6259` | คำอธิบาย |
+
+### Contrast (WCAG 2.1) ที่ตรวจแล้ว
+
+| คู่สี | อัตราส่วน | ผล |
+|---|---|---|
+| ขาว บน `#0B5F45` (ปุ่มหลัก) | 7.67 | AAA |
+| ขาว บน `#084A36` | 10.28 | AAA |
+| `#122821` บน `#C7EE77` (ป้ายราคา) | 11.79 | AAA |
+| `#C7EE77` บน `#0B5F45` | 5.82 | AA |
+| `#122821` บน `#ECF8F1` | 14.26 | AAA |
+| `#4A6259` บน `#ECF8F1` / ขาว | 6.05 / 6.60 | AA |
+| `#0B5F45` บน `#ECF8F1` (ลิงก์/แท็บ) | 7.04 | AAA |
+| success `#0E7A57` / warning `#9A5B00` / error `#C62828` บนขาว | 5.33 / 5.43 / 5.62 | AA |
+| `#122821` บน `#FFF4DC` (แถบรอยืนยันยอดเงิน) | 14.23 | AAA |
+| ปุ่ม disabled `#5F7A70` บน `#E3EBE7` | 3.84 | ผ่านเกณฑ์ UI 3:1 (ปุ่มที่กดไม่ได้ WCAG ไม่บังคับ 4.5) |
+| ขาว บน `#16A37B` | 3.20 | ใช้ได้เฉพาะตัวใหญ่/ไอคอน ห้ามใช้กับข้อความเล็ก |
 
 ## Typography
 
-Font หลัก **Noto Sans Thai** (รองรับไทย+อังกฤษ อ่านง่ายบนมือถือ ฟรีเชิงพาณิชย์) ยกเว้นตัวเลขราคาที่ใช้ **Inter** เพราะตัวเลขอ่านง่ายกว่าเมื่อ font ออกแบบมาสำหรับตัวเลขโดยเฉพาะ
+ฟอนต์ **Noto Sans Thai** มีไฟล์ static ครบ 5 น้ำหนัก (400/500/600/700/800) ซึ่ง instance มาจาก variable font ของ Google Fonts จึงมีตัวอักษรละตินและตัวเลขในไฟล์เดียว (สัญญาอนุญาต OFL อยู่ที่ `assets/fonts/OFL.txt`)
 
-**ข้อจำกัดที่ต้องรู้**: BMW ต้นฉบับใช้ระบบ 2 น้ำหนัก (heavy 700 สำหรับ display + light 300 สำหรับ body) แต่ FixGo bundle มาแค่ font น้ำหนัก Regular (400) เดียว — ลองหาไฟล์ Light เพิ่มแล้วแต่ถูก network proxy บล็อกทั้ง GitHub และ jsdelivr ตอนนี้ body/caption ใช้ 400 ไปก่อน (ไม่ใช่ 300 ตาม BMW จริง) ถ้าต้องการความแท้จริงต้องหาไฟล์ font น้ำหนัก Light มา bundle เพิ่มในอนาคต
+**ต้องมีไฟล์ทุกน้ำหนักที่ใช้**: ถ้าขาด Flutter จะสังเคราะห์ตัวหนาเอง (faux bold) ทำให้สระและวรรณยุกต์ไทยหนาไม่เท่ากัน ดูแตก ซึ่งเป็นสาเหตุที่ตัวหนังสือเวอร์ชันก่อนดูไม่เรียบร้อย
 
-กฎสำคัญ: ราคาต้องใช้ `price` token เสมอ (ใหญ่ ตัวหนามาก) — ห้ามลดขนาด/น้ำหนักแม้ในพื้นที่จำกัด เพราะราคาเป็นข้อมูลที่ผู้ใช้ต้องเห็นชัดที่สุดก่อนตัดสินใจกดยืนยัน
-
-Token ครบ 10 ระดับ: `headline` (หัวข้อใหญ่), `app-bar-title` (แถบด้านบนของหน้า), `title` (หัวข้อรอง/การ์ด), `body` (เนื้อหาทั่วไป), `caption` (คำอธิบายรอง), `price` (ราคา), `button` / `button-secondary` (ตัวหนังสือบนปุ่มหลัก/รอง), `label` (label ใต้ไอคอน/badge), `nav-label` (ข้อความ bottom nav)
+ราคาต้องใช้ขนาดตั้งแต่ 24px น้ำหนัก 800 ขึ้นไปเสมอ
 
 ## Layout
 
-- Spacing ใช้ scale จาก `spacing.xs` ถึง `spacing.xl` เท่านั้น ห้ามใช้ค่าตัวเลขอิสระ
-- Booking wizard และ flow อื่นที่มีหลายขั้นตอน **ต้องมี progress indicator เสมอ** (ดู `StepProgress` widget) ผู้ใช้ต้องเห็นตลอดว่าอยู่ขั้นไหน เหลืออีกกี่ขั้น
-- Bottom navigation คงที่ 4 แท็บทั้ง 2 แอป ไม่ใช้ hamburger menu หรือ drawer ซ่อนเมนูหลัก
+### หน้าแรกลูกค้า (ตาม concept สีเขียว)
+1. หัวเขียวเข้ม: โลโก้ FixGo + pill ตำแหน่งปัจจุบัน (ข้อมูลจริงจาก GPS แตะเพื่อหาใหม่)
+2. **การ์ดเรียกช่างด่วน** ลอยทับหัว: หัวข้อ 32px + ปุ่ม 64px เต็มความกว้าง เป็นองค์ประกอบที่เด่นที่สุดบนจอ
+3. แบนเนอร์ภาพจริง (ภาพไม่มีข้อความ) ข้อความและปุ่ม "ดูขั้นตอนบริการ" วาดด้วย Flutter
+4. บริการยอดนิยม 4 ช่อง: ช่างซ่อมรถ, จั๊มแบต (เข้าขั้นเลือกประเภทรถทันที), ยางรั่ว, รถยก
+5. การ์ดตรวจรถมือสอง: ราคาและจำนวนรายการดึงจาก API เสมอ
+6. หมวดบริการทั้งหมด (ปุ่ม "ดูทั้งหมด" เลื่อนลงมาที่นี่)
 
-## Elevation & Depth
+### หน้าแรกช่าง (FixGo Fixer)
+1. หัวเข้ม + สวิตช์ "พร้อมรับงาน" (อ่านสถานะจริงจาก backend ตอนเปิด)
+2. งานเข้ามาใหม่: นับถอยหลัง ระยะทาง ที่อยู่ ราคาประเมิน ปุ่มรับงาน/ปฏิเสธ
+3. ความคืบหน้างาน 4 ขั้น: รับงาน → เดินทาง → กำลังซ่อม → ปิดงาน (ตรงกับสถานะที่ลูกค้าเห็น)
+4. สรุปวันนี้: งานเสร็จ (completedAt วันนี้), รายได้ที่ยืนยันแล้ว (ORDER_EARNING วันนี้), ยอดถอนได้
+5. เมนูหลัก: งานของฉัน, กระเป๋าเงิน, โปรไฟล์
 
-FixGo ไม่ใช้เงาเลยทั้งระบบ (ต่างจากเวอร์ชันก่อนที่มีเงาบางบนการ์ดหมวดบริการ) — แยกพื้นที่ด้วย `border` สีเทาอ่อน (`hairline`) แทนเงาทุกจุด ตรงตามแนวทาง flat design ของ BMW ที่ไม่ใช้ elevation เพื่อสร้างมิติ แต่ใช้เส้นขอบและช่องว่างแทน
+ไม่มี "เวลาออนไลน์" เพราะ backend ยังไม่เก็บข้อมูลนี้ ห้ามแสดงตัวเลขสมมติ
 
-ไม่มี elevation level ใดๆ เลย ทุก component อยู่บนระนาบเดียวกัน (`elevation: 0` ทุกจุดใน `theme.dart`)
+### ทั่วไป
+- Spacing ใช้ scale `xs`–`xl` เท่านั้น
+- ทุก flow หลายขั้นตอนต้องมี `StepProgress`
+- Bottom navigation 4 แท็บคงที่ทั้ง 2 แอป
 
-## Shapes
+## Elevation & Shapes
 
-**ใช้มุมเหลี่ยมคม (`rounded.none`, 0px) ทุกจุดในระบบ ไม่มีมุมมนเลย** — ปุ่ม, การ์ด, ช่องกรอกข้อมูล, ไอคอนหมวดบริการ, badge ทั้งหมดเป็นสี่เหลี่ยมคมชัด ตรงตามดีไซน์ BMW ต้นฉบับที่ใช้ `rounded.none` กับทุก component โดยไม่มีข้อยกเว้น สื่อความรู้สึกมั่นคง เป็นทางการ ต่างจากเวอร์ชันก่อนที่ใช้มุมมน/pill สื่อความเป็นมิตร
+- การ์ดใช้เงานุ่ม (`fixGoCardShadow`) การ์ดในลิสต์ใช้เส้นขอบ `hairline`
+- การ์ดที่กดได้ให้ใช้ `DecoratedBox(shadow)` → `Material(borderRadius, clip)` → `InkWell` ห้ามใส่ `boxShadow` ใน `Ink` ใต้ `Material` สีโปร่ง (เงาจะรั่วเป็นสี่เหลี่ยมเทาที่มุม)
+- มุมโค้ง: การ์ด 20, ปุ่มและช่องกรอก 14, ปุ่มฉุกเฉินและ chip แบบ pill
 
-## Components
+## Icons & Logo
 
-- **button-primary**: ปุ่มเดียวที่ใช้สั่งการสำคัญ (ยืนยันเรียกช่าง, รับงาน, ขอเบิกเงิน) พื้นน้ำเงิน ตัวหนังสือขาวเสมอ มุมเหลี่ยมคม
-- **button-secondary**: ใช้กับ action รอง (ยกเลิก, ปฏิเสธงาน) ขอบสี ink (`text-primary`) พื้นขาว มุมเหลี่ยมคม ป้องกันไม่ให้แย่งความสนใจจาก primary
-- **category-icon-tile**: ไอคอน 3D สีสัน (Microsoft Fluent Emoji, MIT) วางตรงกลางการ์ด ไม่มีพื้นหลังสีคลุม **ต้องมี label ข้อความกำกับเสมอ** ห้ามใช้ไอคอนอย่างเดียวโดยไม่มีคำอธิบาย เพราะกลุ่มเป้าหมายไม่มีความรู้เรื่องรถ ตีความไอคอนเองไม่ได้
-- **badge-recommended**: ใช้ระบุตัวเลือกแนะนำ (เช่น "เรียกช่างฉุกเฉิน" ในหน้าแรก) พื้นน้ำเงิน ตัวหนังสือขาว มีแค่ 1 badge ต่อหน้าจอ ป้องกันการเน้นเยอะเกินจนไม่มีจุดเด่น
+- ไอคอนหมวดบริการเป็น 3D ชุดที่เจ้าของโปรเจกต์จัดให้ ต้องมีข้อความกำกับเสมอ
+- **โลโก้**: รถ + ประแจ + "24" มุมขวาบน ต้นฉบับแก้ไขได้ที่ `tool/brand/fixgo_logo.svg` และ `tool/brand/fixgo_fixer_logo.svg`
+- สร้างไอคอนทุกแพลตฟอร์มด้วย `tool/brand/render_icons.mjs` (Playwright/Chromium) แล้วย่อเป็น Android mipmap/adaptive, iOS AppIcon/LaunchImage, web icons
+- Splash: Android `values/colors.xml` (`splash_background`) และ iOS `LaunchScreen.storyboard` ใช้สีพื้นโลโก้ของแต่ละแอป
+
+## Data honesty rules
+
+- ภาพ mockup เป็นแนวทางด้านภาพเท่านั้น ห้ามนำข้อความ/ตัวเลขในภาพไปแสดงเป็นข้อมูลจริง (เช่น "ทั่วไทย", "200+ จุด", "เริ่มต้น 1,500")
+- ราคา จำนวนรายการตรวจ รายได้ และจำนวนงาน ต้องมาจาก API เท่านั้น
+- การชำระเงินเป็น "ชำระแล้ว" ได้เมื่อ backend บันทึก `PAID` (webhook ผู้ให้บริการรับชำระ หรือช่างยืนยันรับเงินสด) เท่านั้น การแสดง QR หรือการกดปุ่มไม่เปลี่ยนสถานะ แสดง "รอยืนยันยอดเงิน" ระหว่างนั้น
+- ข้อมูลที่ยังตรวจสอบต้นฉบับไม่ได้ (TRUSTCAR 360) แสดงเป็น "ต้นแบบ" และไม่เปิดจอง
 
 ## Do's and Don'ts
 
 **Do**
-- ใช้สีน้ำเงิน (`accent`) กับปุ่มสำคัญที่สุดของหน้านั้นเพียงปุ่มเดียว
-- ใช้มุมเหลี่ยมคม (`rounded.none`) กับทุก component ไม่มีข้อยกเว้น
-- แสดงราคาด้วย `price` token ทุกครั้งที่มีตัวเลขเงินปรากฏ
-- ใส่ label ข้อความกำกับไอคอนทุกจุด
-- แสดง progress indicator ในทุก flow ที่มีมากกว่า 1 ขั้นตอน
+- ใช้เขียวเข้มกับปุ่มหลักของหน้าเพียงปุ่มเดียว ปุ่มรองใช้ outline
+- ใช้ `lime` คู่กับตัวอักษร `ink` เท่านั้น
+- แสดงราคาตัวใหญ่ชัดเจนทุกครั้ง
 
 **Don't**
-- อย่าใช้สีน้ำเงินกับมากกว่า 1 ปุ่มในหน้าเดียวกัน
-- อย่าใส่มุมมนหรือเงากลับเข้ามาที่จุดไหนเลย (ขัดกับดีไซน์ BMW ที่ตั้งใจเลือก)
-- อย่าลดขนาด/น้ำหนักตัวอักษรของราคาต่ำกว่า `price` token
-- อย่าใช้ไอคอนเดี่ยวๆ โดยไม่มีข้อความกำกับ
-- อย่าเพิ่มสีใหม่นอกเหนือจาก token ที่กำหนดไว้ — ถ้าจำเป็นต้องมีสีใหม่ ให้เพิ่ม token ใน DESIGN.md นี้ก่อน แล้วค่อย implement ใน `theme.dart`
+- อย่าใช้โลโก้ ภาพ หรือข้อความโฆษณาของแบรนด์อื่น
+- อย่าเพิ่มน้ำหนักฟอนต์ที่ไม่มีไฟล์จริงใน `pubspec.yaml`
+- อย่าเพิ่มสีนอก token ถ้าจำเป็นให้เพิ่มใน DESIGN.md ก่อนแล้วค่อย implement ใน `theme.dart`

@@ -3,78 +3,110 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700;800&display=swap" rel="stylesheet">
 <title>FixGo Admin</title>
 <style>
+  /* โทนเดียวกับแอป (DESIGN.md): เขียว FixGo เป็นสีปุ่ม action พื้นมินต์อ่อน */
   :root {
-    --navy: #0B1B2B;
-    --accent: #FFC72C;
-    --surface: #F5F6F8;
-    --text-secondary: #6B7280;
-    --border: #E5E7EB;
-    --success: #22C55E;
-    --error: #EF4444;
+    --navy: #122821;
+    --accent: #0B5F45;
+    --accent-active: #084A36;
+    --accent-soft: #ECF8F1;
+    --surface: #F3F8F5;
+    --text-secondary: #4A6259;
+    --border: #D5E8DE;
+    --success: #16A37B;
+    --error: #C62828;
+    --warn-soft: #FFF4E5;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: "Noto Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif;
     background: var(--surface);
     color: var(--navy);
   }
   header {
-    background: var(--navy);
-    color: #fff;
-    padding: 16px 24px;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
     display: flex;
     align-items: center;
     gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
   }
-  header h1 { margin: 0; font-size: 20px; color: var(--accent); }
+  header .logo {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, #16A37B, #0B5F45);
+    display: grid; place-items: center; color: #fff;
+  }
+  header h1 { margin: 0; font-size: 20px; font-weight: 800; }
+  header .sub {
+    font-size: 13px; color: var(--text-secondary);
+    background: var(--surface); padding: 4px 10px; border-radius: 999px;
+  }
   main { padding: 24px; max-width: 1100px; margin: 0 auto; }
   .card {
     background: #fff;
     border: 1px solid var(--border);
-    border-radius: 16px;
+    border-radius: 20px;
     padding: 20px;
     margin-bottom: 20px;
+    box-shadow: 0 4px 16px rgba(29, 35, 48, 0.06);
   }
   h2 { font-size: 17px; margin: 0 0 16px; }
   input {
-    padding: 12px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
+    padding: 12px 14px;
+    border: 1px solid transparent;
+    background: var(--surface);
+    border-radius: 14px;
     font-size: 15px;
     width: 100%;
     max-width: 280px;
+    font-family: inherit;
   }
+  input:focus { outline: none; border-color: var(--accent); background: #fff; }
   button {
     background: var(--accent);
-    color: var(--navy);
+    color: #fff;
     border: none;
-    border-radius: 999px;
-    padding: 10px 20px;
+    border-radius: 12px;
+    padding: 10px 18px;
     font-weight: 700;
     font-size: 14px;
+    font-family: inherit;
     cursor: pointer;
   }
+  button:hover { background: var(--accent-active); }
   button.ghost {
     background: transparent;
+    color: var(--navy);
     border: 1px solid var(--border);
   }
-  button.danger { background: var(--error); color: #fff; }
+  button.ghost:hover { background: var(--surface); }
+  button.danger { background: #fff; color: var(--error); border: 1px solid rgba(220, 38, 38, 0.35); }
+  button.danger:hover { background: #FEF2F2; }
+  .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+  th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--border); }
+  tbody tr:hover { background: #FAFAFB; }
   th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
-  .stats { display: flex; gap: 16px; flex-wrap: wrap; }
+  .stats { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
   .stat {
-    flex: 1 1 160px;
-    background: var(--navy);
-    color: #fff;
+    background: var(--surface);
     border-radius: 16px;
     padding: 16px;
   }
-  .stat .value { font-size: 26px; font-weight: 800; color: var(--accent); }
-  .stat .label { font-size: 13px; color: #CBD5E1; }
+  .stat:first-child { background: linear-gradient(135deg, #16A37B, #0B5F45); }
+  .stat.alert { background: var(--warn-soft); outline: 2px solid #F5A524; }
+  .card.alert { border-color: #F5A524; }
+  .muted { color: var(--text-secondary); font-size: 13px; }
+  .stat:first-child .value, .stat:first-child .label { color: #fff; }
+  .stat .value { font-size: 26px; font-weight: 800; color: var(--navy); }
+  .stat .label { font-size: 13px; color: var(--text-secondary); }
   .hidden { display: none; }
   .error { color: var(--error); margin-top: 12px; }
   .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -82,18 +114,21 @@
 </head>
 <body>
 <header>
+  <div class="logo" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M12 2C7.6 2 4 5.4 4 9.7 4 15 11 21.4 11.3 21.7a1 1 0 0 0 1.4 0C13 21.4 20 15 20 9.7 20 5.4 16.4 2 12 2Z"/></svg>
+  </div>
   <h1>FixGo</h1>
-  <span>ระบบหลังบ้าน</span>
+  <span class="sub">ระบบหลังบ้าน</span>
   <span style="flex:1"></span>
-  <button id="logout" class="ghost hidden" style="color:#fff">ออกจากระบบ</button>
+  <button id="logout" class="ghost hidden">ออกจากระบบ</button>
 </header>
 
 <main>
   <section id="login-view" class="card">
     <h2>เข้าสู่ระบบผู้ดูแล</h2>
     <div class="row">
-      <input id="phone" placeholder="เบอร์โทรศัพท์" inputmode="numeric">
-      <input id="password" type="password" placeholder="รหัสผ่าน">
+      <input id="phone" placeholder="เบอร์โทรศัพท์" inputmode="numeric" autocomplete="username">
+      <input id="password" type="password" placeholder="รหัสผ่าน" autocomplete="current-password">
       <button id="login-btn">เข้าสู่ระบบ</button>
     </div>
     <div id="login-error" class="error"></div>
@@ -105,36 +140,60 @@
       <div class="stats" id="stats"></div>
     </div>
 
+    <div class="card" id="nomatch-card">
+      <h2>งานที่ไม่มีช่างรับ <span class="muted">(ลูกค้ารออยู่ ต้องจัดการด่วน)</span></h2>
+      <div class="table-wrap"><table><thead><tr>
+        <th>เลขที่</th><th>บริการ</th><th>จุดนัดหมาย</th><th>ลูกค้า</th><th>สร้างเมื่อ</th><th></th>
+      </tr></thead><tbody id="nomatch-body"></tbody></table></div>
+    </div>
+
+    <div class="card" id="slips-card">
+      <h2>สลิปพร้อมเพย์รอตรวจ <span class="muted">(เช็คยอดเข้าบัญชีจริงก่อนกดยืนยัน)</span></h2>
+      <div class="table-wrap"><table><thead><tr>
+        <th>สลิป</th><th>เลขที่งาน</th><th>ยอดที่ต้องได้รับ</th><th>ลูกค้า</th><th>ช่าง</th><th>ส่งเมื่อ</th><th></th>
+      </tr></thead><tbody id="slips-body"></tbody></table></div>
+    </div>
+
     <div class="card">
       <h2>ช่างรออนุมัติ</h2>
-      <table><thead><tr>
+      <div class="table-wrap"><table><thead><tr>
         <th>ชื่อ</th><th>เบอร์</th><th>ร้าน/อู่</th><th>เฟซบุ๊ก</th><th>เวลาทำงาน</th><th></th>
-      </tr></thead><tbody id="providers-body"></tbody></table>
+      </tr></thead><tbody id="providers-body"></tbody></table></div>
     </div>
 
     <div class="card">
       <h2>คำขอเบิกเงิน</h2>
-      <table><thead><tr>
+      <div class="table-wrap"><table><thead><tr>
         <th>ช่าง</th><th>จำนวน</th><th>บัญชีรับเงิน</th><th>ขอเมื่อ</th><th></th>
-      </tr></thead><tbody id="withdrawals-body"></tbody></table>
+      </tr></thead><tbody id="withdrawals-body"></tbody></table></div>
     </div>
 
     <div class="card">
       <h2>ออเดอร์ล่าสุด</h2>
-      <table><thead><tr>
+      <div class="table-wrap"><table><thead><tr>
         <th>เลขที่</th><th>บริการ</th><th>ลูกค้า</th><th>ช่าง</th><th>สถานะ</th><th>ราคา</th>
-      </tr></thead><tbody id="orders-body"></tbody></table>
+      </tr></thead><tbody id="orders-body"></tbody></table></div>
     </div>
   </div>
 </main>
 
 <script>
 // ตั้งค่า API ปลายทาง — เปลี่ยนเป็น URL จริงตอน deploy
-const API_BASE = localStorage.getItem('fixgo_api_base') || 'http://localhost:3000';
+// production: หน้าแอดมินอยู่ที่ admin.<โดเมน> และ API อยู่ที่ api.<โดเมน> (ดู deploy/Caddyfile)
+// ตั้ง localStorage fixgo_api_base เพื่อชี้ไปที่อื่นได้
+const API_BASE = localStorage.getItem('fixgo_api_base') || (
+  location.hostname.startsWith('admin.')
+    ? `${location.protocol}//api.${location.hostname.slice('admin.'.length)}`
+    : 'http://localhost:3000'
+);
 
-let token = localStorage.getItem('fixgo_admin_token');
+// เก็บโทเคนเฉพาะแท็บปัจจุบัน ลดความเสี่ยงจากโทเคนค้างบนเครื่องสาธารณะ
+let token = sessionStorage.getItem('fixgo_admin_token');
 
 const el = (id) => document.getElementById(id);
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
+})[char]);
 
 const STATUS_LABELS = {
   CREATED: 'สร้างแล้ว', SEARCHING: 'กำลังหาช่าง', MATCHED: 'ช่างรับแล้ว',
@@ -180,7 +239,7 @@ async function login() {
       }),
     });
     token = result.accessToken;
-    localStorage.setItem('fixgo_admin_token', token);
+    sessionStorage.setItem('fixgo_admin_token', token);
     showDashboard();
   } catch (error) {
     el('login-error').textContent = error.message;
@@ -189,7 +248,7 @@ async function login() {
 
 function logout() {
   token = null;
-  localStorage.removeItem('fixgo_admin_token');
+  sessionStorage.removeItem('fixgo_admin_token');
   el('dashboard-view').classList.add('hidden');
   el('login-view').classList.remove('hidden');
   el('logout').classList.add('hidden');
@@ -199,18 +258,127 @@ async function showDashboard() {
   el('login-view').classList.add('hidden');
   el('dashboard-view').classList.remove('hidden');
   el('logout').classList.remove('hidden');
-  await Promise.all([loadSummary(), loadProviders(), loadWithdrawals(), loadOrders()]);
+  await refreshAll();
+}
+
+async function refreshAll() {
+  await Promise.all([
+    loadSummary(), loadNoMatch(), loadSlips(), loadProviders(), loadWithdrawals(), loadOrders(),
+  ]);
+}
+
+// งานไม่มีช่างรับต้องเห็นเร็ว รีเฟรชทุก 30 วินาทีขณะเปิดหน้าอยู่
+setInterval(() => {
+  if (token && !document.hidden) refreshAll().catch(() => {});
+}, 30000);
+
+async function loadNoMatch() {
+  const orders = await api('/admin/orders?status=NO_MATCH');
+  el('nomatch-card').classList.toggle('alert', orders.length > 0);
+  el('nomatch-body').innerHTML = orders.length === 0
+    ? '<tr><td colspan="6">ไม่มีงานค้าง</td></tr>'
+    : orders.map((order) => `
+      <tr>
+        <td><strong>${escapeHtml(order.orderNo)}</strong><br><small>เสนอช่างแล้ว ${escapeHtml(order._count?.dispatchAttempts ?? 0)} คน</small></td>
+        <td>${escapeHtml(order.subService?.name || order.category?.name || '-')}</td>
+        <td>${escapeHtml(order.pickupAddress || `${order.pickupLat.toFixed(5)}, ${order.pickupLng.toFixed(5)}`)}<br>
+          <small><a href="https://www.google.com/maps?q=${order.pickupLat},${order.pickupLng}" target="_blank" rel="noopener">เปิดแผนที่</a></small></td>
+        <td>${escapeHtml(order.customer?.phone || '-')}</td>
+        <td>${escapeHtml(new Date(order.createdAt).toLocaleString('th-TH'))}</td>
+        <td>
+          <button onclick="redispatch('${order.id}')">ส่งหาช่างอีกครั้ง</button>
+          <button class="danger" onclick="cancelOrder('${order.id}')">ยกเลิกงาน</button>
+        </td>
+      </tr>`).join('');
+}
+
+async function loadSlips() {
+  const slips = await api('/admin/payments/slips');
+  el('slips-card').classList.toggle('alert', slips.length > 0);
+  el('slips-body').innerHTML = slips.length === 0
+    ? '<tr><td colspan="7">ไม่มีสลิปรอตรวจ</td></tr>'
+    : slips.map((payment) => `
+      <tr>
+        <td><a href="${escapeHtml(payment.slipUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(payment.slipUrl)}" alt="สลิป" style="width:64px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"></a></td>
+        <td><strong>${escapeHtml(payment.order.orderNo)}</strong></td>
+        <td><strong>${escapeHtml(formatSatang(payment.amount))}</strong></td>
+        <td>${escapeHtml(payment.order.customer?.phone || '-')}</td>
+        <td>${escapeHtml(payment.order.provider?.nickname || '-')}</td>
+        <td>${escapeHtml(new Date(payment.slipSubmittedAt).toLocaleString('th-TH'))}</td>
+        <td>
+          <button onclick="confirmSlip('${payment.id}','${escapeHtml(formatSatang(payment.amount))}')">ยอดเข้าแล้ว</button>
+          <button class="danger" onclick="rejectSlip('${payment.id}')">ไม่ผ่าน</button>
+        </td>
+      </tr>`).join('');
+}
+
+async function confirmSlip(id, amountText) {
+  if (!confirm(`ยืนยันว่ายอด ${amountText} เข้าบัญชีแล้ว? ระบบจะบันทึกชำระแล้วและเครดิตรายได้ให้ช่างทันที`)) return;
+  try {
+    await api('/admin/payments/' + id + '/confirm', { method: 'POST' });
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
+}
+
+async function rejectSlip(id) {
+  const reason = prompt(
+    'เหตุผลที่สลิปไม่ผ่าน (ส่งถึงลูกค้า)',
+    'ยังไม่พบยอดเงินเข้าบัญชี หรือยอดในสลิปไม่ตรงกับยอดที่ต้องชำระ',
+  );
+  if (!reason) return;
+  try {
+    await api('/admin/payments/' + id + '/reject', {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
+}
+
+async function redispatch(id) {
+  try {
+    const result = await api('/admin/orders/' + id + '/redispatch', { method: 'POST' });
+    alert(result.status === 'SEARCHING'
+      ? 'ส่งข้อเสนอให้ช่างแล้ว รอช่างกดรับ'
+      : 'ยังไม่มีช่างที่ออนไลน์ในรัศมี ลองโทรเรียกช่างให้เปิดแอปแล้วกดอีกครั้ง');
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
+}
+
+async function cancelOrder(id) {
+  const reason = prompt(
+    'เหตุผลที่ยกเลิก (ข้อความนี้ส่งถึงลูกค้า)',
+    'ขออภัย ตอนนี้ไม่มีช่างว่างในพื้นที่ของคุณ ทีมงานยกเลิกงานให้แล้ว ไม่มีค่าใช้จ่าย',
+  );
+  if (!reason) return;
+  try {
+    await api('/admin/orders/' + id + '/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
 }
 
 async function loadSummary() {
   const summary = await api('/admin/summary');
   el('stats').innerHTML = [
     { label: 'ออเดอร์ทั้งหมด', value: summary.orderCount },
+    { label: 'งานไม่มีช่างรับ', value: summary.noMatchOrders ?? 0, alert: (summary.noMatchOrders ?? 0) > 0 },
+    { label: 'สลิปรอตรวจ', value: summary.pendingSlips ?? 0, alert: (summary.pendingSlips ?? 0) > 0 },
     { label: 'งานที่เสร็จแล้ว', value: summary.completedCount },
     { label: 'รายได้ค่าธรรมเนียม', value: formatSatang(summary.commissionRevenue) },
     { label: 'ช่างรออนุมัติ', value: summary.pendingProviders },
     { label: 'คำขอเบิกค้าง', value: summary.pendingWithdrawals },
-  ].map((stat) => `<div class="stat"><div class="value">${stat.value}</div><div class="label">${stat.label}</div></div>`).join('');
+  ].map((stat) => `<div class="stat${stat.alert ? ' alert' : ''}"><div class="value">${escapeHtml(stat.value)}</div><div class="label">${escapeHtml(stat.label)}</div></div>`).join('');
 }
 
 async function loadProviders() {
@@ -219,11 +387,11 @@ async function loadProviders() {
     ? '<tr><td colspan="6">ไม่มีช่างรออนุมัติ</td></tr>'
     : providers.map((provider) => `
       <tr>
-        <td>${provider.realName} (${provider.nickname})</td>
-        <td>${provider.phone}</td>
-        <td>${provider.shopName || '-'}</td>
-        <td>${provider.facebookPage || '-'}</td>
-        <td>${formatMinute(provider.openMinute)}-${formatMinute(provider.closeMinute)}</td>
+        <td>${escapeHtml(provider.realName)} (${escapeHtml(provider.nickname)})<br><small>ประสบการณ์ ${escapeHtml(provider.experienceYears)} ปี</small></td>
+        <td>${escapeHtml(provider.phone)}</td>
+        <td>${escapeHtml(provider.shopName || '-')}</td>
+        <td>${escapeHtml(provider.facebookPage || '-')}</td>
+        <td>${escapeHtml(formatMinute(provider.openMinute))}-${escapeHtml(formatMinute(provider.closeMinute))}</td>
         <td>
           <button onclick="setProviderStatus('${provider.id}','VERIFIED')">อนุมัติ</button>
           <button class="danger" onclick="setProviderStatus('${provider.id}','SUSPENDED')">ปฏิเสธ</button>
@@ -245,10 +413,10 @@ async function loadWithdrawals() {
     ? '<tr><td colspan="5">ไม่มีคำขอเบิกเงิน</td></tr>'
     : withdrawals.map((withdrawal) => `
       <tr>
-        <td>${withdrawal.provider.realName} (${withdrawal.provider.nickname})<br><small>${withdrawal.provider.phone}</small></td>
-        <td><strong>${formatSatang(withdrawal.amount)}</strong></td>
-        <td>${withdrawal.promptPayId ? 'พร้อมเพย์ ' + withdrawal.promptPayId : (withdrawal.bankName || '') + ' ' + (withdrawal.bankAccountNumber || '')}<br><small>${withdrawal.bankAccountName || ''}</small></td>
-        <td>${new Date(withdrawal.requestedAt).toLocaleString('th-TH')}</td>
+        <td>${escapeHtml(withdrawal.provider.realName)} (${escapeHtml(withdrawal.provider.nickname)})<br><small>${escapeHtml(withdrawal.provider.phone)}</small></td>
+        <td><strong>${escapeHtml(formatSatang(withdrawal.amount))}</strong></td>
+        <td>${escapeHtml(withdrawal.promptPayId ? 'พร้อมเพย์ ' + withdrawal.promptPayId : (withdrawal.bankName || '') + ' ' + (withdrawal.bankAccountNumber || ''))}<br><small>${escapeHtml(withdrawal.bankAccountName || '')}</small></td>
+        <td>${escapeHtml(new Date(withdrawal.requestedAt).toLocaleString('th-TH'))}</td>
         <td>
           <button onclick="resolveWithdrawal('${withdrawal.id}','transferred')">โอนแล้ว</button>
           <button class="danger" onclick="resolveWithdrawal('${withdrawal.id}','reject')">ปฏิเสธ</button>
@@ -270,12 +438,12 @@ async function loadOrders() {
   const orders = await api('/admin/orders');
   el('orders-body').innerHTML = orders.slice(0, 30).map((order) => `
     <tr>
-      <td>${order.orderNo}</td>
-      <td>${order.subService?.name || order.category?.name || '-'}</td>
-      <td>${order.customer?.phone || '-'}</td>
-      <td>${order.provider ? order.provider.nickname : '-'}</td>
-      <td>${STATUS_LABELS[order.status] || order.status}</td>
-      <td>${formatSatang(order.priceFinal ?? order.priceEstimated)}</td>
+      <td>${escapeHtml(order.orderNo)}</td>
+      <td>${escapeHtml(order.subService?.name || order.category?.name || '-')}</td>
+      <td>${escapeHtml(order.customer?.phone || '-')}</td>
+      <td>${escapeHtml(order.provider ? order.provider.nickname : '-')}</td>
+      <td>${escapeHtml(STATUS_LABELS[order.status] || order.status)}</td>
+      <td>${escapeHtml(formatSatang(order.priceFinal ?? order.priceEstimated))}</td>
     </tr>`).join('') || '<tr><td colspan="6">ยังไม่มีออเดอร์</td></tr>';
 }
 

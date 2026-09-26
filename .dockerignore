@@ -1,0 +1,8 @@
+# context ของ deploy/web.Dockerfile คือ root ของ repo ส่งเฉพาะโค้ดแอป
+**/build
+**/.dart_tool
+**/node_modules
+backend
+.git
+apps/*/android
+apps/*/ios

@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import 'inspection.dart';
 import 'models.dart';
 
 class ApiException implements Exception {
@@ -21,11 +24,18 @@ String _roleToJson(ApiRole role) =>
     role == ApiRole.customer ? 'CUSTOMER' : 'PROVIDER';
 
 class FixGoApiClient {
-  FixGoApiClient({required this.baseUrl, http.Client? httpClient})
-      : _http = httpClient ?? http.Client();
+  FixGoApiClient({
+    required this.baseUrl,
+    http.Client? httpClient,
+    http.Client Function()? streamClientFactory,
+  })  : _http = httpClient ?? http.Client(),
+        _streamClientFactory = streamClientFactory ?? http.Client.new;
 
   final String baseUrl;
   final http.Client _http;
+
+  /// event stream ใช้ client แยกต่อ stream เพื่อปิด connection ได้ทันทีเมื่อเลิกฟัง
+  final http.Client Function() _streamClientFactory;
 
   String? accessToken;
 
@@ -67,6 +77,73 @@ class FixGoApiClient {
     return jsonDecode(utf8.decode(response.bodyBytes));
   }
 
+  /// ฟังการเปลี่ยนแปลงของงานแบบ real-time (Server-Sent Events)
+  ///
+  /// ปล่อยค่าเป็นประเภทเหตุการณ์ เช่น MATCHED, EN_ROUTE, LOCATION ให้ผู้ฟังไปเรียก [getOrder] ใหม่
+  /// stream จบหรือ error เมื่อการเชื่อมต่อหลุด ผู้ฟังต้องต่อใหม่เอง
+  /// ใช้บนเว็บไม่ได้ (browser client ไม่ส่งข้อมูลทีละส่วน) ให้ดึงข้อมูลเป็นรอบแทน
+  Stream<String> orderEvents(String orderId) {
+    final client = _streamClientFactory();
+    late final StreamController<String> controller;
+    StreamSubscription<String>? lines;
+    controller = StreamController<String>(
+      onListen: () async {
+        try {
+          final request = http.Request(
+            'GET',
+            Uri.parse('$baseUrl/api/orders/$orderId/events'),
+          )..headers.addAll({
+              ..._headers,
+              'Accept': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+            });
+          final response = await client.send(request);
+          if (response.statusCode != 200) {
+            throw ApiException(
+              response.statusCode,
+              'เชื่อมต่อการติดตามงานไม่สำเร็จ (${response.statusCode})',
+            );
+          }
+          var event = 'message';
+          var data = StringBuffer();
+          lines = response.stream
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())
+              .listen(
+            (line) {
+              if (line.isEmpty) {
+                if (event == 'order' && data.isNotEmpty) {
+                  final decoded = jsonDecode(data.toString());
+                  final type = decoded is Map ? decoded['type'] : null;
+                  if (type is String) controller.add(type);
+                } else if (event == 'ping') {
+                  controller.add('PING');
+                }
+                event = 'message';
+                data = StringBuffer();
+              } else if (line.startsWith('event:')) {
+                event = line.substring(6).trim();
+              } else if (line.startsWith('data:')) {
+                data.write(line.substring(5).trim());
+              }
+            },
+            onError: controller.addError,
+            onDone: controller.close,
+            cancelOnError: true,
+          );
+        } catch (error, stackTrace) {
+          controller.addError(error, stackTrace);
+          await controller.close();
+        }
+      },
+      onCancel: () async {
+        await lines?.cancel();
+        client.close();
+      },
+    );
+    return controller.stream;
+  }
+
   // ---------- Auth ----------
 
   Future<String?> requestOtp(String phone, ApiRole role) async {
@@ -77,6 +154,27 @@ class FixGoApiClient {
     // devCode มีเฉพาะตอน backend รันโหมด development
     return result['devCode'] as String?;
   }
+
+  /// ลบบัญชีของผู้ที่ล็อกอินอยู่ (ลูกค้าหรือช่าง) กู้คืนไม่ได้
+  Future<void> deleteAccount() async {
+    await _send('DELETE', '/account');
+  }
+
+  /// ลงทะเบียนโทเคน push ของเครื่องนี้ให้ผู้ที่ล็อกอินอยู่ (platform: IOS / ANDROID)
+  Future<void> registerDevice(String token, String platform) async {
+    await _send('POST', '/devices', body: {
+      'token': token,
+      'platform': platform,
+    });
+  }
+
+  /// ถอนโทเคน push ตอนล็อกเอาต์ ต้องเรียกก่อนล้าง accessToken
+  Future<void> unregisterDevice(String token) async {
+    await _send('DELETE', '/devices', body: {'token': token});
+  }
+
+  /// หน้าเว็บนโยบาย/ข้อตกลง/การลบบัญชี/ติดต่อ ที่ backend ให้บริการแบบสาธารณะ
+  Uri legalPageUrl(String page) => Uri.parse('$baseUrl/api/legal/$page');
 
   Future<({String accessToken, bool hasProfile})> verifyOtp(
     String phone,
@@ -112,11 +210,15 @@ class FixGoApiClient {
       'GET',
       '/catalog/categories/$categoryId/sub-services',
     ) as List<dynamic>;
-    return result.cast<Map<String, dynamic>>().map(SubService.fromJson).toList();
+    return result
+        .cast<Map<String, dynamic>>()
+        .map(SubService.fromJson)
+        .toList();
   }
 
   Future<List<VehicleType>> listVehicleTypes() async {
-    final result = await _send('GET', '/catalog/vehicle-types') as List<dynamic>;
+    final result =
+        await _send('GET', '/catalog/vehicle-types') as List<dynamic>;
     return result
         .cast<Map<String, dynamic>>()
         .map(VehicleType.fromJson)
@@ -142,6 +244,7 @@ class FixGoApiClient {
     String? pickupAddress,
     String? note,
     List<String>? photoUrls,
+    InspectionBooking? inspection,
   }) async {
     final result = await _send('POST', '/orders', body: {
       'categoryId': categoryId,
@@ -152,12 +255,58 @@ class FixGoApiClient {
       if (pickupAddress != null) 'pickupAddress': pickupAddress,
       if (note != null) 'note': note,
       if (photoUrls != null && photoUrls.isNotEmpty) 'photoUrls': photoUrls,
+      if (inspection != null) 'inspection': inspection.toJson(),
     }) as Map<String, dynamic>;
     return Order.fromJson(result);
   }
 
+  // ---------- ตรวจรถมือสอง ----------
+
+  Future<InspectionChecklist> getInspectionChecklist() async {
+    final result =
+        await _send('GET', '/inspections/checklist') as Map<String, dynamic>;
+    return InspectionChecklist.fromJson(result);
+  }
+
+  Future<InspectionReport> getInspection(String orderId) async {
+    final result = await _send('GET', '/orders/$orderId/inspection')
+        as Map<String, dynamic>;
+    return InspectionReport.fromJson(result);
+  }
+
+  /// บันทึกข้อมูลรถและ/หรือผลตรวจบางข้อ (ส่งเฉพาะที่เปลี่ยน)
+  Future<InspectionReport> updateInspection(
+    String orderId, {
+    Map<String, dynamic> vehicle = const {},
+    List<InspectionItemResult> items = const [],
+    Map<String, List<InspectionPhoto>> photoSlots = const {},
+  }) async {
+    final result = await _send('PATCH', '/orders/$orderId/inspection', body: {
+      ...vehicle,
+      if (items.isNotEmpty)
+        'items': items.map((item) => item.toJson()).toList(),
+      // ส่งรูปทั้งช่องแทนของเดิม (ลบรูป = ส่งรายการที่เหลือ)
+      if (photoSlots.isNotEmpty)
+        'photoSlots': [
+          for (final entry in photoSlots.entries)
+            {
+              'slotCode': entry.key,
+              'photos': entry.value.map((photo) => photo.toJson()).toList(),
+            },
+        ],
+    }) as Map<String, dynamic>;
+    return InspectionReport.fromJson(result);
+  }
+
+  Future<InspectionReport> submitInspection(String orderId) async {
+    final result = await _send('POST', '/orders/$orderId/inspection/submit')
+        as Map<String, dynamic>;
+    return InspectionReport.fromJson(result);
+  }
+
   Future<Order> getOrder(String orderId) async {
-    final result = await _send('GET', '/orders/$orderId') as Map<String, dynamic>;
+    final result =
+        await _send('GET', '/orders/$orderId') as Map<String, dynamic>;
     return Order.fromJson(result);
   }
 
@@ -179,8 +328,20 @@ class FixGoApiClient {
 
   // ---------- Provider ----------
 
-  Future<void> registerProvider(Map<String, dynamic> form) async {
-    await _send('POST', '/providers/register', body: form);
+  Future<({String accessToken, bool hasProfile})> registerProvider(
+    Map<String, dynamic> form,
+  ) async {
+    final result = await _send(
+      'POST',
+      '/providers/register',
+      body: form,
+    ) as Map<String, dynamic>;
+    final token = result['accessToken'] as String;
+    accessToken = token;
+    return (
+      accessToken: token,
+      hasProfile: result['hasProfile'] as bool,
+    );
   }
 
   Future<Map<String, dynamic>> getProviderProfile() async {
@@ -196,6 +357,42 @@ class FixGoApiClient {
       'lat': lat,
       'lng': lng,
     });
+  }
+
+  Future<void> sendProviderHeartbeat() async {
+    await _send('POST', '/providers/me/heartbeat');
+  }
+
+  Future<String> uploadImage({
+    required Uint8List bytes,
+    required String fileName,
+    required String contentType,
+    required String scope,
+  }) async {
+    final result = await _send('POST', '/uploads/presign', body: {
+      'fileName': fileName,
+      'contentType': contentType,
+      'byteLength': bytes.length,
+      'scope': scope,
+    }) as Map<String, dynamic>;
+
+    final uploadUrl = result['uploadUrl'] as String;
+    final publicUrl = result['publicUrl'] as String;
+    final uploadHeaders =
+        (result['headers'] as Map<String, dynamic>? ?? const {})
+            .map((key, value) => MapEntry(key, value.toString()));
+    final response = await _http.put(
+      Uri.parse(uploadUrl),
+      headers: uploadHeaders,
+      body: bytes,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        response.statusCode,
+        'อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่',
+      );
+    }
+    return publicUrl;
   }
 
   Future<void> updatePayoutInfo({
@@ -240,22 +437,43 @@ class FixGoApiClient {
     await _send('PATCH', '/orders/$orderId/start');
   }
 
-  Future<void> completeJob(String orderId, int priceFinal) async {
-    await _send('POST', '/orders/$orderId/complete', body: {
-      'priceFinal': priceFinal,
+  Future<void> proposeQuote(
+    String orderId,
+    int priceProposed, {
+    String? note,
+  }) async {
+    await _send('POST', '/orders/$orderId/quote', body: {
+      'priceProposed': priceProposed,
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
     });
+  }
+
+  Future<void> approveQuote(String orderId) async {
+    await _send('POST', '/orders/$orderId/quote/approve');
+  }
+
+  Future<void> rejectQuote(String orderId) async {
+    await _send('POST', '/orders/$orderId/quote/reject');
+  }
+
+  Future<void> completeJob(String orderId) async {
+    await _send('POST', '/orders/$orderId/complete');
   }
 
   // ---------- Wallet (ช่าง) ----------
 
   Future<int> getWalletBalance() async {
-    final result = await _send('GET', '/wallet/balance') as Map<String, dynamic>;
+    final result =
+        await _send('GET', '/wallet/balance') as Map<String, dynamic>;
     return result['balance'] as int;
   }
 
   Future<List<WalletEntry>> listWalletEntries() async {
     final result = await _send('GET', '/wallet/entries') as List<dynamic>;
-    return result.cast<Map<String, dynamic>>().map(WalletEntry.fromJson).toList();
+    return result
+        .cast<Map<String, dynamic>>()
+        .map(WalletEntry.fromJson)
+        .toList();
   }
 
   Future<void> requestWithdrawal(int amount) async {
@@ -264,18 +482,41 @@ class FixGoApiClient {
 
   // ---------- Payments (ลูกค้า) ----------
 
-  Future<({String chargeId, String qrPayload, int amount})> createPromptPayCharge(
-    String orderId,
-  ) async {
+  /// ขอ QR พร้อมเพย์ การได้ QR ไม่ใช่การชำระสำเร็จ ต้องรอ backend ยืนยันจาก gateway
+  Future<
+      ({
+        String chargeId,
+        String qrPayload,
+        int amount,
+        DateTime? expiresAt,
+        bool requiresSlip,
+        String? payeeName,
+      })> createPromptPayCharge(String orderId) async {
     final result = await _send(
       'POST',
       '/payments/orders/$orderId/promptpay',
     ) as Map<String, dynamic>;
+    final expires = result['expiresAt'] as String?;
     return (
       chargeId: result['chargeId'] as String,
       qrPayload: result['qrPayload'] as String,
       amount: result['amount'] as int,
+      expiresAt: expires == null ? null : DateTime.parse(expires).toLocal(),
+      requiresSlip: result['requiresSlip'] as bool? ?? false,
+      payeeName: result['payeeName'] as String?,
     );
+  }
+
+  /// ส่งสลิปโอนพร้อมเพย์ (อัปโหลดรูปด้วย [uploadImage] scope PAYMENT_SLIP ก่อน)
+  /// งานยังไม่เป็น "ชำระแล้ว" จนกว่าทีมงานตรวจยอดเข้าบัญชีจริง
+  Future<void> submitPaymentSlip(String orderId, String slipUrl) async {
+    await _send('POST', '/payments/orders/$orderId/slip', body: {
+      'slipUrl': slipUrl,
+    });
+  }
+
+  Future<void> confirmCashPayment(String orderId) async {
+    await _send('POST', '/payments/orders/$orderId/cash/confirm');
   }
 
   void dispose() => _http.close();

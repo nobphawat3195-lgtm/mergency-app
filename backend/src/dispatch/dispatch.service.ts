@@ -3,12 +3,26 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { DispatchStatus, OrderStatus, ProviderStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../notifications/push.service';
+import { OrderEventsService } from '../notifications/order-events.service';
+import {
+  AdminAlertService,
+  coarseArea,
+} from '../notifications/admin-alert.service';
 import { distanceKm } from '../common/geo';
 import {
   DISPATCH_MAX_CANDIDATES,
   DISPATCH_MAX_RADIUS_KM,
   DISPATCH_OFFER_TIMEOUT_MS,
+  DISPATCH_BATCH_SIZE,
+  PROVIDER_HEARTBEAT_STALE_MS,
 } from '../common/constants';
+
+const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
+  OrderStatus.MATCHED,
+  OrderStatus.EN_ROUTE,
+  OrderStatus.IN_PROGRESS,
+];
 
 /** นาทีของวันตามเวลาไทย (UTC+7) ใช้เช็กว่าช่างอยู่ในช่วงเวลาทำงานหรือยัง */
 export function bangkokMinuteOfDay(now: Date = new Date()): number {
@@ -32,7 +46,12 @@ export function isWithinWorkingHours(
 export class DispatchService {
   private readonly logger = new Logger(DispatchService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly push: PushService,
+    private readonly adminAlert: AdminAlertService,
+    private readonly events: OrderEventsService,
+  ) {}
 
   /** เริ่มกระจายงาน: หาช่างที่เข้าเงื่อนไข เรียงตามระยะทาง แล้วเสนอให้คนใกล้สุดก่อน */
   async startDispatch(orderId: string): Promise<void> {
@@ -40,14 +59,20 @@ export class DispatchService {
       where: { id: orderId },
       data: { status: OrderStatus.SEARCHING },
     });
-    await this.offerToNextCandidate(orderId);
+    await this.offerToNextBatch(orderId);
   }
 
-  /** เสนองานให้ช่างคนถัดไปที่ใกล้ที่สุดและยังไม่เคยถูกเสนอ */
-  private async offerToNextCandidate(orderId: string): Promise<void> {
+  /** เสนองานพร้อมกันให้กลุ่มช่างที่ใกล้ที่สุด คนแรกที่รับได้งาน */
+  private async offerToNextBatch(
+    orderId: string,
+    { notifyNoMatch = true }: { notifyNoMatch?: boolean } = {},
+  ): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { dispatchAttempts: true },
+      include: {
+        dispatchAttempts: true,
+        subService: { select: { name: true } },
+      },
     });
 
     if (!order) return;
@@ -58,8 +83,15 @@ export class DispatchService {
       return;
     }
 
+    const now = new Date();
+    const hasActiveOffer = order.dispatchAttempts.some(
+      (attempt) =>
+        attempt.status === DispatchStatus.OFFERED && attempt.expiresAt > now,
+    );
+    if (hasActiveOffer) return;
+
     if (order.dispatchAttempts.length >= DISPATCH_MAX_CANDIDATES) {
-      await this.markNoMatch(orderId);
+      await this.markNoMatch(orderId, notifyNoMatch);
       return;
     }
 
@@ -71,9 +103,19 @@ export class DispatchService {
       where: {
         status: ProviderStatus.VERIFIED,
         isOnline: true,
+        lastSeenAt: {
+          gte: new Date(Date.now() - PROVIDER_HEARTBEAT_STALE_MS),
+        },
         id: { notIn: [...alreadyOffered] },
         serviceCategories: { some: { categoryId: order.categoryId } },
         vehicleTypes: { some: { vehicleTypeId: order.vehicleTypeId } },
+        orders: { none: { status: { in: ACTIVE_ORDER_STATUSES } } },
+        dispatchAttempts: {
+          none: {
+            status: DispatchStatus.OFFERED,
+            expiresAt: { gt: now },
+          },
+        },
       },
     });
 
@@ -99,37 +141,93 @@ export class DispatchService {
       .filter((entry) => entry.distance <= DISPATCH_MAX_RADIUS_KM)
       .sort((a, b) => a.distance - b.distance);
 
-    const next = ranked[0];
-    if (!next) {
-      await this.markNoMatch(orderId);
+    const remainingSlots =
+      DISPATCH_MAX_CANDIDATES - order.dispatchAttempts.length;
+    const batch = ranked.slice(
+      0,
+      Math.min(DISPATCH_BATCH_SIZE, remainingSlots),
+    );
+    if (batch.length === 0) {
+      await this.markNoMatch(orderId, notifyNoMatch);
       return;
     }
 
-    await this.prisma.dispatchAttempt.create({
-      data: {
+    const expiresAt = new Date(Date.now() + DISPATCH_OFFER_TIMEOUT_MS);
+    await this.prisma.dispatchAttempt.createMany({
+      data: batch.map((entry, index) => ({
         orderId,
-        providerId: next.provider.id,
-        rank: order.dispatchAttempts.length + 1,
-        distanceKm: next.distance,
+        providerId: entry.provider.id,
+        rank: order.dispatchAttempts.length + index + 1,
+        distanceKm: entry.distance,
         status: DispatchStatus.OFFERED,
-        expiresAt: new Date(Date.now() + DISPATCH_OFFER_TIMEOUT_MS),
-      },
+        expiresAt,
+      })),
+      skipDuplicates: true,
     });
 
-    this.logger.log(
-      `เสนองาน ${order.orderNo} ให้ช่าง ${next.provider.id} (${next.distance.toFixed(1)} กม.)`,
-    );
+    this.logger.log(`เสนองาน ${order.orderNo} ให้ช่าง ${batch.length} คน`);
 
-    // TODO: ส่ง push notification ให้ช่างคนนี้
+    void this.push.offerToProviders(
+      batch.map((entry) => ({
+        id: entry.provider.id,
+        distanceKm: entry.distance,
+      })),
+      {
+        id: order.id,
+        orderNo: order.orderNo,
+        serviceName: order.subService.name,
+      },
+      Math.round(DISPATCH_OFFER_TIMEOUT_MS / 1000),
+    );
   }
 
-  private async markNoMatch(orderId: string): Promise<void> {
-    await this.prisma.order.update({
-      where: { id: orderId },
+  private async markNoMatch(orderId: string, notify = true): Promise<void> {
+    const updated = await this.prisma.order.updateMany({
+      where: { id: orderId, status: OrderStatus.SEARCHING },
       data: { status: OrderStatus.NO_MATCH },
     });
     this.logger.warn(`ออเดอร์ ${orderId} ไม่มีช่างรับ ส่งต่อให้แอดมิน`);
-    // TODO: แจ้งเตือนแอดมิน
+    // แอดมินกดหาช่างใหม่เองแล้วยังไม่เจอ: แอดมินเห็นผลในหน้าจออยู่แล้ว ลูกค้าก็รู้แล้ว ไม่แจ้งซ้ำ
+    if (updated.count === 0) return;
+    this.events.emit(orderId, 'NO_MATCH');
+    if (!notify) return;
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        orderNo: true,
+        customerId: true,
+        pickupAddress: true,
+        subService: { select: { name: true } },
+      },
+    });
+    if (!order) return;
+    void this.push.noMatch(order.customerId, order);
+    void this.adminAlert.noMatch({
+      orderNo: order.orderNo,
+      serviceName: order.subService.name,
+      area: coarseArea(order.pickupAddress),
+    });
+  }
+
+  /**
+   * แอดมินสั่งหาช่างใหม่ให้งานที่ไม่มีใครรับ (เช่น หลังโทรเรียกช่างให้เปิดแอป)
+   * ล้างรอบเสนองานเดิมเพื่อให้ช่างที่เคยปฏิเสธ/หมดเวลาได้รับข้อเสนออีกครั้ง
+   */
+  async redispatch(orderId: string): Promise<void> {
+    const reopened = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: { id: orderId, status: OrderStatus.NO_MATCH },
+        data: { status: OrderStatus.SEARCHING },
+      });
+      if (updated.count !== 1) return false;
+      await tx.dispatchAttempt.deleteMany({ where: { orderId } });
+      return true;
+    });
+    if (!reopened) {
+      throw new BadRequestException('ส่งหาช่างใหม่ได้เฉพาะงานที่ไม่มีช่างรับ');
+    }
+    await this.offerToNextBatch(orderId, { notifyNoMatch: false });
   }
 
   /** ช่างกดรับงาน */
@@ -140,7 +238,9 @@ export class DispatchService {
     });
 
     if (!attempt || attempt.status !== DispatchStatus.OFFERED) {
-      throw new BadRequestException('งานนี้ไม่ได้ถูกเสนอให้คุณ หรือหมดเวลาแล้ว');
+      throw new BadRequestException(
+        'งานนี้ไม่ได้ถูกเสนอให้คุณ หรือหมดเวลาแล้ว',
+      );
     }
     if (attempt.expiresAt.getTime() < Date.now()) {
       throw new BadRequestException('หมดเวลากดรับงานแล้ว');
@@ -149,29 +249,66 @@ export class DispatchService {
       throw new BadRequestException('งานนี้ถูกรับไปแล้ว');
     }
 
-    await this.prisma.$transaction([
-      this.prisma.dispatchAttempt.update({
-        where: { id: attempt.id },
-        data: { status: DispatchStatus.ACCEPTED, respondedAt: new Date() },
-      }),
-      // ปิดข้อเสนอที่ค้างอยู่ของช่างคนอื่น ไม่ให้เห็นงานที่ถูกรับไปแล้ว
-      this.prisma.dispatchAttempt.updateMany({
-        where: {
-          orderId,
-          status: DispatchStatus.OFFERED,
-          id: { not: attempt.id },
-        },
-        data: { status: DispatchStatus.EXPIRED },
-      }),
-      this.prisma.order.update({
-        where: { id: orderId },
-        data: {
-          providerId,
-          status: OrderStatus.MATCHED,
-          matchedAt: new Date(),
-        },
-      }),
-    ]);
+    await this.prisma.$transaction(
+      async (tx) => {
+        const activeOrder = await tx.order.findFirst({
+          where: { providerId, status: { in: ACTIVE_ORDER_STATUSES } },
+          select: { id: true },
+        });
+        if (activeOrder) {
+          throw new BadRequestException('คุณมีงานที่กำลังดำเนินการอยู่แล้ว');
+        }
+
+        const accepted = await tx.dispatchAttempt.updateMany({
+          where: {
+            id: attempt.id,
+            status: DispatchStatus.OFFERED,
+            expiresAt: { gt: new Date() },
+          },
+          data: { status: DispatchStatus.ACCEPTED, respondedAt: new Date() },
+        });
+        if (accepted.count !== 1) {
+          throw new BadRequestException('งานนี้หมดเวลาหรือถูกรับไปแล้ว');
+        }
+
+        const claimed = await tx.order.updateMany({
+          where: {
+            id: orderId,
+            status: OrderStatus.SEARCHING,
+            providerId: null,
+          },
+          data: {
+            providerId,
+            status: OrderStatus.MATCHED,
+            matchedAt: new Date(),
+          },
+        });
+        if (claimed.count !== 1) {
+          throw new BadRequestException('งานนี้ถูกรับไปแล้ว');
+        }
+
+        // ปิดข้อเสนอที่ค้างอยู่ของช่างคนอื่น ไม่ให้เห็นงานที่ถูกรับไปแล้ว
+        await tx.dispatchAttempt.updateMany({
+          where: {
+            orderId,
+            status: DispatchStatus.OFFERED,
+            id: { not: attempt.id },
+          },
+          data: { status: DispatchStatus.EXPIRED },
+        });
+      },
+      { isolationLevel: 'Serializable' },
+    );
+
+    const provider = await this.prisma.provider.findUnique({
+      where: { id: providerId },
+      select: { nickname: true },
+    });
+    void this.push.matched(
+      attempt.order.customerId,
+      attempt.order,
+      provider?.nickname ? `ช่าง${provider.nickname}` : 'ช่าง',
+    );
   }
 
   /** ช่างกดปฏิเสธ — ส่งต่อคนถัดไปทันทีไม่ต้องรอหมดเวลา */
@@ -189,7 +326,14 @@ export class DispatchService {
       data: { status: DispatchStatus.REJECTED, respondedAt: new Date() },
     });
 
-    await this.offerToNextCandidate(orderId);
+    const otherActiveOffers = await this.prisma.dispatchAttempt.count({
+      where: {
+        orderId,
+        status: DispatchStatus.OFFERED,
+        expiresAt: { gt: new Date() },
+      },
+    });
+    if (otherActiveOffers === 0) await this.offerToNextBatch(orderId);
   }
 
   /** งานที่ถูกเสนอให้ช่างคนนี้และยังไม่หมดเวลา */
@@ -224,12 +368,14 @@ export class DispatchService {
       },
     });
 
-    for (const attempt of expired) {
-      await this.prisma.dispatchAttempt.update({
-        where: { id: attempt.id },
-        data: { status: DispatchStatus.EXPIRED },
-      });
-      await this.offerToNextCandidate(attempt.orderId);
-    }
+    if (expired.length === 0) return;
+
+    await this.prisma.dispatchAttempt.updateMany({
+      where: { id: { in: expired.map((attempt) => attempt.id) } },
+      data: { status: DispatchStatus.EXPIRED },
+    });
+
+    const orderIds = [...new Set(expired.map((attempt) => attempt.orderId))];
+    for (const orderId of orderIds) await this.offerToNextBatch(orderId);
   }
 }

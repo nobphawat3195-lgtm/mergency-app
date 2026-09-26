@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- สีพื้นหน้าเปิดแอป ตรงกับพื้นโลโก้ใน tool/brand -->
+    <color name="splash_background">#122821</color>
+</resources>

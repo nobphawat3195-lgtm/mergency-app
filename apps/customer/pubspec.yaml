@@ -12,6 +12,9 @@ dependencies:
   fixgo_core:
     path: ../../packages/fixgo_core
   cupertino_icons: ^1.0.8
+  image_picker: ^1.1.2
+  qr_flutter: ^4.1.0
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
@@ -20,3 +23,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/

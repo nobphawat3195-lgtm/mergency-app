@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+  <title>ใต้พรม/ร่องรอยน้ำ</title>
+  <rect id="background" width="320" height="200" rx="18" fill="#ECF8F1"/>
+  <path d="M40 160 L90 70 L280 70 L280 160 Z" fill="#DCE7E2" stroke="#7F968D" stroke-width="4"/>
+  <path d="M40 160 L90 70 L150 50 L110 150 Z" fill="white" stroke="#0B5F45" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M170 110 q10 -18 20 0 a10 10 0 1 1 -20 0 Z M214 132 q8 -14 16 0 a8 8 0 1 1 -16 0 Z M200 88 q7 -12 14 0 a7 7 0 1 1 -14 0 Z" fill="#4FA3C7"/>
+</svg>

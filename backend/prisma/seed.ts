@@ -1,9 +1,17 @@
+import 'dotenv/config';
 import { PrismaClient, PriceType } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 /** ราคาเก็บเป็นสตางค์ */
 const baht = (amount: number): number => amount * 100;
+
+/** FixGo ตั้งราคาถูกกว่า 24CarFix ทุกบริการที่อ้างอิงราคาเขา (บาท) */
+const DISCOUNT_VS_24CARFIX = 101;
+
+/** รับราคาอ้างอิงของ 24CarFix (บาท) คืนราคา FixGo (สตางค์) */
+const vs24 = (reference: number): number =>
+  baht(reference - DISCOUNT_VS_24CARFIX);
 
 const VEHICLE_TYPES = [
   { slug: 'sedan', name: 'รถเก๋ง', multiplier: 1.0, sortOrder: 1 },
@@ -27,37 +35,37 @@ const CATEGORIES = [
       {
         name: 'เรียกช่างให้ไปดูก่อน จ่ายเงินหน้างาน',
         description: 'ค่าเดินทาง เรียกไปดูอาการเสนอราคาเพิ่มเติมหากมีการซ่อม',
-        basePrice: baht(749),
+        basePrice: vs24(749),
         priceType: PriceType.CALL_OUT_FEE,
       },
       {
         name: 'ซ่อมนอกสถานที่',
         description: 'ซ่อมพื้นฐาน ไม่รวมค่าอะไหล่และค่าบริการซ่อม',
-        basePrice: baht(856),
+        basePrice: vs24(856),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'ตรวจสอบเบื้องต้น (นอกสถานที่)',
         description: 'เช็คอาการเบื้องต้นเพื่อเสนอราคาซ่อม',
-        basePrice: baht(749),
+        basePrice: vs24(749),
         priceType: PriceType.CALL_OUT_FEE,
       },
       {
         name: 'รถมีไฟเตือนขึ้นหน้าปัด',
         description: 'รูปไฟโชว์เรียกช่างไปตรวจสอบหน้างาน',
-        basePrice: baht(749),
+        basePrice: vs24(749),
         priceType: PriceType.CALL_OUT_FEE,
       },
       {
         name: 'รถสตาร์ทไม่ติด',
         description: 'เรียกไปดูอาการหน้างานและประเมินเบื้องต้น',
-        basePrice: baht(749),
+        basePrice: vs24(749),
         priceType: PriceType.CALL_OUT_FEE,
       },
       {
         name: 'ดับกลางทาง',
         description: 'เรียกไปดูอาการหน้างานและประเมินเบื้องต้น',
-        basePrice: baht(749),
+        basePrice: vs24(749),
         priceType: PriceType.CALL_OUT_FEE,
       },
     ],
@@ -71,29 +79,30 @@ const CATEGORIES = [
       {
         name: 'เรียกช่างให้ไปดูก่อน จ่ายเงินหน้างาน',
         description: 'เรียกไปดูอาการหน้างานและประเมิน',
-        basePrice: baht(400),
+        basePrice: vs24(400),
         priceType: PriceType.CALL_OUT_FEE,
       },
       {
         name: 'ไดชาร์จ (นอกสถานที่)',
         description: 'เริ่มต้น',
-        basePrice: baht(1177),
+        basePrice: vs24(1177),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'ไดสตาร์ท (นอกสถานที่)',
         description: 'เริ่มต้น',
-        basePrice: baht(1177),
+        basePrice: vs24(1177),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'ไล่เช็คระบบไฟ (นอกสถานที่)',
         description: 'เริ่มต้น',
-        basePrice: baht(1177),
+        basePrice: vs24(1177),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
   },
+  // ตัวเลขใน vs24() คือราคาแอป 24CarFix (ภาพหน้าจอจากเจ้าของโปรเจกต์ ก.ย. 2569)
   {
     slug: 'battery',
     name: 'ช่างแบตเตอรี่รถยนต์',
@@ -101,15 +110,27 @@ const CATEGORIES = [
     sortOrder: 3,
     subServices: [
       {
-        name: 'พ่วงแบตเตอรี่ (จั๊มแบต)',
-        description: 'บริการพ่วงแบตนอกสถานที่',
-        basePrice: baht(499),
+        name: 'เรียกช่างให้ไปดูก่อน จ่ายเงินหน้างาน',
+        description: 'ช่างไปดูอาการและประเมินราคาซ่อมหน้างาน',
+        basePrice: vs24(535),
+        priceType: PriceType.CALL_OUT_FEE,
+      },
+      {
+        name: 'จั๊มแบต (นอกสถานที่)',
+        description: 'พ่วงแบตให้สตาร์ทติด ค่าบริการเบื้องต้น',
+        basePrice: vs24(535),
         priceType: PriceType.FULL_SERVICE,
       },
       {
-        name: 'เปลี่ยนแบตเตอรี่นอกสถานที่',
-        description: 'ค่าบริการเริ่มต้น ไม่รวมค่าแบตเตอรี่',
-        basePrice: baht(749),
+        name: 'เปลี่ยนแบต (ช่างนำแบตไปติดตั้ง)',
+        description: 'ค่าบริการเริ่มต้น ไม่รวมค่าแบต ช่างแจ้งราคาแบตตามรุ่นให้ยืนยันก่อน',
+        basePrice: vs24(428),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'เปลี่ยนแบต (ลูกค้ามีแบตแล้ว)',
+        description: 'จ่ายเฉพาะค่าแรงติดตั้ง',
+        basePrice: vs24(442),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
@@ -121,15 +142,39 @@ const CATEGORIES = [
     sortOrder: 4,
     subServices: [
       {
-        name: 'ปะยางนอกสถานที่',
-        description: 'ค่าบริการเริ่มต้นต่อเส้น',
-        basePrice: baht(499),
+        name: 'เรียกช่างให้ไปดูก่อน จ่ายเงินหน้างาน',
+        description: 'ช่างตรวจยางและล้อหน้างานแล้วเสนอราคา',
+        basePrice: vs24(856),
+        priceType: PriceType.CALL_OUT_FEE,
+      },
+      {
+        name: 'ปะยางตัวหนอน (นอกสถานที่)',
+        description: 'ซ่อมรอยรั่วขนาดเล็กบริเวณหน้ายาง',
+        basePrice: vs24(856),
         priceType: PriceType.FULL_SERVICE,
       },
       {
-        name: 'เปลี่ยนยางอะไหล่',
-        description: 'ค่าบริการเปลี่ยนยางอะไหล่หน้างาน',
-        basePrice: baht(499),
+        name: 'เปลี่ยนยาง (นอกสถานที่)',
+        description: 'ถอดยางเดิมและติดตั้งยางใหม่ ไม่รวมค่ายาง',
+        basePrice: vs24(856),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'ปะยางสตรีมเย็น (นอกสถานที่)',
+        description: 'ซ่อมรอยรั่วหน้ายางแบบสตรีมเย็น',
+        basePrice: vs24(1070),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'ปะยางสตรีมร้อน (นอกสถานที่)',
+        description: 'ซ่อมรอยรั่วแบบสตรีมร้อน ช่างตรวจสภาพยางก่อนว่าซ่อมได้ปลอดภัย',
+        basePrice: vs24(1391),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'เปลี่ยนยางอะไหล่ (นอกสถานที่)',
+        description: 'เปลี่ยนเป็นยางอะไหล่ของลูกค้า ให้ขับไปร้านยางได้',
+        basePrice: vs24(749),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
@@ -141,9 +186,45 @@ const CATEGORIES = [
     sortOrder: 5,
     subServices: [
       {
-        name: 'เปิดรถกรณีกุญแจค้างในรถ',
-        description: 'ค่าบริการเริ่มต้น',
-        basePrice: baht(1177),
+        name: 'เรียกช่างให้ไปดูก่อน',
+        description: 'ช่างไปดูอาการหน้างานและประเมินราคา',
+        basePrice: vs24(856),
+        priceType: PriceType.CALL_OUT_FEE,
+      },
+      {
+        name: 'สะเดาะล็อครถ (เปิดรถจากภายนอก)',
+        description: 'เปิดรถจากภายนอก ไม่รวมทำกุญแจใหม่',
+        basePrice: vs24(1070),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'เปิดรถยนต์ฉุกเฉิน (นอกสถานที่)',
+        description: 'ลืมกุญแจไว้ในรถ กุญแจหาย หรือระบบล็อกขัดข้อง',
+        basePrice: vs24(1070),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'ทำกุญแจรถยนต์ (นอกสถานที่)',
+        description: 'ทำกุญแจใหม่ที่จุดจอดรถ กรณีกุญแจหาย ชำรุด หรือทำดอกสำรอง',
+        basePrice: vs24(1926),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'โปรแกรมกุญแจ Immobilizer (นอกสถานที่)',
+        description: 'ลงทะเบียนชิปกุญแจเข้ากับระบบกันขโมยของรถ',
+        basePrice: vs24(2996),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'โปรแกรม Smart Key (นอกสถานที่)',
+        description: 'ลงทะเบียน Smart Key เข้ากับระบบ Keyless และระบบสตาร์ท',
+        basePrice: vs24(4173),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'โปรแกรมรีโมทรถยนต์ (นอกสถานที่)',
+        description: 'ลงทะเบียนรีโมทเข้ากับระบบล็อก/ปลดล็อก',
+        basePrice: vs24(2461),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
@@ -155,9 +236,120 @@ const CATEGORIES = [
     sortOrder: 6,
     subServices: [
       {
-        name: 'รถสไลด์ในเขตเมือง',
-        description: 'ค่าบริการเริ่มต้น ระยะทางเพิ่มคิดตามจริง',
-        basePrice: baht(1500),
+        name: 'เรียกกระบะสไลด์ใกล้ฉัน',
+        description: 'ค่ามัดจำเรียกรถ ส่วนที่เหลือคิดตามระยะทางจริง',
+        basePrice: vs24(321),
+        fixedPrice: true, // ค่ามัดจำเท่ากันทุกประเภทรถ
+        priceType: PriceType.CALL_OUT_FEE,
+      },
+      {
+        name: 'เรียกหกล้อสไลด์ใกล้ฉัน',
+        description: 'ค่ามัดจำเรียกรถ ส่วนที่เหลือคิดตามระยะทางจริง',
+        basePrice: vs24(321),
+        fixedPrice: true, // ค่ามัดจำเท่ากันทุกประเภทรถ
+        priceType: PriceType.CALL_OUT_FEE,
+      },
+      {
+        name: 'รถกระบะสไลด์',
+        description: 'ราคาเริ่มต้น ภายใน 15 กม.',
+        basePrice: vs24(1819),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'รถหกล้อสไลด์',
+        description: 'ราคาเริ่มต้น ภายใน 15 กม.',
+        basePrice: vs24(1926),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'รถสไลด์ 24 ชั่วโมง',
+        description: 'ค่ามัดจำเรียกรถนอกเวลา ส่วนที่เหลือคิดตามระยะทางจริง',
+        basePrice: vs24(321),
+        fixedPrice: true, // ค่ามัดจำเท่ากันทุกประเภทรถ
+        priceType: PriceType.CALL_OUT_FEE,
+      },
+      {
+        name: 'เรียกรถยกใกล้ฉัน',
+        description: 'ค่ามัดจำเรียกรถ ส่วนที่เหลือคิดตามระยะทางจริง',
+        basePrice: vs24(350),
+        fixedPrice: true, // ค่ามัดจำเท่ากันทุกประเภทรถ
+        priceType: PriceType.CALL_OUT_FEE,
+      },
+      {
+        name: 'รถยกเล็ก',
+        description: 'ราคาเริ่มต้น ภายใน 15 กม.',
+        basePrice: vs24(1605),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'รถยก 6 ล้อ/10 ล้อ',
+        description: 'ราคาเริ่มต้น ภายใน 15 กม.',
+        basePrice: vs24(4280),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'รถติดหล่ม/ตกหลุม/กู้รถ',
+        description: 'ราคาเริ่มต้น ช่างประเมินหน้างานก่อนเริ่มกู้',
+        basePrice: vs24(1926),
+        priceType: PriceType.FULL_SERVICE,
+      },
+    ],
+  },
+  // 24CarFix ไม่มีบริการส่งน้ำมัน ราคานี้ตั้งเองตามตลาด ปรับได้ในหลังบ้าน
+  {
+    slug: 'fuel-delivery',
+    name: 'น้ำมันหมด ส่งน้ำมันถึงที่',
+    iconKey: 'fuel',
+    sortOrder: 7,
+    subServices: [
+      {
+        name: 'ส่งน้ำมันฉุกเฉิน',
+        description: 'ค่าบริการส่งถึงที่ ไม่รวมค่าน้ำมัน (สูงสุด 10 ลิตร)',
+        basePrice: baht(590),
+        priceType: PriceType.FULL_SERVICE,
+      },
+    ],
+  },
+  {
+    slug: 'ev-assist',
+    name: 'ช่างรถ EV',
+    iconKey: 'ev',
+    sortOrder: 8,
+    subServices: [
+      {
+        name: 'เรียกช่างให้ไปดูก่อน',
+        description: 'ช่างไปดูอาการหน้างานและประเมินราคา',
+        basePrice: vs24(856),
+        priceType: PriceType.CALL_OUT_FEE,
+      },
+      {
+        name: 'ตรวจเช็กอาการรถ EV (นอกสถานที่)',
+        description: 'ราคาเริ่มต้น',
+        basePrice: vs24(1605),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'ตรวจอาการชาร์จไม่เข้าเบื้องต้น (นอกสถานที่)',
+        description: 'ราคาเริ่มต้น',
+        basePrice: vs24(1605),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'ตรวจไฟเตือนระบบ EV (นอกสถานที่)',
+        description: 'ราคาเริ่มต้น',
+        basePrice: vs24(1605),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'อ่านโค้ดระบบ EV (นอกสถานที่)',
+        description: 'ราคาเริ่มต้น',
+        basePrice: vs24(1605),
+        priceType: PriceType.FULL_SERVICE,
+      },
+      {
+        name: 'รีเซ็ตระบบเบื้องต้น (นอกสถานที่)',
+        description: 'ราคาเริ่มต้น',
+        basePrice: vs24(1605),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
@@ -166,13 +358,17 @@ const CATEGORIES = [
     slug: 'used-car-inspection',
     name: 'ตรวจรถมือสองนอกสถานที่',
     iconKey: 'inspection',
-    sortOrder: 7,
+    sortOrder: 9,
     subServices: [
       {
         name: 'ตรวจรถมือสองนอกสถานที่',
-        description: 'ช่างไปตรวจสภาพรถให้ถึงที่ก่อนตัดสินใจซื้อ ราคาเริ่มต้น',
-        basePrice: baht(699),
-        priceType: PriceType.CALL_OUT_FEE,
+        description:
+          'ตรวจ 134 จุดถึงที่ เช็กรถจมน้ำ ชนหนัก กรอไมล์ วัดความหนาสี สแกน OBD2 พร้อมรายงานในแอป ราคาเดียวทุกประเภทรถ',
+        infoNote:
+          'ช่างตรวจเอกสาร โครงสร้างตัวถัง สีทุกชิ้น ร่องรอยน้ำท่วม ห้องเครื่อง คอมพิวเตอร์รถ ช่วงล่าง ยาง ระบบไฟฟ้า และทดลองขับ ใช้เวลาประมาณ 60–90 นาที ผลเป็นเกรด A–E พร้อมคำแนะนำว่าควรซื้อหรือไม่',
+        basePrice: baht(1990),
+        fixedPrice: true,
+        priceType: PriceType.FULL_SERVICE,
       },
     ],
   },
@@ -206,7 +402,7 @@ async function main(): Promise<void> {
       if (existing) {
         await prisma.subService.update({
           where: { id: existing.id },
-          data: { ...subService, sortOrder: index + 1 },
+          data: { ...subService, sortOrder: index + 1, active: true },
         });
       } else {
         await prisma.subService.create({
@@ -214,6 +410,15 @@ async function main(): Promise<void> {
         });
       }
     }
+
+    // บริการย่อยที่เลิกขายแล้วลบไม่ได้ถ้ามีออเดอร์อ้างอิง จึงปิดการแสดงแทน
+    await prisma.subService.updateMany({
+      where: {
+        categoryId: saved.id,
+        name: { notIn: subServices.map((subService) => subService.name) },
+      },
+      data: { active: false },
+    });
   }
 
   console.log('seed เสร็จเรียบร้อย');

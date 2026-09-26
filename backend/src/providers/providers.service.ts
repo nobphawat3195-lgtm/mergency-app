@@ -4,9 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Provider, ProviderStatus } from '@prisma/client';
+import { OrderStatus, Provider, ProviderStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { UploadsService } from '../uploads/uploads.service';
+import { AdminAlertService } from '../notifications/admin-alert.service';
+import { OrderEventsService } from '../notifications/order-events.service';
 import {
   RegisterProviderDto,
   UpdateLocationDto,
@@ -15,19 +18,37 @@ import {
 
 @Injectable()
 export class ProvidersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploads: UploadsService,
+    private readonly adminAlert: AdminAlertService,
+    private readonly events: OrderEventsService,
+  ) {}
 
-  async register(phone: string, dto: RegisterProviderDto): Promise<Provider> {
-    const existing = await this.prisma.provider.findUnique({ where: { phone } });
+  /** uploaderId = sub ของโทเคนที่ใช้ขอ presign (ช่างที่ยังไม่สมัครคือ pending:<เบอร์>) */
+  async register(
+    phone: string,
+    dto: RegisterProviderDto,
+    uploaderId: string,
+  ): Promise<Provider> {
+    this.uploads.assertOwnedUploads(
+      dto.toolPhotoUrls,
+      uploaderId,
+      'PROVIDER_TOOL',
+    );
+    const existing = await this.prisma.provider.findUnique({
+      where: { phone },
+    });
     if (existing) {
       throw new BadRequestException('เบอร์นี้ลงทะเบียนเป็นช่างไว้แล้ว');
     }
 
-    return this.prisma.provider.create({
+    const provider = await this.prisma.provider.create({
       data: {
         phone,
         realName: dto.realName,
         nickname: dto.nickname,
+        experienceYears: dto.experienceYears,
         shopName: dto.shopName,
         facebookPage: dto.facebookPage,
         baseLat: dto.baseLat,
@@ -39,13 +60,17 @@ export class ProvidersService {
           create: dto.categoryIds.map((categoryId) => ({ categoryId })),
         },
         vehicleTypes: {
-          create: dto.vehicleTypeIds.map((vehicleTypeId) => ({ vehicleTypeId })),
+          create: dto.vehicleTypeIds.map((vehicleTypeId) => ({
+            vehicleTypeId,
+          })),
         },
         toolPhotos: {
           create: dto.toolPhotoUrls.map((url) => ({ url })),
         },
       },
     });
+    void this.adminAlert.providerApplied(provider.nickname);
+    return provider;
   }
 
   async getMe(providerId: string) {
@@ -85,7 +110,7 @@ export class ProvidersService {
     dto: UpdateLocationDto,
   ): Promise<Provider> {
     await this.requireVerified(providerId);
-    return this.prisma.provider.update({
+    const provider = await this.prisma.provider.update({
       where: { id: providerId },
       data: {
         currentLat: dto.lat,
@@ -93,6 +118,31 @@ export class ProvidersService {
         lastSeenAt: new Date(),
       },
     });
+    // ลูกค้าที่เปิดหน้าติดตามงานอยู่เห็นช่างขยับทันที
+    const active = await this.prisma.order.findFirst({
+      where: {
+        providerId,
+        status: {
+          in: [
+            OrderStatus.MATCHED,
+            OrderStatus.EN_ROUTE,
+            OrderStatus.IN_PROGRESS,
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    if (active) this.events.emit(active.id, 'LOCATION');
+    return provider;
+  }
+
+  async heartbeat(providerId: string): Promise<{ ok: true }> {
+    await this.requireVerified(providerId);
+    await this.prisma.provider.update({
+      where: { id: providerId },
+      data: { lastSeenAt: new Date() },
+    });
+    return { ok: true };
   }
 
   async updatePayoutInfo(

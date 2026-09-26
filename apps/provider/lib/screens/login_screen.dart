@@ -71,113 +71,62 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: FixGoColors.navy,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(FixGoSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: FixGoSpacing.xl),
-              Row(
-                children: [
-                  const Text(
-                    'FixGo',
-                    style: TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.w900,
-                      color: FixGoColors.accent,
-                    ),
-                  ),
-                  const SizedBox(width: FixGoSpacing.sm),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: FixGoSpacing.sm,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: FixGoColors.accent),
-                    ),
-                    child: const Text(
-                      'FIXER',
-                      style: TextStyle(
-                        color: FixGoColors.accent,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: FixGoSpacing.sm),
-              const Text(
-                'รับงานซ่อมรถใกล้คุณ\nรับเงินเข้ากระเป๋าทันทีที่งานจบ',
-                style: TextStyle(
-                  fontSize: 18,
-                  height: 1.4,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: FixGoSpacing.xl),
-              Container(
-                padding: const EdgeInsets.all(FixGoSpacing.lg),
-                color: Colors.white,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      _otpSent ? 'ใส่รหัส OTP' : 'เข้าสู่ระบบสำหรับช่าง',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: FixGoSpacing.md),
-                    TextField(
-                      controller: _phoneController,
-                      enabled: !_otpSent,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(10),
-                      ],
-                      decoration: const InputDecoration(
-                        hintText: 'เบอร์โทรศัพท์',
-                        prefixIcon: Icon(Icons.phone_outlined),
-                      ),
-                    ),
-                    if (_otpSent) ...[
-                      const SizedBox(height: FixGoSpacing.md),
-                      TextField(
-                        controller: _codeController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(6),
-                        ],
-                        decoration: const InputDecoration(
-                          hintText: 'รหัส 6 หลัก',
-                          prefixIcon: Icon(Icons.lock_outline),
-                        ),
-                      ),
-                    ],
-                    if (_error != null) ...[
-                      const SizedBox(height: FixGoSpacing.md),
-                      Text(
-                        _error!,
-                        style: const TextStyle(color: FixGoColors.error),
-                      ),
-                    ],
-                    const SizedBox(height: FixGoSpacing.lg),
-                    FixGoButton(
-                      label: _otpSent ? 'ยืนยันรหัส' : 'ขอรหัส OTP',
-                      loading: _loading,
-                      onPressed: _otpSent ? _verifyOtp : _requestOtp,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+    return FixGoAuthLayout(
+      dark: true,
+      badge: 'Fixer',
+      tagline: 'รับงานซ่อมรถใกล้คุณ\nเงินเข้ากระเป๋าเมื่อยืนยันการชำระแล้ว',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _otpSent ? 'ใส่รหัส OTP' : 'เข้าสู่ระบบสำหรับช่าง',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
-        ),
+          const SizedBox(height: FixGoSpacing.md),
+          TextField(
+            controller: _phoneController,
+            enabled: !_otpSent,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(10),
+            ],
+            decoration: const InputDecoration(
+              hintText: 'เบอร์โทรศัพท์',
+              prefixIcon: Icon(Icons.phone_outlined),
+            ),
+          ),
+          if (_otpSent) ...[
+            const SizedBox(height: FixGoSpacing.md),
+            TextField(
+              controller: _codeController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
+              ],
+              decoration: const InputDecoration(
+                hintText: 'รหัส 6 หลัก',
+                prefixIcon: Icon(Icons.lock_outline),
+              ),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: FixGoSpacing.md),
+            Text(
+              _error!,
+              style: const TextStyle(color: FixGoColors.error),
+            ),
+          ],
+          const SizedBox(height: FixGoSpacing.lg),
+          FixGoButton(
+            label: _otpSent ? 'ยืนยันรหัส' : 'ขอรหัส OTP',
+            loading: _loading,
+            onPressed: _otpSent ? _verifyOtp : _requestOtp,
+          ),
+          const SizedBox(height: FixGoSpacing.md),
+          LegalConsentText(api: ProviderAppScope.of(context).api),
+        ],
       ),
     );
   }
