@@ -209,6 +209,16 @@ export function publicWebUrl(
   return domain ? `https://${domain}` : null;
 }
 
+/** ที่อยู่เว็บแอปช่าง เช่น https://fixer.fixgo.co.th ใช้พากลับหลังช่างล็อกอิน LINE */
+export function publicFixerUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const explicit = env.PUBLIC_FIXER_URL?.trim();
+  if (explicit) return trimUrl(explicit);
+  const domain = env.FIXER_DOMAIN?.trim();
+  return domain ? `https://${domain}` : null;
+}
+
 /** ที่อยู่ API ที่คนภายนอกเรียกได้ เช่น https://api.fixgo.co.th */
 export function publicApiUrl(env: NodeJS.ProcessEnv = process.env): string {
   const explicit = env.PUBLIC_API_URL?.trim();

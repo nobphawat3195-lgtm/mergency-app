@@ -7,6 +7,7 @@ import {
 import { OrderStatus, Provider, ProviderStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { JwtPayload } from '../auth/auth.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { AdminAlertService } from '../notifications/admin-alert.service';
 import { OrderEventsService } from '../notifications/order-events.service';
@@ -27,27 +28,57 @@ export class ProvidersService {
   ) {}
 
   /**
-   * ยื่นใบสมัคร uploaderId = sub ของโทเคนที่ใช้ขอ presign (ช่างที่ยังไม่สมัครคือ pending:<เบอร์>)
+   * ยื่นใบสมัคร รูปต้องอัปโหลดด้วยโทเคนเดียวกัน (sub ของช่างที่ยังไม่สมัครคือ pending:<เบอร์>
+   * หรือ pending:line:<LINE userId>)
    * ใบสมัครที่ถูกปฏิเสธ (REJECTED) ส่งใหม่ได้ ข้อมูลเดิมถูกแทนที่และกลับไปรอตรวจ
+   *
+   * เบอร์โทร: ล็อกอินด้วย OTP ใช้เบอร์จากโทเคน (ยืนยันแล้ว) ห้ามรับจาก body กันการสมัครแทนคนอื่น
+   * สมัครผ่าน LINE ไม่มีเบอร์ที่ยืนยัน จึงใช้เบอร์ที่กรอกในใบสมัคร แอดมินโทรยืนยันก่อนอนุมัติ
    */
   async register(
-    phone: string,
+    user: JwtPayload,
     dto: RegisterProviderDto,
-    uploaderId: string,
   ): Promise<Provider> {
     this.uploads.assertOwnedUploads(
       [...dto.toolPhotoUrls, dto.photoUrl],
-      uploaderId,
+      user.sub,
       'PROVIDER_TOOL',
     );
-    const existing = await this.prisma.provider.findUnique({
-      where: { phone },
-    });
+    // หาใบสมัครเดิมด้วย id ก่อน (เบอร์ในโทเคนอาจเก่า ถ้าช่าง LINE แก้เบอร์ตอนส่งใหม่)
+    const existing = user.lineUserId
+      ? await this.prisma.provider.findUnique({
+          where: { lineUserId: user.lineUserId },
+        })
+      : !user.sub.startsWith('pending:')
+        ? await this.prisma.provider.findUnique({ where: { id: user.sub } })
+        : await this.prisma.provider.findUnique({
+            where: { phone: user.phone },
+          });
     if (existing && existing.status !== ProviderStatus.REJECTED) {
-      throw new BadRequestException('เบอร์นี้ลงทะเบียนเป็นช่างไว้แล้ว');
+      throw new BadRequestException('บัญชีนี้ลงทะเบียนเป็นช่างไว้แล้ว');
+    }
+
+    const selfDeclaredPhone = Boolean(user.lineUserId || existing?.lineUserId);
+    const phone = selfDeclaredPhone
+      ? (dto.phone ?? existing?.phone ?? '')
+      : user.phone;
+    if (!phone) {
+      throw new BadRequestException('กรุณากรอกเบอร์โทรศัพท์ที่ติดต่อได้');
+    }
+    if (phone !== existing?.phone) {
+      const taken = await this.prisma.provider.findUnique({
+        where: { phone },
+        select: { id: true },
+      });
+      if (taken) {
+        throw new BadRequestException(
+          'เบอร์นี้ลงทะเบียนเป็นช่างไว้แล้ว ให้เข้าสู่ระบบด้วยเบอร์โทรนี้แทน',
+        );
+      }
     }
 
     const data = {
+      phone,
       realName: dto.realName,
       nickname: dto.nickname,
       experienceYears: dto.experienceYears,
@@ -104,7 +135,11 @@ export class ProvidersService {
           });
         })
       : await this.prisma.provider.create({
-          data: { phone, ...data, ...relations },
+          data: {
+            lineUserId: user.lineUserId ?? null,
+            ...data,
+            ...relations,
+          },
         });
     if (replacedPhotos.length > 0) {
       await this.uploads.deleteUploads(replacedPhotos);

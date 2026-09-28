@@ -15,5 +15,6 @@ export 'src/widgets/account_widgets.dart';
 export 'src/widgets/auth_layout.dart';
 export 'src/token_store.dart';
 export 'src/widgets/fixgo_button.dart';
+export 'src/widgets/line_login.dart';
 export 'src/widgets/order_status_chip.dart';
 export 'src/widgets/step_progress.dart';

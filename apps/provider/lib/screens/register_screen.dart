@@ -1,5 +1,6 @@
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app_state.dart';
@@ -24,6 +25,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _facebookController = TextEditingController();
   final _plateController = TextEditingController();
   final _vehicleDescController = TextEditingController();
+  final _phoneController = TextEditingController();
   String? _photoUrl;
   bool _uploadingPhoto = false;
 
@@ -66,6 +68,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _facebookController.dispose();
     _plateController.dispose();
     _vehicleDescController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -231,6 +234,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'vehiclePlate': _plateController.text.trim(),
         if (_vehicleDescController.text.trim().isNotEmpty)
           'vehicleDesc': _vehicleDescController.text.trim(),
+        if (appState.needsContactPhone) 'phone': _phoneController.text.trim(),
       });
       appState.signIn(
         session.accessToken,
@@ -279,6 +283,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
               validator: (value) =>
                   (value ?? '').trim().isEmpty ? 'กรุณากรอกชื่อเล่น' : null,
             ),
+            // สมัครผ่าน LINE ยังไม่มีเบอร์ ลูกค้าต้องโทรหาช่างได้ ทีมงานจะโทรยืนยันเบอร์นี้ก่อนอนุมัติ
+            if (ProviderAppScope.of(context).needsContactPhone) ...[
+              const SizedBox(height: FixGoSpacing.md),
+              TextFormField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                ],
+                decoration: const InputDecoration(
+                  labelText: 'เบอร์โทรที่ลูกค้าติดต่อได้',
+                  helperText: 'ทีมงานจะโทรยืนยันเบอร์นี้ก่อนอนุมัติ',
+                ),
+                validator: (value) =>
+                    RegExp(r'^0[0-9]{8,9}$').hasMatch((value ?? '').trim())
+                        ? null
+                        : 'กรุณากรอกเบอร์โทร 9-10 หลัก ขึ้นต้นด้วย 0',
+              ),
+            ],
             const SizedBox(height: FixGoSpacing.md),
             TextFormField(
               controller: _experienceController,

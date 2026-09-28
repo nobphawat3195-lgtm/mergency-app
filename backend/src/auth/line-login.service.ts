@@ -9,7 +9,12 @@ import { Role } from '@prisma/client';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { publicApiUrl, publicWebUrl, readSecret } from '../config/environment';
+import {
+  publicApiUrl,
+  publicFixerUrl,
+  publicWebUrl,
+  readSecret,
+} from '../config/environment';
 import { JwtPayload } from './auth.service';
 
 const AUTHORIZE_URL = 'https://access.line.me/oauth2/v2.1/authorize';
@@ -23,6 +28,13 @@ const TICKET_TTL_MS = 60_000;
 
 export const LINE_STATE_COOKIE = 'fixgo_line_state';
 
+/** แอปที่เริ่มล็อกอิน: ใช้เลือกว่าจะสร้างบัญชีแบบไหนและพากลับไปเว็บไหน */
+export type LineApp = 'customer' | 'provider';
+
+export function parseLineApp(value: unknown): LineApp {
+  return value === 'provider' ? 'provider' : 'customer';
+}
+
 interface LineConfig {
   channelId: string;
   channelSecret: string;
@@ -31,7 +43,8 @@ interface LineConfig {
 }
 
 /**
- * ล็อกอินลูกค้าด้วย LINE (OAuth 2.1 + OpenID Connect) สำหรับเว็บลูกค้า
+ * ล็อกอินด้วย LINE (OAuth 2.1 + OpenID Connect) สำหรับเว็บลูกค้าและเว็บแอปช่าง
+ * ใช้ LINE Login channel และ Callback URL เดียวกันทั้งสองแอป แยกด้วยค่า app ในคุกกี้ state
  *
  * 1. /start สร้าง state + nonce เก็บในคุกกี้ที่ลงลายเซ็นไว้ แล้วพาไปหน้า LINE
  * 2. LINE พากลับมา /callback พร้อม code ตรวจ state กับคุกกี้ (กัน CSRF)
@@ -39,7 +52,9 @@ interface LineConfig {
  * 3. พากลับเว็บพร้อม "ตั๋ว" อายุ 60 วินาที ใช้ได้ครั้งเดียว เว็บเอาตั๋วมาแลก accessToken
  *    (ไม่ใส่ accessToken ใน URL ตรงๆ เพราะ URL ไปอยู่ในประวัติเบราว์เซอร์และ log)
  *
- * LINE ไม่ส่งเบอร์โทรมา บัญชีที่สมัครด้วย LINE จึงไม่มีเบอร์ (phone = null)
+ * LINE ไม่ส่งเบอร์โทรมา ลูกค้าที่สมัครด้วย LINE จึงไม่มีเบอร์ (phone = null)
+ * ช่างที่ยังไม่มีบัญชีได้โทเคนชั่วคราว (sub = pending:line:<LINE userId>) ไว้ส่งใบสมัคร
+ * และกรอกเบอร์ติดต่อเองในใบสมัคร
  */
 @Injectable()
 export class LineLoginService {
@@ -52,10 +67,10 @@ export class LineLoginService {
     private readonly jwt: JwtService,
   ) {}
 
-  private config(): LineConfig | null {
+  private config(app: LineApp): LineConfig | null {
     const channelId = process.env.LINE_LOGIN_CHANNEL_ID?.trim();
     const channelSecret = process.env.LINE_LOGIN_CHANNEL_SECRET?.trim();
-    const webUrl = publicWebUrl();
+    const webUrl = app === 'provider' ? publicFixerUrl() : publicWebUrl();
     if (!channelId || !channelSecret || !webUrl) return null;
     return {
       channelId,
@@ -65,12 +80,12 @@ export class LineLoginService {
     };
   }
 
-  isEnabled(): boolean {
-    return this.config() !== null;
+  isEnabled(app: LineApp = 'customer'): boolean {
+    return this.config(app) !== null;
   }
 
-  private requireConfig(): LineConfig {
-    const config = this.config();
+  private requireConfig(app: LineApp): LineConfig {
+    const config = this.config(app);
     if (!config) {
       throw new BadRequestException('ยังไม่ได้เปิดใช้การเข้าสู่ระบบด้วย LINE');
     }
@@ -95,11 +110,11 @@ export class LineLoginService {
   }
 
   /** คืน URL หน้า LINE และค่าคุกกี้ state ที่ต้องตั้งก่อน redirect */
-  start(now: number = Date.now()) {
-    const config = this.requireConfig();
+  start(app: LineApp = 'customer', now: number = Date.now()) {
+    const config = this.requireConfig(app);
     const state = randomBytes(16).toString('base64url');
     const nonce = randomBytes(16).toString('base64url');
-    const body = `${state}.${nonce}.${now + STATE_TTL_MS}`;
+    const body = `${state}.${nonce}.${now + STATE_TTL_MS}.${app}`;
     const cookie = `${body}.${this.sign(body, 'line-state')}`;
     const url = new URL(AUTHORIZE_URL);
     url.search = new URLSearchParams({
@@ -113,9 +128,15 @@ export class LineLoginService {
     return { url: url.toString(), cookie, maxAgeSeconds: STATE_TTL_MS / 1000 };
   }
 
+  /** แอปที่เริ่มล็อกอิน อ่านจากคุกกี้ (ยังไม่ตรวจลายเซ็น ใช้เลือกหน้าที่จะพากลับเท่านั้น) */
+  appFromCookie(cookie: string | undefined): LineApp {
+    return parseLineApp(cookie?.split('.')[3]);
+  }
+
   /** หน้าเว็บที่จะพาผู้ใช้กลับไปเมื่อเกิดข้อผิดพลาด */
-  failureRedirect(): string {
-    const webUrl = publicWebUrl() ?? '/';
+  failureRedirect(app: LineApp = 'customer'): string {
+    const webUrl =
+      (app === 'provider' ? publicFixerUrl() : publicWebUrl()) ?? '/';
     return `${webUrl}/?line_error=1`;
   }
 
@@ -125,16 +146,15 @@ export class LineLoginService {
     cookie: string | undefined,
     now: number = Date.now(),
   ): Promise<string> {
-    const config = this.requireConfig();
     if (query.error || !query.code || !query.state) {
       throw new UnauthorizedException('ผู้ใช้ยกเลิกหรือ LINE ส่งข้อมูลไม่ครบ');
     }
     const parts = cookie?.split('.') ?? [];
-    if (parts.length !== 4) throw new UnauthorizedException('ไม่พบ state');
-    const [state, nonce, expires, signature] = parts;
+    if (parts.length !== 5) throw new UnauthorizedException('ไม่พบ state');
+    const [state, nonce, expires, appValue, signature] = parts;
     if (
       !this.verifySigned(
-        `${state}.${nonce}.${expires}`,
+        `${state}.${nonce}.${expires}.${appValue}`,
         signature,
         'line-state',
       ) ||
@@ -143,6 +163,8 @@ export class LineLoginService {
     ) {
       throw new UnauthorizedException('state ไม่ตรงหรือหมดอายุ');
     }
+    const app = parseLineApp(appValue);
+    const config = this.requireConfig(app);
 
     const tokenResponse = await fetch(TOKEN_URL, {
       method: 'POST',
@@ -184,6 +206,12 @@ export class LineLoginService {
     };
     if (!profile.sub) throw new UnauthorizedException('LINE ไม่ส่ง userId');
 
+    if (app === 'provider') {
+      // ช่างยังไม่สร้างบัญชีตรงนี้ ต้องส่งใบสมัครก่อน ตั๋วจึงพา LINE userId ไปแทน
+      const ticket = this.issueTicket('provider', profile.sub, now);
+      return `${config.webUrl}/?line_ticket=${encodeURIComponent(ticket)}`;
+    }
+
     const customer = await this.prisma.customer.upsert({
       where: { lineUserId: profile.sub },
       create: { lineUserId: profile.sub, name: profile.name?.slice(0, 120) },
@@ -193,12 +221,13 @@ export class LineLoginService {
       throw new UnauthorizedException('บัญชีนี้ถูกลบแล้ว');
     }
 
-    const ticket = this.issueTicket(customer.id, now);
+    const ticket = this.issueTicket('customer', customer.id, now);
     return `${config.webUrl}/?line_ticket=${encodeURIComponent(ticket)}`;
   }
 
-  private issueTicket(customerId: string, now: number): string {
-    const body = `${customerId}.${now + TICKET_TTL_MS}.${randomBytes(12).toString('base64url')}`;
+  /** subject = id ลูกค้า หรือ LINE userId ของช่าง (ไม่มีจุดทั้งคู่) */
+  private issueTicket(app: LineApp, subject: string, now: number): string {
+    const body = `${app}.${subject}.${now + TICKET_TTL_MS}.${randomBytes(12).toString('base64url')}`;
     return `${Buffer.from(body).toString('base64url')}.${this.sign(body, 'line-ticket')}`;
   }
 
@@ -206,7 +235,7 @@ export class LineLoginService {
   async exchange(ticket: string, now: number = Date.now()) {
     const [encoded, signature] = ticket.split('.');
     const body = encoded ? Buffer.from(encoded, 'base64url').toString() : '';
-    const [customerId, expires] = body.split('.');
+    const [app, subject, expires] = body.split('.');
     if (
       !signature ||
       !this.verifySigned(body, signature, 'line-ticket') ||
@@ -222,8 +251,10 @@ export class LineLoginService {
     }
     this.usedTickets.set(body, Number(expires));
 
+    if (app === 'provider') return this.providerSession(subject);
+
     const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
+      where: { id: subject },
     });
     if (!customer || customer.deletedAt) {
       throw new UnauthorizedException('ไม่พบบัญชี');
@@ -237,6 +268,37 @@ export class LineLoginService {
       accessToken: await this.jwt.signAsync(payload),
       hasProfile: true,
       userId: customer.id,
+    };
+  }
+
+  /** ช่างที่เคยสมัครด้วย LINE นี้แล้วเข้าบัญชีเดิม คนใหม่ได้โทเคนสำหรับส่งใบสมัคร */
+  private async providerSession(lineUserId: string) {
+    const provider = await this.prisma.provider.findUnique({
+      where: { lineUserId },
+      select: { id: true, phone: true, deletedAt: true },
+    });
+    if (provider && !provider.deletedAt) {
+      const payload: JwtPayload = {
+        sub: provider.id,
+        role: Role.PROVIDER,
+        phone: provider.phone,
+      };
+      return {
+        accessToken: await this.jwt.signAsync(payload),
+        hasProfile: true,
+        userId: provider.id,
+      };
+    }
+    const payload: JwtPayload = {
+      sub: `pending:line:${lineUserId}`,
+      role: Role.PROVIDER,
+      phone: '',
+      lineUserId,
+    };
+    return {
+      accessToken: await this.jwt.signAsync(payload),
+      hasProfile: false,
+      userId: null,
     };
   }
 }

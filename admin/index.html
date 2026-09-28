@@ -122,6 +122,7 @@
   .tools { display: flex; flex-wrap: wrap; gap: 8px; }
   .tools img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; border: 1px solid #D5E8DE; }
   .plate { border: 2px solid #122821; border-radius: 6px; padding: 1px 8px; font-weight: 800; }
+  .line-note { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: #FFF4DB; color: #7A4B00; font-size: 14px; }
   .applicant-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 </style>
 </head>
@@ -416,6 +417,7 @@ async function loadProviders() {
             <span class="muted">${escapeHtml(provider.phone)} · ประสบการณ์ ${escapeHtml(provider.experienceYears)} ปี · สมัครเมื่อ ${escapeHtml(new Date(provider.createdAt).toLocaleString('th-TH'))}</span>
           </div>
         </div>
+        ${provider.lineUserId ? `<p class="line-note">สมัครผ่าน LINE: เบอร์นี้ช่างกรอกเอง ยังไม่ได้ยืนยันด้วย OTP ควรโทรเช็กก่อนกดอนุมัติ</p>` : ''}
         <dl>
           <dt>ร้าน/อู่</dt><dd>${escapeHtml(provider.shopName || '-')}</dd>
           <dt>เฟซบุ๊ก</dt><dd>${escapeHtml(provider.facebookPage || '-')}</dd>

@@ -1,7 +1,7 @@
 import { IsEnum, IsString, Length, Matches } from 'class-validator';
 import { Role } from '@prisma/client';
 
-const THAI_PHONE = /^0[0-9]{8,9}$/;
+export const THAI_PHONE = /^0[0-9]{8,9}$/;
 
 export class RequestOtpDto {
   @Matches(THAI_PHONE, { message: 'เบอร์โทรศัพท์ไม่ถูกต้อง' })

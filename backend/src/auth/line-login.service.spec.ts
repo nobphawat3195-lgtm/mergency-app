@@ -10,6 +10,7 @@ describe('LineLoginService', () => {
   let fetchMock: jest.Mock;
   let prisma: {
     customer: { upsert: jest.Mock; findUnique: jest.Mock };
+    provider: { findUnique: jest.Mock };
   };
   let service: LineLoginService;
   const jwt = new JwtService({ secret: 'test-secret' });
@@ -18,6 +19,7 @@ describe('LineLoginService', () => {
     process.env.LINE_LOGIN_CHANNEL_ID = '1234567890';
     process.env.LINE_LOGIN_CHANNEL_SECRET = 'channel-secret';
     process.env.PUBLIC_WEB_URL = 'https://fixgo.example';
+    process.env.PUBLIC_FIXER_URL = 'https://fixer.fixgo.example';
     process.env.PUBLIC_API_URL = 'https://api.fixgo.example';
     const customer = {
       id: '11111111-1111-4111-8111-111111111111',
@@ -29,6 +31,7 @@ describe('LineLoginService', () => {
         upsert: jest.fn().mockResolvedValue(customer),
         findUnique: jest.fn().mockResolvedValue(customer),
       },
+      provider: { findUnique: jest.fn().mockResolvedValue(null) },
     };
     service = new LineLoginService(prisma as never, jwt);
     fetchMock = jest.fn();
@@ -62,7 +65,7 @@ describe('LineLoginService', () => {
   });
 
   it('sends the user to LINE with state, nonce and the API callback', () => {
-    const { url } = service.start(NOW);
+    const { url } = service.start('customer', NOW);
     const params = new URL(url).searchParams;
     expect(
       url.startsWith('https://access.line.me/oauth2/v2.1/authorize?'),
@@ -76,7 +79,7 @@ describe('LineLoginService', () => {
   });
 
   it('logs in with a one-time ticket after LINE verifies the id_token', async () => {
-    const { url, cookie } = service.start(NOW);
+    const { url, cookie } = service.start('customer', NOW);
     lineResponds();
     const redirect = await service.callback(
       { code: 'auth-code', state: stateFrom(url) },
@@ -109,7 +112,7 @@ describe('LineLoginService', () => {
   });
 
   it('rejects a callback whose state does not match the cookie', async () => {
-    const { cookie } = service.start(NOW);
+    const { cookie } = service.start('customer', NOW);
     await expect(
       service.callback({ code: 'c', state: 'forged' }, cookie, NOW),
     ).rejects.toBeInstanceOf(UnauthorizedException);
@@ -117,7 +120,7 @@ describe('LineLoginService', () => {
   });
 
   it('rejects a tampered state cookie', async () => {
-    const { url, cookie } = service.start(NOW);
+    const { url, cookie } = service.start('customer', NOW);
     const tampered = cookie.replace(/\.[^.]+$/, '.AAAA');
     await expect(
       service.callback({ code: 'c', state: stateFrom(url) }, tampered, NOW),
@@ -125,7 +128,7 @@ describe('LineLoginService', () => {
   });
 
   it('rejects an expired ticket', async () => {
-    const { url, cookie } = service.start(NOW);
+    const { url, cookie } = service.start('customer', NOW);
     lineResponds();
     const redirect = await service.callback(
       { code: 'c', state: stateFrom(url) },
@@ -139,7 +142,7 @@ describe('LineLoginService', () => {
   });
 
   it('does not log in when LINE rejects the id_token', async () => {
-    const { url, cookie } = service.start(NOW);
+    const { url, cookie } = service.start('customer', NOW);
     fetchMock
       .mockResolvedValueOnce({
         ok: true,
@@ -150,5 +153,78 @@ describe('LineLoginService', () => {
       service.callback({ code: 'c', state: stateFrom(url) }, cookie, NOW),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(prisma.customer.upsert).not.toHaveBeenCalled();
+  });
+
+  describe('provider app', () => {
+    async function providerTicket(sub = 'Uprovider') {
+      const { url, cookie } = service.start('provider', NOW);
+      lineResponds(sub);
+      const redirect = await service.callback(
+        { code: 'c', state: stateFrom(url) },
+        cookie,
+        NOW,
+      );
+      expect(
+        redirect.startsWith('https://fixer.fixgo.example/?line_ticket='),
+      ).toBe(true);
+      return new URL(redirect).searchParams.get('line_ticket')!;
+    }
+
+    it('is disabled when the fixer web address is not configured', () => {
+      expect(service.isEnabled('provider')).toBe(true);
+      delete process.env.PUBLIC_FIXER_URL;
+      expect(service.isEnabled('provider')).toBe(false);
+      expect(service.isEnabled('customer')).toBe(true);
+    });
+
+    it('gives a new mechanic a pending token that carries the LINE user id', async () => {
+      const ticket = await providerTicket();
+      // ไม่สร้างบัญชีลูกค้าให้ช่าง
+      expect(prisma.customer.upsert).not.toHaveBeenCalled();
+      const session = await service.exchange(ticket, NOW + 1_000);
+      expect(session.hasProfile).toBe(false);
+      expect(jwt.verify(session.accessToken)).toMatchObject({
+        sub: 'pending:line:Uprovider',
+        role: 'PROVIDER',
+        phone: '',
+        lineUserId: 'Uprovider',
+      });
+    });
+
+    it('logs a registered mechanic into the existing account', async () => {
+      prisma.provider.findUnique.mockResolvedValue({
+        id: 'provider-1',
+        phone: '0812345678',
+        deletedAt: null,
+      });
+      const ticket = await providerTicket();
+      const session = await service.exchange(ticket, NOW + 1_000);
+      expect(prisma.provider.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { lineUserId: 'Uprovider' } }),
+      );
+      expect(session.hasProfile).toBe(true);
+      const payload = jwt.verify(session.accessToken);
+      expect(payload).toMatchObject({
+        sub: 'provider-1',
+        role: 'PROVIDER',
+        phone: '0812345678',
+      });
+      expect(payload.lineUserId).toBeUndefined();
+    });
+
+    it('cannot switch the app by editing the signed state cookie', async () => {
+      const { url, cookie } = service.start('customer', NOW);
+      const forged = cookie.replace('.customer.', '.provider.');
+      await expect(
+        service.callback({ code: 'c', state: stateFrom(url) }, forged, NOW),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('sends failed mechanic logins back to the mechanic web app', () => {
+      const { cookie } = service.start('provider', NOW);
+      expect(service.failureRedirect(service.appFromCookie(cookie))).toBe(
+        'https://fixer.fixgo.example/?line_error=1',
+      );
+    });
   });
 });

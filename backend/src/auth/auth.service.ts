@@ -19,7 +19,10 @@ const OTP_REQUEST_COOLDOWN_MS = 60_000;
 export interface JwtPayload {
   sub: string;
   role: Role;
+  /** ว่างได้: ลูกค้าหรือช่างที่ล็อกอินด้วย LINE ยังไม่มีเบอร์ที่ยืนยันแล้ว */
   phone: string;
+  /** มีเฉพาะโทเคนช่างที่ล็อกอินด้วย LINE แต่ยังไม่ได้ส่งใบสมัคร (sub = pending:line:<id>) */
+  lineUserId?: string;
 }
 
 @Injectable()

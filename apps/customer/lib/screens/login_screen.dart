@@ -2,7 +2,6 @@ import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../app_state.dart';
 
@@ -41,7 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _loginWithLine() async {
     final uri = AppStateScope.of(context).api.lineLoginStartUri;
     setState(() => _loading = true);
-    if (!await launchUrl(uri, webOnlyWindowName: '_self') && mounted) {
+    if (!await openLineLoginPage(uri) && mounted) {
       setState(() {
         _loading = false;
         _error = 'เปิดหน้า LINE ไม่สำเร็จ';
@@ -122,11 +121,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _LineLoginButton(
+                    LineLoginButton(
                       onPressed: _loading ? null : _loginWithLine,
                     ),
                     const SizedBox(height: FixGoSpacing.md),
-                    const _OrDivider(),
+                    const LoginOrDivider(),
                     const SizedBox(height: FixGoSpacing.md),
                   ],
                 );
@@ -194,52 +193,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ],
       ),
-    );
-  }
-}
-
-/// ปุ่มตามแนวทางแบรนด์ LINE: พื้นเขียว LINE ตัวอักษรขาว
-class _LineLoginButton extends StatelessWidget {
-  const _LineLoginButton({required this.onPressed});
-
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return FilledButton.icon(
-      onPressed: onPressed,
-      icon: const Icon(Icons.chat_bubble_rounded, size: 22),
-      label: const Text(
-        'เข้าสู่ระบบด้วย LINE',
-        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-      ),
-      style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(54),
-        backgroundColor: const Color(0xFF06C755),
-        foregroundColor: Colors.white,
-        shape: const StadiumBorder(),
-      ),
-    );
-  }
-}
-
-class _OrDivider extends StatelessWidget {
-  const _OrDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        Expanded(child: Divider()),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: FixGoSpacing.sm),
-          child: Text(
-            'หรือใช้เบอร์โทร',
-            style: TextStyle(color: FixGoColors.textSecondary),
-          ),
-        ),
-        Expanded(child: Divider()),
-      ],
     );
   }
 }

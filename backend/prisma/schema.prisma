@@ -56,7 +56,10 @@ enum ProviderStatus {
 
 model Provider {
   id              String @id @default(uuid())
+  /// ช่างที่ล็อกอินด้วย OTP: เบอร์ที่ยืนยันแล้ว / ช่างที่สมัครผ่าน LINE: เบอร์ที่กรอกเองในใบสมัคร
   phone           String @unique
+  /// userId จาก LINE Login (ไม่มีถ้าสมัครด้วยเบอร์โทร) แอดมินควรโทรยืนยันเบอร์ก่อนอนุมัติ
+  lineUserId      String? @unique
   realName        String
   nickname        String
   experienceYears Int
