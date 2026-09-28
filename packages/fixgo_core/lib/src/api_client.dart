@@ -155,6 +155,26 @@ class FixGoApiClient {
     return result['devCode'] as String?;
   }
 
+  /// เซิร์ฟเวอร์เปิดให้ลูกค้าเข้าสู่ระบบด้วย LINE หรือยัง (ต้องตั้ง Channel ID/secret)
+  Future<bool> isLineLoginEnabled() async {
+    final result =
+        await _send('GET', '/auth/line/config') as Map<String, dynamic>;
+    return result['enabled'] as bool? ?? false;
+  }
+
+  /// หน้าเริ่มล็อกอิน LINE: เปิดในแท็บเดิม LINE จะพากลับมาที่เว็บพร้อม ?line_ticket=
+  Uri get lineLoginStartUri => Uri.parse('$baseUrl/api/auth/line/start');
+
+  /// แลกตั๋วจาก LINE (ใช้ได้ครั้งเดียว ภายใน 60 วินาที) เป็น accessToken
+  Future<String> exchangeLineTicket(String ticket) async {
+    final result = await _send('POST', '/auth/line/exchange', body: {
+      'ticket': ticket,
+    }) as Map<String, dynamic>;
+    final token = result['accessToken'] as String;
+    accessToken = token;
+    return token;
+  }
+
   /// ลบบัญชีของผู้ที่ล็อกอินอยู่ (ลูกค้าหรือช่าง) กู้คืนไม่ได้
   Future<void> deleteAccount() async {
     await _send('DELETE', '/account');
@@ -319,6 +339,18 @@ class FixGoApiClient {
     await _send('POST', '/orders/$orderId/cancel');
   }
 
+  /// ลิงก์ติดตามงานสำหรับครอบครัว (เปิดได้โดยไม่ต้องล็อกอิน) เรียกซ้ำได้ ได้ลิงก์เดิม
+  /// [url] เป็น null เมื่อเซิร์ฟเวอร์ไม่ได้ตั้ง PUBLIC_WEB_URL ให้ต่อ [path] กับโดเมนเว็บเอง
+  Future<({String path, String? url})> shareOrder(String orderId) async {
+    final result =
+        await _send('POST', '/orders/$orderId/share') as Map<String, dynamic>;
+    return (path: result['path'] as String, url: result['url'] as String?);
+  }
+
+  Future<void> revokeOrderShare(String orderId) async {
+    await _send('DELETE', '/orders/$orderId/share');
+  }
+
   Future<void> rateOrder(String orderId, int score, {String? comment}) async {
     await _send('POST', '/orders/$orderId/rate', body: {
       'score': score,
@@ -393,6 +425,19 @@ class FixGoApiClient {
       );
     }
     return publicUrl;
+  }
+
+  /// การ์ดช่างที่ลูกค้าเห็น ค่า "" = ลบ, null = ไม่เปลี่ยน
+  Future<void> updatePublicProfile({
+    String? photoUrl,
+    String? vehicleDesc,
+    String? vehiclePlate,
+  }) async {
+    await _send('PATCH', '/providers/me/public-profile', body: {
+      if (photoUrl != null) 'photoUrl': photoUrl,
+      if (vehicleDesc != null) 'vehicleDesc': vehicleDesc,
+      if (vehiclePlate != null) 'vehiclePlate': vehiclePlate,
+    });
   }
 
   Future<void> updatePayoutInfo({

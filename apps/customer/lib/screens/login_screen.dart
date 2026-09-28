@@ -1,6 +1,8 @@
 import 'package:fixgo_core/fixgo_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app_state.dart';
 
@@ -18,6 +20,34 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _otpSent = false;
   bool _loading = false;
   String? _error;
+
+  /// ปุ่ม LINE แสดงเฉพาะบนเว็บ และเมื่อเซิร์ฟเวอร์ตั้งค่า LINE Login แล้ว
+  Future<bool>? _lineEnabled;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_lineEnabled != null) return;
+    final appState = AppStateScope.of(context);
+    _lineEnabled = kIsWeb
+        ? appState.api.isLineLoginEnabled().catchError((_) => false)
+        : Future.value(false);
+    if (appState.lineLoginFailed) {
+      appState.lineLoginFailed = false;
+      _error = 'เข้าสู่ระบบด้วย LINE ไม่สำเร็จ กรุณาลองใหม่';
+    }
+  }
+
+  Future<void> _loginWithLine() async {
+    final uri = AppStateScope.of(context).api.lineLoginStartUri;
+    setState(() => _loading = true);
+    if (!await launchUrl(uri, webOnlyWindowName: '_self') && mounted) {
+      setState(() {
+        _loading = false;
+        _error = 'เปิดหน้า LINE ไม่สำเร็จ';
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -84,6 +114,24 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!_otpSent)
+            FutureBuilder<bool>(
+              future: _lineEnabled,
+              builder: (context, snapshot) {
+                if (snapshot.data != true) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _LineLoginButton(
+                      onPressed: _loading ? null : _loginWithLine,
+                    ),
+                    const SizedBox(height: FixGoSpacing.md),
+                    const _OrDivider(),
+                    const SizedBox(height: FixGoSpacing.md),
+                  ],
+                );
+              },
+            ),
           Text(
             _otpSent ? 'ใส่รหัส OTP' : 'เข้าสู่ระบบด้วยเบอร์โทร',
             style: Theme.of(context).textTheme.titleMedium,
@@ -146,6 +194,52 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// ปุ่มตามแนวทางแบรนด์ LINE: พื้นเขียว LINE ตัวอักษรขาว
+class _LineLoginButton extends StatelessWidget {
+  const _LineLoginButton({required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.chat_bubble_rounded, size: 22),
+      label: const Text(
+        'เข้าสู่ระบบด้วย LINE',
+        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+      ),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(54),
+        backgroundColor: const Color(0xFF06C755),
+        foregroundColor: Colors.white,
+        shape: const StadiumBorder(),
+      ),
+    );
+  }
+}
+
+class _OrDivider extends StatelessWidget {
+  const _OrDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        Expanded(child: Divider()),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: FixGoSpacing.sm),
+          child: Text(
+            'หรือใช้เบอร์โทร',
+            style: TextStyle(color: FixGoColors.textSecondary),
+          ),
+        ),
+        Expanded(child: Divider()),
+      ],
     );
   }
 }

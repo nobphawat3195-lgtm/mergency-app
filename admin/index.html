@@ -283,7 +283,7 @@ async function loadNoMatch() {
         <td>${escapeHtml(order.subService?.name || order.category?.name || '-')}</td>
         <td>${escapeHtml(order.pickupAddress || `${order.pickupLat.toFixed(5)}, ${order.pickupLng.toFixed(5)}`)}<br>
           <small><a href="https://www.google.com/maps?q=${order.pickupLat},${order.pickupLng}" target="_blank" rel="noopener">เปิดแผนที่</a></small></td>
-        <td>${escapeHtml(order.customer?.phone || '-')}</td>
+        <td>${escapeHtml(order.customer?.phone || (order.customer?.name ? 'LINE: ' + order.customer.name : '-'))}</td>
         <td>${escapeHtml(new Date(order.createdAt).toLocaleString('th-TH'))}</td>
         <td>
           <button onclick="redispatch('${order.id}')">ส่งหาช่างอีกครั้ง</button>
@@ -440,7 +440,7 @@ async function loadOrders() {
     <tr>
       <td>${escapeHtml(order.orderNo)}</td>
       <td>${escapeHtml(order.subService?.name || order.category?.name || '-')}</td>
-      <td>${escapeHtml(order.customer?.phone || '-')}</td>
+      <td>${escapeHtml(order.customer?.phone || (order.customer?.name ? 'LINE: ' + order.customer.name : '-'))}</td>
       <td>${escapeHtml(order.provider ? order.provider.nickname : '-')}</td>
       <td>${escapeHtml(STATUS_LABELS[order.status] || order.status)}</td>
       <td>${escapeHtml(formatSatang(order.priceFinal ?? order.priceEstimated))}</td>

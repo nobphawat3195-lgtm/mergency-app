@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   MessageEvent,
   Param,
@@ -18,6 +19,7 @@ import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
 import { JwtPayload } from '../auth/auth.service';
 import { OrderEventsService } from '../notifications/order-events.service';
 import { OrderAccessGuard } from './order-access.guard';
+import { OrderShareService } from './order-share.service';
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -25,6 +27,7 @@ export class OrdersController {
   constructor(
     private readonly orders: OrdersService,
     private readonly orderEvents: OrderEventsService,
+    private readonly orderShare: OrderShareService,
   ) {}
 
   @Post()
@@ -43,6 +46,20 @@ export class OrdersController {
   @Roles(Role.PROVIDER)
   listAssigned(@CurrentUser() user: JwtPayload) {
     return this.orders.listForProvider(user.sub);
+  }
+
+  /** สร้าง (หรือคืนลิงก์เดิม) ลิงก์ติดตามงานให้ครอบครัวเปิดดูได้โดยไม่ต้องล็อกอิน */
+  @Post(':id/share')
+  @Roles(Role.CUSTOMER)
+  share(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.orderShare.share(id, user.sub);
+  }
+
+  /** ยกเลิกลิงก์ติดตาม คนที่มีลิงก์เดิมจะเปิดไม่ได้อีก */
+  @Delete(':id/share')
+  @Roles(Role.CUSTOMER)
+  revokeShare(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.orderShare.revoke(id, user.sub);
   }
 
   @Get(':id')

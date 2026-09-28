@@ -17,6 +17,7 @@ import {
   INSPECTION_CATEGORY_SLUG,
   InspectionsService,
 } from '../inspections/inspections.service';
+import { PROVIDER_CARD_SELECT, presentProviderCard } from './provider-card';
 import { CreateOrderDto, ProposeQuoteDto, RateOrderDto } from './dto/order.dto';
 
 /** ไม่ส่งรูปสลิปออกไปกับข้อมูลงาน (ช่างไม่ควรเห็นบัญชีธนาคารของลูกค้า) แอดมินดูได้ในหน้าตรวจสลิป */
@@ -133,21 +134,16 @@ export class OrdersService {
             submittedAt: true,
           },
         },
-        provider: {
-          select: {
-            id: true,
-            realName: true,
-            nickname: true,
-            phone: true,
-            ratingAvg: true,
-            currentLat: true,
-            currentLng: true,
-          },
-        },
+        provider: { select: PROVIDER_CARD_SELECT },
       },
     });
     if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
-    return order;
+    // ลิงก์แชร์ขอผ่าน POST /orders/:id/share เท่านั้น ไม่ติดไปกับข้อมูลงานที่ช่างก็เห็น
+    const { shareToken: _shareToken, provider, ...rest } = order;
+    return {
+      ...rest,
+      provider: provider ? presentProviderCard(order, provider) : null,
+    };
   }
 
   async findAccessibleById(

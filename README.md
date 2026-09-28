@@ -21,6 +21,11 @@ The platform has three parts: a customer app, a mechanic app ("FixGo Fixer") and
   - Thai QR PromptPay payloads (EMVCo + CRC-16) go straight to the owner's account.
   - A customer can upload a slip, but an order becomes `PAID` only when an admin confirms the money arrived or a signed Stripe webhook confirms it. Displaying a QR or pressing a button never marks an order paid.
   - The wallet is an idempotent ledger. For cash jobs the mechanic keeps the cash and is charged the platform fee instead of being credited twice.
+- **Symptom-first booking.** Drivers tap what is wrong ("battery dead", "flat tyre", "locked out") instead of picking a service category. The app maps the symptom to the right service and skips straight to the vehicle type. A test checks every symptom against the seeded catalog.
+- **Live map with ETA.** While the mechanic is on the way, the customer sees both pins on an OpenStreetMap map and an estimated arrival time. The server only shares the mechanic's position during that window and hides stale positions.
+- **Mechanic trust card.** Photo, verified badge, rating, completed jobs, experience, and the vehicle and licence plate to look for.
+- **Share with family + SOS.** A read-only tracking link (random 256-bit token, no login) that shows the status and the mechanic on the way but no phone numbers or prices. It expires 2 hours after the job ends and can be revoked. One-tap Thai emergency numbers are also available.
+- **LINE Login (web).** OAuth 2.1 + OpenID Connect with a signed state cookie, nonce and a single-use 60-second ticket, so no access token ever appears in a URL. It saves SMS OTP cost.
 - **Real-time tracking** uses Server-Sent Events, falls back to polling, and sends push notifications through FCM HTTP v1 with a self-signed JWT.
 - **Used-car inspection mode.** A 134-point checklist in 11 categories, with measured values (paint thickness, tread, brake pads, battery), required photo evidence, weighted A–E grading and red flags for flood, crash, odometer and paperwork problems.
 - **Security and privacy (PDPA).**
@@ -37,8 +42,8 @@ The platform has three parts: a customer app, a mechanic app ("FixGo Fixer") and
   - The API refuses to start with missing or placeholder secrets.
   - A trial mode lets the team test before SMS is paid for.
 - **CI (GitHub Actions)** runs:
-  - backend typecheck and tests (86 unit tests)
-  - Flutter analyze and tests
+  - backend typecheck and tests (108 unit tests)
+  - Flutter analyze and tests (shared package and customer app)
   - a Docker boot test
   - a web image smoke test through the real Caddyfile
   - Android APK/AAB builds and an iOS build
@@ -110,6 +115,13 @@ Quality checks: `npm run typecheck && npm test` (backend), `flutter analyze && f
 - **แอปลูกค้า:** เรียกช่าง ติดตามงานแบบเรียลไทม์ ยืนยันราคาก่อนซ่อม จ่ายเงินสดหรือพร้อมเพย์ และจองตรวจรถมือสอง 134 จุด
 - **แอปช่าง FixGo Fixer:** รับงานตามระยะทาง เสนอราคา อัปเดตสถานะ ดูกระเป๋ารายได้ และทำรายงานตรวจรถพร้อมรูปหลักฐาน
 - **หน้าแอดมิน:** อนุมัติช่าง ตรวจสลิปพร้อมเพย์ จัดการงานที่ไม่มีช่างรับ และจัดการคำขอเบิกเงิน
+
+**สิ่งที่ทำให้ใช้ง่ายกว่าแอปทั่วไป**
+- เรียกช่างจาก "อาการรถ" ได้เลย ไม่ต้องรู้ว่าต้องเรียกช่างประเภทไหน
+- แผนที่สดพร้อมเวลาช่างถึงโดยประมาณ
+- การ์ดข้อมูลช่าง: รูป ป้ายยืนยันตัวตน คะแนน จำนวนงาน และทะเบียนรถ
+- แชร์ลิงก์ให้ครอบครัวติดตาม และปุ่มโทรเบอร์ฉุกเฉิน
+- เข้าสู่ระบบด้วย LINE บนเว็บ ไม่ต้องรอ OTP
 
 **จุดเด่นทางเทคนิค**
 - ระบบจับคู่ช่างแบบส่งเป็นกลุ่มตามระยะทาง

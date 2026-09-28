@@ -5,10 +5,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../app_state.dart';
 import 'inspection_report_screen.dart';
+import 'tracking/live_map_card.dart';
+import 'tracking/provider_trust_card.dart';
+import 'tracking/safety_actions.dart';
 
 class OrderTrackingScreen extends StatefulWidget {
   const OrderTrackingScreen({super.key, required this.orderId});
@@ -237,14 +239,32 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           : ListView(
               padding: const EdgeInsets.all(FixGoSpacing.md),
               children: [
+                // ช่างกำลังมา: สิ่งที่ลูกค้าอยากรู้ที่สุดคือช่างอยู่ไหน ถึงเมื่อไร และเป็นใคร
+                if (_onTheWay(order)) ...[
+                  LiveMapCard(order: order),
+                  const SizedBox(height: FixGoSpacing.md),
+                  if (order.provider != null) ...[
+                    ProviderTrustCard(provider: order.provider!),
+                    const SizedBox(height: FixGoSpacing.md),
+                  ],
+                ],
+                if (_isActive(order)) ...[
+                  SafetyActions(
+                    api: AppStateScope.of(context).api,
+                    orderId: order.id,
+                  ),
+                  const SizedBox(height: FixGoSpacing.md),
+                ],
                 _StatusCard(order: order),
                 const SizedBox(height: FixGoSpacing.md),
                 if (order.isInspection && order.inspection != null) ...[
                   _InspectionCard(order: order),
                   const SizedBox(height: FixGoSpacing.md),
                 ],
-                if (order.provider != null) _ProviderCard(order: order),
-                const SizedBox(height: FixGoSpacing.md),
+                if (order.provider != null && !_onTheWay(order)) ...[
+                  ProviderTrustCard(provider: order.provider!),
+                  const SizedBox(height: FixGoSpacing.md),
+                ],
                 if (order.quoteStatus != QuoteStatus.notRequested) ...[
                   _QuoteCard(
                     order: order,
@@ -318,6 +338,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     );
   }
 }
+
+bool _onTheWay(Order order) =>
+    order.status == OrderStatus.matched || order.status == OrderStatus.enRoute;
+
+bool _isActive(Order order) =>
+    order.status != OrderStatus.completed &&
+    order.status != OrderStatus.cancelled;
 
 class _StatusCard extends StatelessWidget {
   const _StatusCard({required this.order});
@@ -434,82 +461,6 @@ class _TimelineRow extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ProviderCard extends StatelessWidget {
-  const _ProviderCard({required this.order});
-
-  final Order order;
-
-  @override
-  Widget build(BuildContext context) {
-    final provider = order.provider!;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(FixGoSpacing.md),
-        child: Row(
-          children: [
-            Container(
-              height: 56,
-              width: 56,
-              padding: const EdgeInsets.all(6),
-              decoration: const BoxDecoration(
-                color: FixGoColors.accentSoft,
-                shape: BoxShape.circle,
-              ),
-              child: Image.asset(technicianIconAsset),
-            ),
-            const SizedBox(width: FixGoSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${provider.realName} (${provider.nickname})',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: FixGoSpacing.xs),
-                  Row(
-                    children: [
-                      const Icon(Icons.star,
-                          size: 16, color: FixGoColors.warning),
-                      const SizedBox(width: 4),
-                      Text(
-                        provider.ratingAvg > 0
-                            ? provider.ratingAvg.toStringAsFixed(1)
-                            : 'ช่างใหม่',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            IconButton.filled(
-              tooltip: 'โทรหาช่าง',
-              onPressed: () async {
-                final uri = Uri(scheme: 'tel', path: provider.phone);
-                if (!await launchUrl(uri) && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('ไม่สามารถเปิดแอปโทรศัพท์ได้')),
-                  );
-                }
-              },
-              icon: const Icon(Icons.phone),
-              style: IconButton.styleFrom(
-                backgroundColor: FixGoColors.success,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

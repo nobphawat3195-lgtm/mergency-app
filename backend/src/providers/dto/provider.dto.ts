@@ -10,6 +10,7 @@ import {
   IsString,
   Length,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 
@@ -107,4 +108,25 @@ export class UpdatePayoutInfoDto {
   @IsString()
   @Length(1, 30)
   promptPayId?: string;
+}
+
+/**
+ * ข้อมูลที่ลูกค้าเห็นในการ์ดช่างหลังรับงาน ส่งค่าว่าง ("") เพื่อลบ
+ * รูปต้องเป็นไฟล์ที่ช่างคนนี้อัปโหลดเอง (scope PROVIDER_TOOL)
+ */
+export class UpdatePublicProfileDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  photoUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  vehicleDesc?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  vehiclePlate?: string;
 }

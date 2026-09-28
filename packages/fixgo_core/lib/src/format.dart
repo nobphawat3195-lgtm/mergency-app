@@ -31,3 +31,11 @@ String formatThousands(num value) {
   }
   return buffer.toString();
 }
+
+/// เวลาที่ผ่านไปแบบสั้น เช่น "เมื่อสักครู่", "3 นาทีที่แล้ว"
+String formatRelativeMinutes(DateTime value, {DateTime? now}) {
+  final minutes = (now ?? DateTime.now()).difference(value).inMinutes;
+  if (minutes < 1) return 'เมื่อสักครู่';
+  if (minutes < 60) return '$minutes นาทีที่แล้ว';
+  return '${minutes ~/ 60} ชม.ที่แล้ว';
+}

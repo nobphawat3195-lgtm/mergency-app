@@ -72,6 +72,13 @@ jobs:
           curl -fsS http://localhost:8082/ | grep -q "FixGo Fixer"
           # ลิงก์ตรงเข้าหน้าในแอปต้องได้ index.html ไม่ใช่ 404
           curl -fsS http://localhost:8081/orders/any | grep -q "flutter_bootstrap.js"
+          # ลิงก์ติดตามงานที่แชร์ให้ครอบครัว: หน้า HTML เบา ผ่าน templates แล้ว (ไม่เหลือ {{ ใน meta)
+          TOKEN=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ
+          curl -fsS http://localhost:8081/track/$TOKEN > track.out
+          grep -q "ติดตามช่าง FixGo" track.out
+          grep -q 'content="https://http://localhost:8090"' track.out
+          curl -fsS -o /dev/null http://localhost:8081/vendor/leaflet/leaflet.js
+          curl -fsS http://localhost:8081/track/short | grep -q "flutter_bootstrap.js"
           docker exec web grep -q "https://api.example.com" /srv/web/main.dart.js
       - name: Web logs
         if: failure()
@@ -94,6 +101,9 @@ jobs:
       - name: Analyze customer app
         working-directory: apps/customer
         run: flutter pub get && flutter analyze
+      - name: Test customer app
+        working-directory: apps/customer
+        run: flutter test
       - name: Analyze provider app
         working-directory: apps/provider
         run: flutter pub get && flutter analyze

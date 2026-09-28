@@ -31,13 +31,16 @@ model OtpCode {
 // ---------- Customer ----------
 
 model Customer {
-  id        String    @id @default(uuid())
-  phone     String    @unique
-  name      String?
+  id         String    @id @default(uuid())
+  /// null เมื่อสมัครด้วย LINE (LINE ไม่ส่งเบอร์โทรมาให้)
+  phone      String?   @unique
+  /// userId จาก LINE Login (ค่า sub ใน id_token) ใช้แทนเบอร์โทรในการเข้าสู่ระบบ
+  lineUserId String?   @unique
+  name       String?
   /// ลบบัญชีแล้ว: ข้อมูลส่วนตัวถูกลบ/ปิดบัง เก็บเฉพาะประวัติธุรกรรมตามกฎหมายบัญชี
-  deletedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   orders Order[]
 }
@@ -60,6 +63,11 @@ model Provider {
   shopName     String?
   facebookPage String?
 
+  // ข้อมูลที่ลูกค้าเห็นในการ์ดช่างหลังช่างรับงาน (ไม่บังคับ ช่างกรอกเองในหน้าโปรไฟล์)
+  photoUrl     String?
+  vehicleDesc  String? // เช่น "กระบะ Isuzu สีขาว"
+  vehiclePlate String? // ทะเบียนรถที่ช่างขับมา ลูกค้าใช้ยืนยันว่าเป็นช่างตัวจริง
+
   // พื้นที่รับงาน: ปักหมุดตำแหน่งประจำ ใช้คำนวณรัศมี dispatch
   baseLat Float
   baseLng Float
@@ -72,6 +80,8 @@ model Provider {
   isOnline   Boolean        @default(false)
   currentLat Float?
   currentLng Float?
+  /// เวลาที่ส่งพิกัดล่าสุด (heartbeat อัปเดตแค่ lastSeenAt) ใช้ตัดสินว่าตำแหน่งยังสดไหม
+  locationAt DateTime?
   lastSeenAt DateTime?
 
   // ข้อมูลรับเงิน กรอกหลังแอดมินอนุมัติ ก่อนเบิกครั้งแรก
@@ -230,12 +240,15 @@ model Order {
   quoteProposedAt  DateTime?
   quoteRespondedAt DateTime?
 
-  createdAt   DateTime  @default(now())
-  matchedAt   DateTime?
-  completedAt DateTime?
-  cancelledAt DateTime?
+  createdAt    DateTime  @default(now())
+  matchedAt    DateTime?
+  completedAt  DateTime?
+  cancelledAt  DateTime?
   /// เหตุผลที่ทีมงานยกเลิกงาน (ลูกค้ายกเลิกเองจะเป็น null)
   cancelReason String?
+
+  /// โทเคนลิงก์ติดตามงานที่ลูกค้าแชร์ให้ครอบครัว (สุ่ม 32 ไบต์ ดูได้อย่างเดียว)
+  shareToken String? @unique
 
   customer    Customer        @relation(fields: [customerId], references: [id])
   provider    Provider?       @relation(fields: [providerId], references: [id])

@@ -171,6 +171,8 @@ String paymentStatusLabel(String? status) {
   }
 }
 
+/// ข้อมูลช่างที่ลูกค้าเห็นหลังช่างรับงาน (การ์ดช่าง) ตำแหน่งและเวลาถึงมีค่าเฉพาะ
+/// ตอนช่างกำลังเดินทางมาและตำแหน่งยังสด backend เป็นคนตัดสิน
 class ProviderSummary {
   const ProviderSummary({
     required this.id,
@@ -178,8 +180,18 @@ class ProviderSummary {
     required this.nickname,
     required this.phone,
     required this.ratingAvg,
+    this.ratingCount = 0,
+    this.experienceYears,
+    this.photoUrl,
+    this.vehicleDesc,
+    this.vehiclePlate,
+    this.verified = false,
+    this.completedJobs = 0,
     this.currentLat,
     this.currentLng,
+    this.locationUpdatedAt,
+    this.distanceKm,
+    this.etaMinutes,
   });
 
   final String id;
@@ -187,8 +199,20 @@ class ProviderSummary {
   final String nickname;
   final String phone;
   final double ratingAvg;
+  final int ratingCount;
+  final int? experienceYears;
+  final String? photoUrl;
+  final String? vehicleDesc;
+  final String? vehiclePlate;
+  final bool verified;
+  final int completedJobs;
   final double? currentLat;
   final double? currentLng;
+  final DateTime? locationUpdatedAt;
+  final double? distanceKm;
+  final int? etaMinutes;
+
+  bool get hasLivePosition => currentLat != null && currentLng != null;
 
   factory ProviderSummary.fromJson(Map<String, dynamic> json) {
     return ProviderSummary(
@@ -197,8 +221,20 @@ class ProviderSummary {
       nickname: json['nickname'] as String,
       phone: json['phone'] as String,
       ratingAvg: (json['ratingAvg'] as num).toDouble(),
+      ratingCount: (json['ratingCount'] as num?)?.toInt() ?? 0,
+      experienceYears: (json['experienceYears'] as num?)?.toInt(),
+      photoUrl: json['photoUrl'] as String?,
+      vehicleDesc: json['vehicleDesc'] as String?,
+      vehiclePlate: json['vehiclePlate'] as String?,
+      verified: json['verified'] as bool? ?? false,
+      completedJobs: (json['completedJobs'] as num?)?.toInt() ?? 0,
       currentLat: (json['currentLat'] as num?)?.toDouble(),
       currentLng: (json['currentLng'] as num?)?.toDouble(),
+      locationUpdatedAt: json['locationUpdatedAt'] == null
+          ? null
+          : DateTime.parse(json['locationUpdatedAt'] as String),
+      distanceKm: (json['distanceKm'] as num?)?.toDouble(),
+      etaMinutes: (json['etaMinutes'] as num?)?.toInt(),
     );
   }
 }
