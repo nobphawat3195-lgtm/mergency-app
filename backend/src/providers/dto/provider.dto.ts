@@ -72,6 +72,21 @@ export class RegisterProviderDto {
   @ArrayMaxSize(6)
   @IsString({ each: true })
   toolPhotoUrls!: string[];
+
+  /** รูปหน้าตรงของช่าง ทีมงานใช้ตรวจตัวตน และลูกค้าเห็นในการ์ดช่าง */
+  @IsString()
+  @Length(1, 500)
+  photoUrl!: string;
+
+  /** ทะเบียนรถที่ใช้ไปหน้างาน ลูกค้าใช้ยืนยันว่าเป็นช่างตัวจริง */
+  @IsString()
+  @Length(2, 20)
+  vehiclePlate!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  vehicleDesc?: string;
 }
 
 export class UpdateLocationDto {

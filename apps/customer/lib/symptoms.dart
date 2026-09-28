@@ -43,7 +43,7 @@ const carSymptoms = <CarSymptom>[
     label: 'ลืมกุญแจไว้ในรถ',
     iconKey: 'key',
     categorySlug: 'locksmith',
-    subServiceKeyword: 'เปิดรถยนต์ฉุกเฉิน',
+    subServiceKeyword: 'สะเดาะล็อค',
   ),
   CarSymptom(
     label: 'น้ำมันหมด',
@@ -67,7 +67,7 @@ const carSymptoms = <CarSymptom>[
     label: 'รถชน ต้องยก/ลาก',
     iconKey: 'tow',
     categorySlug: 'towing',
-    subServiceKeyword: 'กระบะสไลด์ใกล้ฉัน',
+    subServiceKeyword: 'รถสไลด์ใกล้ฉัน',
   ),
   CarSymptom(
     label: 'รถ EV ชาร์จไม่เข้า',

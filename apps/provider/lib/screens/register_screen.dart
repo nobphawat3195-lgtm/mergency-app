@@ -6,7 +6,10 @@ import '../app_state.dart';
 
 /// แบบฟอร์มลงทะเบียนช่าง — ฟิลด์ตรงกับฟอร์มคัดกรองช่างที่ใช้งานจริง
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  const RegisterScreen({super.key, this.resubmit = false});
+
+  /// ส่งใบสมัครใหม่หลังถูกปฏิเสธ: เปิดเป็นหน้าซ้อน ส่งเสร็จแล้วปิดกลับหน้าหลัก
+  final bool resubmit;
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -19,6 +22,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _experienceController = TextEditingController();
   final _shopNameController = TextEditingController();
   final _facebookController = TextEditingController();
+  final _plateController = TextEditingController();
+  final _vehicleDescController = TextEditingController();
+  String? _photoUrl;
+  bool _uploadingPhoto = false;
 
   TimeOfDay _openTime = const TimeOfDay(hour: 8, minute: 0);
   TimeOfDay _closeTime = const TimeOfDay(hour: 20, minute: 0);
@@ -57,6 +64,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _experienceController.dispose();
     _shopNameController.dispose();
     _facebookController.dispose();
+    _plateController.dispose();
+    _vehicleDescController.dispose();
     super.dispose();
   }
 
@@ -74,6 +83,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
         : file.name.toLowerCase().endsWith('.webp')
             ? 'image/webp'
             : 'image/jpeg';
+  }
+
+  Future<void> _pickProfilePhoto() async {
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 800,
+    );
+    if (file == null || !mounted) return;
+    setState(() => _uploadingPhoto = true);
+    try {
+      final url = await ProviderAppScope.of(context).api.uploadImage(
+            bytes: await file.readAsBytes(),
+            fileName: file.name,
+            contentType: _contentTypeFor(file),
+            scope: 'PROVIDER_TOOL',
+          );
+      if (mounted) setState(() => _photoUrl = url);
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'อ่านหรืออัปโหลดรูปไม่สำเร็จ');
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
   }
 
   Future<void> _pickToolPhotos() async {
@@ -148,6 +182,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
+    if (_photoUrl == null) {
+      setState(() => _error = 'กรุณาใส่รูปโปรไฟล์หน้าตรง');
+      return;
+    }
     if (_categoryIds.isEmpty) {
       setState(() => _error = 'กรุณาเลือกงานบริการที่รับทำอย่างน้อย 1 รายการ');
       return;
@@ -189,11 +227,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'categoryIds': _categoryIds.toList(),
         'vehicleTypeIds': _vehicleTypeIds.toList(),
         'toolPhotoUrls': _toolPhotoUrls,
+        'photoUrl': _photoUrl,
+        'vehiclePlate': _plateController.text.trim(),
+        if (_vehicleDescController.text.trim().isNotEmpty)
+          'vehicleDesc': _vehicleDescController.text.trim(),
       });
       appState.signIn(
         session.accessToken,
         hasProfile: session.hasProfile,
       );
+      if (widget.resubmit && mounted) Navigator.of(context).pop(true);
     } on ApiException catch (error) {
       setState(() => _error = error.message);
     } finally {
@@ -204,7 +247,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('ลงทะเบียนเป็นช่าง')),
+      appBar: AppBar(
+        title: Text(widget.resubmit ? 'ส่งใบสมัครใหม่' : 'ลงทะเบียนเป็นช่าง'),
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -213,6 +258,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
             Text(
               'กรอกข้อมูลเพื่อให้ทีมงานส่งงานได้ตรงตามประเภทของช่าง',
               style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: FixGoSpacing.lg),
+            _ProfilePhotoPicker(
+              photoUrl: _photoUrl,
+              uploading: _uploadingPhoto,
+              onPick: _pickProfilePhoto,
             ),
             const SizedBox(height: FixGoSpacing.lg),
             TextFormField(
@@ -255,6 +306,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
               controller: _facebookController,
               decoration: const InputDecoration(
                 labelText: 'ชื่อเพจ / เฟซบุ๊ก',
+              ),
+            ),
+            const SizedBox(height: FixGoSpacing.lg),
+            const _SectionTitle('รถที่ใช้ไปหน้างาน'),
+            TextFormField(
+              controller: _plateController,
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 20,
+              decoration: const InputDecoration(
+                labelText: 'ทะเบียนรถ',
+                hintText: 'เช่น 1กข 1234 กรุงเทพมหานคร',
+              ),
+              validator: (value) => (value ?? '').trim().length < 2
+                  ? 'กรุณากรอกทะเบียนรถ ลูกค้าใช้ยืนยันตัวช่าง'
+                  : null,
+            ),
+            TextFormField(
+              controller: _vehicleDescController,
+              maxLength: 80,
+              decoration: const InputDecoration(
+                labelText: 'ยี่ห้อ / สีรถ (ไม่บังคับ)',
+                hintText: 'เช่น กระบะ Isuzu สีขาว',
               ),
             ),
             const SizedBox(height: FixGoSpacing.lg),
@@ -305,7 +378,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ],
             ),
             const SizedBox(height: FixGoSpacing.lg),
-            const _SectionTitle('งานบริการที่รับทำ'),
+            const _SectionTitle('งานบริการที่รับทำ (เลือกได้หลายข้อ)'),
             FutureBuilder<List<ServiceCategory>>(
               future: _categoriesFuture,
               builder: (context, snapshot) {
@@ -316,28 +389,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
-                return Wrap(
-                  spacing: FixGoSpacing.sm,
-                  runSpacing: FixGoSpacing.sm,
-                  children: [
+                return _ChoiceGrid(
+                  items: [
                     for (final category in categories)
-                      FilterChip(
-                        label: Text(category.name),
-                        selected: _categoryIds.contains(category.id),
-                        onSelected: (selected) => setState(() {
-                          if (selected) {
-                            _categoryIds.add(category.id);
-                          } else {
-                            _categoryIds.remove(category.id);
-                          }
-                        }),
+                      (
+                        id: category.id,
+                        label: category.name,
+                        asset: categoryIconAsset(category.iconKey),
                       ),
                   ],
+                  selected: _categoryIds,
+                  onChanged: () => setState(() {}),
                 );
               },
             ),
             const SizedBox(height: FixGoSpacing.lg),
-            const _SectionTitle('ประเภทรถที่รับ'),
+            const _SectionTitle('ประเภทรถที่รับ (เลือกได้หลายข้อ)'),
             FutureBuilder<List<VehicleType>>(
               future: _vehicleTypesFuture,
               builder: (context, snapshot) {
@@ -348,23 +415,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
-                return Wrap(
-                  spacing: FixGoSpacing.sm,
-                  runSpacing: FixGoSpacing.sm,
-                  children: [
+                return _ChoiceGrid(
+                  items: [
                     for (final vehicleType in vehicleTypes)
-                      FilterChip(
-                        label: Text(vehicleType.name),
-                        selected: _vehicleTypeIds.contains(vehicleType.id),
-                        onSelected: (selected) => setState(() {
-                          if (selected) {
-                            _vehicleTypeIds.add(vehicleType.id);
-                          } else {
-                            _vehicleTypeIds.remove(vehicleType.id);
-                          }
-                        }),
+                      (
+                        id: vehicleType.id,
+                        label: vehicleType.name,
+                        asset: vehicleIconAsset(vehicleType.slug),
                       ),
                   ],
+                  selected: _vehicleTypeIds,
+                  onChanged: () => setState(() {}),
                 );
               },
             ),
@@ -507,6 +568,192 @@ class _TimeField extends StatelessWidget {
       child: InputDecorator(
         decoration: InputDecoration(labelText: label),
         child: Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
+      ),
+    );
+  }
+}
+
+/// รูปโปรไฟล์หน้าตรง: ทีมงานใช้ตรวจตัวตน และลูกค้าเห็นในการ์ดช่างตอนช่างรับงาน
+class _ProfilePhotoPicker extends StatelessWidget {
+  const _ProfilePhotoPicker({
+    required this.photoUrl,
+    required this.uploading,
+    required this.onPick,
+  });
+
+  final String? photoUrl;
+  final bool uploading;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: uploading ? null : onPick,
+          child: Stack(
+            children: [
+              CircleAvatar(
+                radius: 52,
+                backgroundColor: FixGoColors.accentSoft,
+                backgroundImage:
+                    photoUrl == null ? null : NetworkImage(photoUrl!),
+                child: photoUrl == null
+                    ? Image.asset(technicianIconAsset, height: 64)
+                    : null,
+              ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: FixGoColors.accent,
+                  child: uploading
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.photo_camera,
+                          size: 18,
+                          color: Colors.white,
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: FixGoSpacing.sm),
+        Text(
+          photoUrl == null ? 'แตะเพื่อใส่รูปหน้าตรง (บังคับ)' : 'เปลี่ยนรูป',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        Text(
+          'เห็นหน้าชัด ไม่ใส่แว่นดำ ลูกค้าจะเห็นรูปนี้ตอนคุณรับงาน',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+}
+
+/// ตัวเลือกแบบการ์ดพร้อมไอคอน 3D กดเพื่อเลือก/ยกเลิก เลือกได้หลายข้อ
+class _ChoiceGrid extends StatelessWidget {
+  const _ChoiceGrid({
+    required this.items,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<({String id, String label, String asset})> items;
+  final Set<String> selected;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = FixGoSpacing.sm;
+        final width = (constraints.maxWidth - spacing * 2) / 3;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (final item in items)
+              SizedBox(
+                width: width,
+                child: _ChoiceTile(
+                  label: item.label,
+                  asset: item.asset,
+                  selected: selected.contains(item.id),
+                  onTap: () {
+                    if (!selected.remove(item.id)) selected.add(item.id);
+                    onChanged();
+                  },
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ChoiceTile extends StatelessWidget {
+  const _ChoiceTile({
+    required this.label,
+    required this.asset,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String asset;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: Material(
+        color: selected ? FixGoColors.accentSoft : FixGoColors.background,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(FixGoRadius.md),
+          side: BorderSide(
+            color: selected ? FixGoColors.accent : FixGoColors.hairline,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
+                child: Column(
+                  children: [
+                    Image.asset(asset, height: 44, width: 44),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 34,
+                      child: Center(
+                        child: Text(
+                          label,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            height: 1.3,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected)
+                const Positioned(
+                  top: 6,
+                  right: 6,
+                  child: Icon(
+                    Icons.check_circle,
+                    size: 20,
+                    color: FixGoColors.accent,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

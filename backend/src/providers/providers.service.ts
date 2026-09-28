@@ -26,50 +26,89 @@ export class ProvidersService {
     private readonly events: OrderEventsService,
   ) {}
 
-  /** uploaderId = sub ของโทเคนที่ใช้ขอ presign (ช่างที่ยังไม่สมัครคือ pending:<เบอร์>) */
+  /**
+   * ยื่นใบสมัคร uploaderId = sub ของโทเคนที่ใช้ขอ presign (ช่างที่ยังไม่สมัครคือ pending:<เบอร์>)
+   * ใบสมัครที่ถูกปฏิเสธ (REJECTED) ส่งใหม่ได้ ข้อมูลเดิมถูกแทนที่และกลับไปรอตรวจ
+   */
   async register(
     phone: string,
     dto: RegisterProviderDto,
     uploaderId: string,
   ): Promise<Provider> {
     this.uploads.assertOwnedUploads(
-      dto.toolPhotoUrls,
+      [...dto.toolPhotoUrls, dto.photoUrl],
       uploaderId,
       'PROVIDER_TOOL',
     );
     const existing = await this.prisma.provider.findUnique({
       where: { phone },
     });
-    if (existing) {
+    if (existing && existing.status !== ProviderStatus.REJECTED) {
       throw new BadRequestException('เบอร์นี้ลงทะเบียนเป็นช่างไว้แล้ว');
     }
 
-    const provider = await this.prisma.provider.create({
-      data: {
-        phone,
-        realName: dto.realName,
-        nickname: dto.nickname,
-        experienceYears: dto.experienceYears,
-        shopName: dto.shopName,
-        facebookPage: dto.facebookPage,
-        baseLat: dto.baseLat,
-        baseLng: dto.baseLng,
-        openMinute: dto.openMinute,
-        closeMinute: dto.closeMinute,
-        status: ProviderStatus.PENDING,
-        serviceCategories: {
-          create: dto.categoryIds.map((categoryId) => ({ categoryId })),
-        },
-        vehicleTypes: {
-          create: dto.vehicleTypeIds.map((vehicleTypeId) => ({
-            vehicleTypeId,
-          })),
-        },
-        toolPhotos: {
-          create: dto.toolPhotoUrls.map((url) => ({ url })),
-        },
+    const data = {
+      realName: dto.realName,
+      nickname: dto.nickname,
+      experienceYears: dto.experienceYears,
+      shopName: dto.shopName ?? null,
+      facebookPage: dto.facebookPage ?? null,
+      baseLat: dto.baseLat,
+      baseLng: dto.baseLng,
+      openMinute: dto.openMinute,
+      closeMinute: dto.closeMinute,
+      photoUrl: dto.photoUrl,
+      vehiclePlate: dto.vehiclePlate.trim().toUpperCase(),
+      vehicleDesc: dto.vehicleDesc?.trim() || null,
+      status: ProviderStatus.PENDING,
+      reviewNote: null,
+      reviewedAt: null,
+    };
+    const relations = {
+      serviceCategories: {
+        create: dto.categoryIds.map((categoryId) => ({ categoryId })),
       },
-    });
+      vehicleTypes: {
+        create: dto.vehicleTypeIds.map((vehicleTypeId) => ({ vehicleTypeId })),
+      },
+      toolPhotos: {
+        create: dto.toolPhotoUrls.map((url) => ({ url })),
+      },
+    };
+
+    let replacedPhotos: string[] = [];
+    const provider = existing
+      ? await this.prisma.$transaction(async (tx) => {
+          const old = await tx.providerToolPhoto.findMany({
+            where: { providerId: existing.id },
+            select: { url: true },
+          });
+          replacedPhotos = [
+            ...old.map((photo) => photo.url),
+            ...(existing.photoUrl ? [existing.photoUrl] : []),
+          ].filter(
+            (url) => url !== dto.photoUrl && !dto.toolPhotoUrls.includes(url),
+          );
+          await tx.providerServiceCategory.deleteMany({
+            where: { providerId: existing.id },
+          });
+          await tx.providerVehicleType.deleteMany({
+            where: { providerId: existing.id },
+          });
+          await tx.providerToolPhoto.deleteMany({
+            where: { providerId: existing.id },
+          });
+          return tx.provider.update({
+            where: { id: existing.id },
+            data: { ...data, ...relations },
+          });
+        })
+      : await this.prisma.provider.create({
+          data: { phone, ...data, ...relations },
+        });
+    if (replacedPhotos.length > 0) {
+      await this.uploads.deleteUploads(replacedPhotos);
+    }
     void this.adminAlert.providerApplied(provider.nickname);
     return provider;
   }

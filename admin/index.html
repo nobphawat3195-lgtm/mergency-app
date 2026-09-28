@@ -110,6 +110,19 @@
   .hidden { display: none; }
   .error { color: var(--error); margin-top: 12px; }
   .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .applicants { display: grid; gap: 14px; }
+  .applicant { border: 1px solid var(--line, #D5E8DE); border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+  .applicant-head { display: flex; gap: 12px; align-items: center; }
+  .applicant-head img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; background: #ECF8F1; }
+  .applicant dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: 14px; }
+  .applicant dt { color: #4A6259; }
+  .applicant dd { margin: 0; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { background: #ECF8F1; border-radius: 999px; padding: 2px 10px; font-size: 13px; }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tools img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; border: 1px solid #D5E8DE; }
+  .plate { border: 2px solid #122821; border-radius: 6px; padding: 1px 8px; font-weight: 800; }
+  .applicant-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -155,10 +168,8 @@
     </div>
 
     <div class="card">
-      <h2>ช่างรออนุมัติ</h2>
-      <div class="table-wrap"><table><thead><tr>
-        <th>ชื่อ</th><th>เบอร์</th><th>ร้าน/อู่</th><th>เฟซบุ๊ก</th><th>เวลาทำงาน</th><th></th>
-      </tr></thead><tbody id="providers-body"></tbody></table></div>
+      <h2>ช่างรออนุมัติ <span class="muted">(ตรวจรูปหน้า เครื่องมือ และบริการที่รับ ก่อนกดอนุมัติ)</span></h2>
+      <div id="providers-body" class="applicants"></div>
     </div>
 
     <div class="card">
@@ -384,25 +395,56 @@ async function loadSummary() {
 async function loadProviders() {
   const providers = await api('/admin/providers?status=PENDING');
   el('providers-body').innerHTML = providers.length === 0
-    ? '<tr><td colspan="6">ไม่มีช่างรออนุมัติ</td></tr>'
-    : providers.map((provider) => `
-      <tr>
-        <td>${escapeHtml(provider.realName)} (${escapeHtml(provider.nickname)})<br><small>ประสบการณ์ ${escapeHtml(provider.experienceYears)} ปี</small></td>
-        <td>${escapeHtml(provider.phone)}</td>
-        <td>${escapeHtml(provider.shopName || '-')}</td>
-        <td>${escapeHtml(provider.facebookPage || '-')}</td>
-        <td>${escapeHtml(formatMinute(provider.openMinute))}-${escapeHtml(formatMinute(provider.closeMinute))}</td>
-        <td>
+    ? '<p class="muted">ไม่มีช่างรออนุมัติ</p>'
+    : providers.map((provider) => {
+      const photo = provider.photoUrl
+        ? `<a href="${escapeHtml(provider.photoUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(provider.photoUrl)}" alt="รูปช่าง"></a>`
+        : '<img alt="ไม่มีรูป">';
+      const tools = (provider.toolPhotos || []).map((photo) =>
+        `<a href="${escapeHtml(photo.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(photo.url)}" alt="รูปเครื่องมือ"></a>`).join('');
+      const categories = (provider.serviceCategories || []).map((item) =>
+        `<span class="tag">${escapeHtml(item.category.name)}</span>`).join('');
+      const vehicles = (provider.vehicleTypes || []).map((item) =>
+        `<span class="tag">${escapeHtml(item.vehicleType.name)}</span>`).join('');
+      const map = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(provider.baseLat + ',' + provider.baseLng)}`;
+      return `
+      <div class="applicant">
+        <div class="applicant-head">
+          ${photo}
+          <div>
+            <strong>${escapeHtml(provider.realName)} (${escapeHtml(provider.nickname)})</strong><br>
+            <span class="muted">${escapeHtml(provider.phone)} · ประสบการณ์ ${escapeHtml(provider.experienceYears)} ปี · สมัครเมื่อ ${escapeHtml(new Date(provider.createdAt).toLocaleString('th-TH'))}</span>
+          </div>
+        </div>
+        <dl>
+          <dt>ร้าน/อู่</dt><dd>${escapeHtml(provider.shopName || '-')}</dd>
+          <dt>เฟซบุ๊ก</dt><dd>${escapeHtml(provider.facebookPage || '-')}</dd>
+          <dt>เวลาทำงาน</dt><dd>${escapeHtml(formatMinute(provider.openMinute))}-${escapeHtml(formatMinute(provider.closeMinute))}</dd>
+          <dt>พื้นที่รับงาน</dt><dd><a href="${escapeHtml(map)}" target="_blank" rel="noopener">ดูบนแผนที่</a></dd>
+          <dt>รถที่ใช้</dt><dd>${provider.vehiclePlate ? `<span class="plate">${escapeHtml(provider.vehiclePlate)}</span>` : '-'} ${escapeHtml(provider.vehicleDesc || '')}</dd>
+          <dt>บริการที่รับ</dt><dd class="tags">${categories || '-'}</dd>
+          <dt>ประเภทรถที่รับ</dt><dd class="tags">${vehicles || '-'}</dd>
+        </dl>
+        <div><span class="muted">รูปเครื่องมือ (${(provider.toolPhotos || []).length} รูป กดเพื่อดูภาพใหญ่)</span><div class="tools">${tools || '-'}</div></div>
+        <div class="applicant-actions">
           <button onclick="setProviderStatus('${provider.id}','VERIFIED')">อนุมัติ</button>
-          <button class="danger" onclick="setProviderStatus('${provider.id}','SUSPENDED')">ปฏิเสธ</button>
-        </td>
-      </tr>`).join('');
+          <button class="danger" onclick="setProviderStatus('${provider.id}','REJECTED')">ปฏิเสธพร้อมเหตุผล</button>
+        </div>
+      </div>`;
+    }).join('');
 }
 
 async function setProviderStatus(id, status) {
+  let note;
+  if (status !== 'VERIFIED') {
+    note = prompt('เหตุผลที่ช่างจะเห็นในแอป เช่น "รูปเครื่องมือไม่ชัด กรุณาถ่ายใหม่"');
+    if (!note || note.trim().length < 3) return;
+  } else if (!confirm('อนุมัติช่างคนนี้ให้เริ่มรับงาน?')) {
+    return;
+  }
   await api('/admin/providers/' + id + '/status', {
     method: 'PATCH',
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(note ? { status, note: note.trim() } : { status }),
   });
   await Promise.all([loadProviders(), loadSummary()]);
 }

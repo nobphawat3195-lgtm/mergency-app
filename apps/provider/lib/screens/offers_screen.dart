@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../app_state.dart';
+import 'register_screen.dart';
 
 /// หน้าหลักแอปช่าง (FixGo Fixer): สถานะพร้อมรับงาน งานเข้าใหม่ งานที่กำลังทำ
 /// สรุปวันนี้ และเมนูหลัก ตัวเลขทุกตัวมาจาก API จริง ไม่มีค่าสมมติ
@@ -29,6 +30,10 @@ class _OffersScreenState extends State<OffersScreen> {
   bool _restoredTrackingStarted = false;
   _TodaySummary? _summary;
   Order? _activeJob;
+
+  /// สถานะบัญชีจาก backend: PENDING / VERIFIED / REJECTED / SUSPENDED
+  String? _accountStatus;
+  String? _reviewNote;
   StreamSubscription<PushEvent>? _pushSub;
 
   @override
@@ -38,7 +43,11 @@ class _OffersScreenState extends State<OffersScreen> {
     unawaited(_syncOnlineStatus());
     // มีงานใหม่หรือสถานะงานเปลี่ยน: ดึงทันทีไม่ต้องรอรอบ 10 วิ
     final push = PushNotifications.instance;
-    _pushSub = push.onAny.listen((_) => unawaited(_refresh()));
+    _pushSub = push.onAny.listen(
+      (event) => unawaited(
+        event.type == 'ACCOUNT' ? _syncOnlineStatus() : _refresh(),
+      ),
+    );
     // ดึงงานใหม่ทุก 10 วิ และให้ countdown เดินด้วย
     _timer = Timer.periodic(const Duration(seconds: 10), (_) {
       unawaited(_refresh());
@@ -53,6 +62,10 @@ class _OffersScreenState extends State<OffersScreen> {
       final profile = await state.api.getProviderProfile();
       if (!mounted) return;
       state.setOnline(profile['isOnline'] as bool? ?? false);
+      setState(() {
+        _accountStatus = profile['status'] as String?;
+        _reviewNote = profile['reviewNote'] as String?;
+      });
     } on ApiException {
       // ใช้ค่าที่มีอยู่ต่อไป
     }
@@ -146,6 +159,13 @@ class _OffersScreenState extends State<OffersScreen> {
     }
   }
 
+  Future<void> _resubmit() async {
+    final sent = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const RegisterScreen(resubmit: true)),
+    );
+    if (sent == true && mounted) await _syncOnlineStatus();
+  }
+
   Future<void> _toggleOnline(bool value) async {
     try {
       await ProviderAppScope.of(context).api.setOnline(value);
@@ -214,8 +234,18 @@ class _OffersScreenState extends State<OffersScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (_accountStatus != null &&
+                        _accountStatus != 'VERIFIED') ...[
+                      _AccountStatusCard(
+                        status: _accountStatus!,
+                        note: _reviewNote,
+                        onResubmit: _resubmit,
+                      ),
+                      const SizedBox(height: FixGoSpacing.md),
+                    ],
                     _SectionCard(
                       icon: Icons.location_on,
+                      iconAsset: emergencyIconAsset,
                       title: 'งานเข้ามาใหม่ ใกล้คุณ',
                       trailing:
                           _offers.isEmpty ? null : '${_offers.length} งาน',
@@ -229,9 +259,17 @@ class _OffersScreenState extends State<OffersScreen> {
                           : _offers.isEmpty
                               ? _EmptyOffers(
                                   message: _error ??
-                                      (isOnline
-                                          ? 'ยังไม่มีงานเข้ามาตอนนี้ ระบบเช็กงานใหม่ทุก 10 วินาที'
-                                          : 'เปิด "พร้อมรับงาน" ด้านบนเพื่อเริ่มรับงาน'),
+                                      (_accountStatus != null &&
+                                              _accountStatus != 'VERIFIED'
+                                          ? 'รับงานได้หลังทีมงานอนุมัติบัญชี'
+                                          : isOnline
+                                              ? 'กำลังรองานใกล้คุณ ระบบเช็กงานใหม่ทุก 10 วินาที'
+                                              : 'ตอนนี้ปิดรับงานอยู่ เปิดแล้วงานใกล้คุณจะเด้งขึ้นที่นี่'),
+                                  actionLabel:
+                                      !isOnline && _accountStatus == 'VERIFIED'
+                                          ? 'เปิดรับงานเลย'
+                                          : null,
+                                  onAction: () => _toggleOnline(true),
                                 )
                               : Column(
                                   children: [
@@ -250,6 +288,7 @@ class _OffersScreenState extends State<OffersScreen> {
                     const SizedBox(height: FixGoSpacing.md),
                     _SectionCard(
                       icon: Icons.route_outlined,
+                      iconAsset: technicianIconAsset,
                       title: 'ความคืบหน้างาน',
                       actionLabel:
                           _activeJob == null ? null : 'ดูรายละเอียดงาน',
@@ -472,6 +511,7 @@ class _OnlineToggle extends StatelessWidget {
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
     required this.icon,
+    this.iconAsset,
     required this.title,
     required this.child,
     this.trailing,
@@ -480,6 +520,9 @@ class _SectionCard extends StatelessWidget {
   });
 
   final IconData icon;
+
+  /// ไอคอน 3D แทนไอคอนเส้น (ถ้ามี)
+  final String? iconAsset;
   final String title;
   final String? trailing;
   final String? actionLabel;
@@ -500,8 +543,11 @@ class _SectionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: FixGoColors.accent, size: 22),
-              const SizedBox(width: 6),
+              if (iconAsset != null)
+                Image.asset(iconAsset!, height: 28, width: 28)
+              else
+                Icon(icon, color: FixGoColors.accent, size: 22),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   title,
@@ -556,9 +602,11 @@ class _SectionCard extends StatelessWidget {
 }
 
 class _EmptyOffers extends StatelessWidget {
-  const _EmptyOffers({required this.message});
+  const _EmptyOffers({required this.message, this.actionLabel, this.onAction});
 
   final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -569,13 +617,10 @@ class _EmptyOffers extends StatelessWidget {
         borderRadius: BorderRadius.circular(FixGoRadius.md),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(
-            Icons.notifications_none_rounded,
-            size: 32,
-            color: FixGoColors.accent,
-          ),
-          const SizedBox(height: 6),
+          Image.asset(technicianIconAsset, height: 64),
+          const SizedBox(height: 8),
           Text(
             message,
             textAlign: TextAlign.center,
@@ -584,13 +629,20 @@ class _EmptyOffers extends StatelessWidget {
               color: FixGoColors.textSecondary,
             ),
           ),
+          if (actionLabel != null) ...[
+            const SizedBox(height: FixGoSpacing.md),
+            FixGoButton(
+              label: actionLabel!,
+              icon: Icons.power_settings_new_rounded,
+              onPressed: onAction,
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-/// 4 ขั้นตอนหลักของงานตรงกับสถานะ backend ที่ลูกค้าเห็นในหน้าติดตามงานด้วย
 class _JobProgress extends StatelessWidget {
   const _JobProgress({required this.order});
 
@@ -906,6 +958,11 @@ class _OfferCardState extends State<_OfferCard> {
         children: [
           Row(
             children: [
+              CategoryIconArt(
+                iconKey: widget.offer.categoryIconKey ?? 'mechanic',
+                size: 44,
+              ),
+              const SizedBox(width: FixGoSpacing.sm),
               Expanded(
                 child: Text(
                   widget.offer.subServiceName ??
@@ -1006,6 +1063,83 @@ class _OfferCardState extends State<_OfferCard> {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ใบสมัครยังไม่ผ่านการอนุมัติ: บอกสถานะชัดๆ แทนให้ช่างกดเปิดรับงานแล้วเจอ error
+class _AccountStatusCard extends StatelessWidget {
+  const _AccountStatusCard({
+    required this.status,
+    required this.note,
+    required this.onResubmit,
+  });
+
+  final String status;
+  final String? note;
+  final VoidCallback onResubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color, title, body) = switch (status) {
+      'PENDING' => (
+          Icons.hourglass_top_rounded,
+          FixGoColors.warning,
+          'รอทีมงานตรวจสอบใบสมัคร',
+          'ทีมงานกำลังตรวจรูป เครื่องมือ และบริการที่คุณรับ ปกติไม่เกิน 1-2 วันทำการ '
+              'อนุมัติแล้วจะแจ้งเตือนให้ทราบ',
+        ),
+      'REJECTED' => (
+          Icons.error_outline_rounded,
+          FixGoColors.error,
+          'ใบสมัครยังไม่ผ่าน',
+          note ?? 'แก้ไขข้อมูลแล้วส่งใบสมัครใหม่ได้',
+        ),
+      _ => (
+          Icons.block_rounded,
+          FixGoColors.error,
+          'บัญชีถูกระงับชั่วคราว',
+          note ?? 'ติดต่อทีมงาน FixGo เพื่อสอบถามรายละเอียด',
+        ),
+    };
+    return Container(
+      padding: const EdgeInsets.all(FixGoSpacing.md),
+      decoration: BoxDecoration(
+        color: FixGoColors.background,
+        borderRadius: BorderRadius.circular(FixGoRadius.lg),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+        boxShadow: fixGoCardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: FixGoSpacing.sm),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: FixGoSpacing.xs),
+          Text(body),
+          if (status == 'REJECTED') ...[
+            const SizedBox(height: FixGoSpacing.md),
+            FixGoButton(
+              label: 'แก้ไขและส่งใบสมัครใหม่',
+              onPressed: onResubmit,
+            ),
+          ],
         ],
       ),
     );

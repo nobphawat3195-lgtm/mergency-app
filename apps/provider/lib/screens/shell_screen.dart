@@ -41,7 +41,8 @@ class _ProviderShellScreenState extends State<ProviderShellScreen> {
   }
 
   /// งานใหม่อยู่หน้าหลัก สถานะงานที่รับแล้ว/การชำระเงินอยู่หน้างานของฉัน
-  int _tabFor(PushEvent event) => event.type == 'OFFER' ? 0 : 1;
+  int _tabFor(PushEvent event) =>
+      event.type == 'OFFER' || event.type == 'ACCOUNT' ? 0 : 1;
 
   void _openFromPush(PushEvent event) {
     setState(() => _index = _tabFor(event));
@@ -301,6 +302,8 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
         return 'รอทีมงานอนุมัติ';
       case 'VERIFIED':
         return 'อนุมัติแล้ว พร้อมรับงาน';
+      case 'REJECTED':
+        return 'ใบสมัครยังไม่ผ่าน ดูรายละเอียดที่หน้าหลัก';
       case 'SUSPENDED':
         return 'ถูกระงับการใช้งาน';
       default:

@@ -31,6 +31,12 @@ export class AdminLoginDto {
 export class SetProviderStatusDto {
   @IsEnum(ProviderStatus)
   status!: ProviderStatus;
+
+  /** เหตุผลที่ช่างเห็นในแอป บังคับเมื่อปฏิเสธ (REJECTED) หรือระงับ (SUSPENDED) */
+  @IsOptional()
+  @IsString()
+  @Length(3, 300)
+  note?: string;
 }
 
 export class CancelOrderDto {
@@ -83,7 +89,7 @@ export class AdminController {
     @Param('id') id: string,
     @Body() dto: SetProviderStatusDto,
   ) {
-    return this.admin.setProviderStatus(id, dto.status);
+    return this.admin.setProviderStatus(id, dto.status, dto.note);
   }
 
   @Get('orders')

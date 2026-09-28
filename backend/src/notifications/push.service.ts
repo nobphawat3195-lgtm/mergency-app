@@ -18,6 +18,7 @@ export type PushType =
   | 'QUOTE_REJECTED'
   | 'COMPLETED'
   | 'CANCELLED'
+  | 'ACCOUNT'
   | 'PAID'
   | 'PAYMENT_REVIEW';
 
@@ -63,6 +64,40 @@ export class PushService {
 
   async removeAllDevices(userId: string, role: Role) {
     await this.prisma.deviceToken.deleteMany({ where: { role, userId } });
+  }
+
+  /** แจ้งผลตรวจใบสมัครช่าง (ไม่ผูกกับงาน orderId ว่าง) */
+  async providerReviewed(
+    providerId: string,
+    approved: boolean,
+    note: string | null,
+  ): Promise<void> {
+    try {
+      const devices = await this.prisma.deviceToken.findMany({
+        where: { role: Role.PROVIDER, userId: providerId },
+        select: { token: true },
+      });
+      const message: PushMessage = approved
+        ? {
+            title: 'บัญชีช่างได้รับอนุมัติแล้ว',
+            body: 'เปิดสวิตช์ "พร้อมรับงาน" เพื่อเริ่มรับงานได้เลย',
+            data: { type: 'ACCOUNT', orderId: '', orderNo: '' },
+          }
+        : {
+            title: 'ใบสมัครช่างยังไม่ผ่าน',
+            body: note ?? 'ดูรายละเอียดและส่งใบสมัครใหม่ได้ในแอป',
+            data: { type: 'ACCOUNT', orderId: '', orderNo: '' },
+          };
+      await Promise.all(
+        devices.map(({ token }) =>
+          this.sender.send(token, message).catch((error: Error) => {
+            this.logger.warn(`ส่ง push ไม่สำเร็จ: ${error.message}`);
+          }),
+        ),
+      );
+    } catch (error) {
+      this.logger.error('แจ้งผลตรวจใบสมัครช่างไม่สำเร็จ', error as Error);
+    }
   }
 
   private async sendToUsers(

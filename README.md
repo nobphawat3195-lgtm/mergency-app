@@ -30,6 +30,7 @@ The platform has three parts: a customer app, a mechanic app ("FixGo Fixer") and
 - **Used-car inspection mode.** A 134-point checklist in 11 categories, with measured values (paint thickness, tread, brake pads, battery), required photo evidence, weighted A–E grading and red flags for flood, crash, odometer and paperwork problems.
 - **Security and privacy (PDPA).**
   - OTP login is rate-limited.
+  - Mechanics are reviewed before they can take jobs: profile photo, licence plate, tool photos, services and vehicle types; admins approve or reject with a reason the mechanic sees in the app, and a rejected mechanic can fix and resubmit.
   - Order ownership and role guards return 404 to strangers.
   - Upload URLs must be signed and are write-once. Files are checked by magic bytes and served with `nosniff` and a CSP.
   - Internal fields such as the commission rate are stripped from API responses.
@@ -42,7 +43,7 @@ The platform has three parts: a customer app, a mechanic app ("FixGo Fixer") and
   - The API refuses to start with missing or placeholder secrets.
   - A trial mode lets the team test before SMS is paid for.
 - **CI (GitHub Actions)** runs:
-  - backend typecheck and tests (108 unit tests)
+  - backend typecheck and tests (112 unit tests)
   - Flutter analyze and tests (shared package and customer app)
   - a Docker boot test
   - a web image smoke test through the real Caddyfile
@@ -145,5 +146,5 @@ Quality checks: `npm run typecheck && npm test` (backend), `flutter analyze && f
 ## Attribution
 
 - The main 3D service icons were made by the project owner.
-- Lightning, siren and mechanic icons come from [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT). The license is in `packages/fixgo_core/assets/icons/licenses/`.
+- Lightning, siren, mechanic and the 3D vehicle-type icons come from [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT). The license is in `packages/fixgo_core/assets/icons/licenses/`.
 - Noto Sans Thai is used under the SIL Open Font License (`packages/fixgo_core/assets/fonts/OFL.txt`).

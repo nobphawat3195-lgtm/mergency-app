@@ -28,6 +28,26 @@ String categoryIconAsset(String iconKey) {
   }
 }
 
+/// ไอคอน 3D ประเภทรถ จาก Microsoft Fluent Emoji (MIT) ชุดเดียวกับ emergency/technician
+/// slug มาจาก VehicleType ใน backend/prisma/seed.ts (รถ EV = รถเก๋ง + สายฟ้า)
+String vehicleIconAsset(String slug) {
+  const base = 'packages/fixgo_core/assets/icons/vehicles';
+  switch (slug) {
+    case 'sedan':
+    case 'suv':
+    case 'pickup':
+    case 'van':
+    case 'motorcycle':
+    case 'ev':
+    case 'euro':
+    case 'truck':
+    case 'machinery':
+      return '$base/vehicle_$slug.png';
+    default:
+      return '$base/vehicle_sedan.png';
+  }
+}
+
 /// widget ไอคอนหมวดบริการขนาดคงที่ ใช้ในลิสต์และกริด
 class CategoryIconArt extends StatelessWidget {
   const CategoryIconArt({super.key, required this.iconKey, this.size = 58});

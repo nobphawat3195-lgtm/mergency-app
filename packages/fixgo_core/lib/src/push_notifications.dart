@@ -60,6 +60,7 @@ class PushEvent {
 
   /// OFFER, MATCHED, EN_ROUTE, IN_PROGRESS, QUOTE_PROPOSED, QUOTE_APPROVED,
   /// QUOTE_REJECTED, COMPLETED, CANCELLED, PAID, NO_MATCH
+  /// ACCOUNT = ผลตรวจใบสมัครช่าง (orderId ว่าง)
   final String type;
   final String orderId;
   final String? title;

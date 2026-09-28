@@ -51,6 +51,7 @@ enum ProviderStatus {
   PENDING
   VERIFIED
   SUSPENDED
+  REJECTED // ใบสมัครไม่ผ่าน ช่างแก้ไขแล้วส่งใหม่ได้ (กลับเป็น PENDING)
 }
 
 model Provider {
@@ -77,6 +78,9 @@ model Provider {
   closeMinute Int
 
   status     ProviderStatus @default(PENDING)
+  /// เหตุผลที่แอดมินแจ้งช่างตอนปฏิเสธหรือระงับ ช่างเห็นในแอป
+  reviewNote String?
+  reviewedAt DateTime?
   isOnline   Boolean        @default(false)
   currentLat Float?
   currentLng Float?
