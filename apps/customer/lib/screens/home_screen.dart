@@ -2,6 +2,7 @@ import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../symptoms.dart';
 import 'booking/booking_flow.dart';
 import 'inspection_detail_screen.dart';
 
@@ -87,6 +88,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// เรียกช่างจากอาการ: ระบบเลือกหมวดและบริการย่อยให้ ลูกค้าเหลือแค่เลือกประเภทรถและยืนยัน
+  void _startFromSymptom(CarSymptom symptom, List<ServiceCategory> categories) {
+    final category = categoryForSymptom(symptom, categories);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BookingFlow(
+          initialCategory: category,
+          pickupLocation: _location,
+          initialSubServiceKeyword:
+              category == null ? null : symptom.subServiceKeyword,
+          initialNote: symptom.note,
+        ),
+      ),
+    );
+  }
+
   void _openInspection(ServiceCategory? inspection) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -121,7 +138,6 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (context, snapshot) {
             final categories = snapshot.data ?? const <ServiceCategory>[];
             final inspection = _findCategory(categories, 'inspection');
-            final battery = _findCategory(categories, 'battery');
 
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -164,18 +180,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: FixGoSpacing.md),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: FixGoSpacing.md,
-                  ),
-                  child: _HeroBanner(
-                    onShowSteps: () => _showHowItWorks(context),
-                  ),
-                ),
                 const SizedBox(height: FixGoSpacing.lg),
                 _SectionHeader(
-                  title: 'บริการยอดนิยม',
+                  title: 'รถเป็นอะไร? กดเลย',
                   actionLabel: 'ดูทั้งหมด',
                   onAction: _scrollToAllServices,
                 ),
@@ -183,47 +190,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.symmetric(
                     horizontal: FixGoSpacing.md,
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final (index, tile) in [
-                        (
-                          key: 'mechanic',
-                          title: 'ช่างซ่อมรถ',
-                          subtitle: 'ซ่อมถึงที่',
-                        ),
-                        (
-                          key: 'battery',
-                          title: 'จั๊มแบต',
-                          subtitle: 'สตาร์ทไม่ติด',
-                        ),
-                        (
-                          key: 'tire',
-                          title: 'ยางรั่ว',
-                          subtitle: 'ปะ/เปลี่ยนยาง',
-                        ),
-                        (
-                          key: 'tow',
-                          title: 'รถยก',
-                          subtitle: 'ยกไปอู่',
-                        ),
-                      ].indexed) ...[
-                        if (index > 0) const SizedBox(width: FixGoSpacing.sm),
-                        Expanded(
-                          child: _PopularServiceTile(
-                            title: tile.title,
-                            subtitle: tile.subtitle,
-                            iconAsset: categoryIconAsset(tile.key),
-                            onTap: tile.key == 'battery'
-                                ? () => _startJumpStart(battery)
-                                : () => _startBooking(
-                                      category:
-                                          _findCategory(categories, tile.key),
-                                    ),
-                          ),
-                        ),
-                      ],
-                    ],
+                  child: _SymptomGrid(
+                    onSelected: (symptom) =>
+                        _startFromSymptom(symptom, categories),
+                  ),
+                ),
+                const SizedBox(height: FixGoSpacing.lg),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: FixGoSpacing.md,
+                  ),
+                  child: _HeroBanner(
+                    onShowSteps: () => _showHowItWorks(context),
                   ),
                 ),
                 const SizedBox(height: FixGoSpacing.lg),
@@ -739,17 +717,41 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _PopularServiceTile extends StatelessWidget {
-  const _PopularServiceTile({
-    required this.title,
-    required this.subtitle,
-    required this.iconAsset,
-    required this.onTap,
-  });
+/// ตารางอาการรถ 3 คอลัมน์ ปุ่มใหญ่กดง่ายด้วยนิ้วโป้ง ข้อความยาวสุด 2 บรรทัด
+class _SymptomGrid extends StatelessWidget {
+  const _SymptomGrid({required this.onSelected});
 
-  final String title;
-  final String subtitle;
-  final String iconAsset;
+  final ValueChanged<CarSymptom> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = FixGoSpacing.sm;
+        final width = (constraints.maxWidth - spacing * 2) / 3;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (final symptom in carSymptoms)
+              SizedBox(
+                width: width,
+                child: _SymptomTile(
+                  symptom: symptom,
+                  onTap: () => onSelected(symptom),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SymptomTile extends StatelessWidget {
+  const _SymptomTile({required this.symptom, required this.onTap});
+
+  final CarSymptom symptom;
   final VoidCallback onTap;
 
   @override
@@ -765,31 +767,30 @@ class _PopularServiceTile extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(FixGoRadius.lg),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 12, 6, 12),
+            padding: const EdgeInsets.fromLTRB(6, 12, 6, 10),
             child: Column(
               children: [
-                Image.asset(iconAsset, height: 52, width: 52),
-                const SizedBox(height: 8),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
+                Image.asset(
+                  categoryIconAsset(symptom.iconKey),
+                  height: 46,
+                  width: 46,
                 ),
-                Text(
-                  subtitle,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    color: FixGoColors.textSecondary,
+                const SizedBox(height: 6),
+                SizedBox(
+                  height: 36,
+                  child: Center(
+                    child: Text(
+                      symptom.label,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        height: 1.3,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ),
               ],

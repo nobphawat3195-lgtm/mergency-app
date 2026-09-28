@@ -104,7 +104,7 @@ export class AccountService {
       });
       await tx.order.updateMany({
         where: { customerId },
-        data: { pickupAddress: null, note: null },
+        data: { pickupAddress: null, note: null, shareToken: null },
       });
       // ข้อมูลผู้ขายรถในงานตรวจรถเป็นข้อมูลที่ลูกค้าให้มา ลบไปพร้อมกัน
       await tx.inspectionReport.updateMany({
@@ -115,9 +115,11 @@ export class AccountService {
         where: { orderId: { in: orderIds } },
         data: { comment: null },
       });
-      await tx.otpCode.deleteMany({
-        where: { phone: customer.phone, role: Role.CUSTOMER },
-      });
+      if (customer.phone) {
+        await tx.otpCode.deleteMany({
+          where: { phone: customer.phone, role: Role.CUSTOMER },
+        });
+      }
       await tx.deviceToken.deleteMany({
         where: { role: Role.CUSTOMER, userId: customerId },
       });
@@ -125,6 +127,7 @@ export class AccountService {
         where: { id: customerId },
         data: {
           phone: `deleted:${customerId}`,
+          lineUserId: null,
           name: null,
           deletedAt: new Date(),
         },
@@ -173,6 +176,8 @@ export class AccountService {
       where: { providerId },
       select: { url: true },
     });
+    const photoUrls = toolPhotos.map((photo) => photo.url);
+    if (provider.photoUrl) photoUrls.push(provider.photoUrl);
     await this.prisma.$transaction(async (tx) => {
       await tx.providerToolPhoto.deleteMany({ where: { providerId } });
       await tx.dispatchAttempt.deleteMany({
@@ -192,19 +197,23 @@ export class AccountService {
           nickname: '',
           shopName: null,
           facebookPage: null,
+          photoUrl: null,
+          vehicleDesc: null,
+          vehiclePlate: null,
           bankName: null,
           bankAccountName: null,
           bankAccountNumber: null,
           promptPayId: null,
           currentLat: null,
           currentLng: null,
+          locationAt: null,
           isOnline: false,
           status: ProviderStatus.SUSPENDED,
           deletedAt: new Date(),
         },
       });
     });
-    await this.uploads.deleteUploads(toolPhotos.map((photo) => photo.url));
+    await this.uploads.deleteUploads(photoUrls);
   }
 
   /** ใช้ตรวจโทเคนทุกคำขอ: บัญชีที่ลบแล้วใช้โทเคนเก่าต่อไม่ได้ */

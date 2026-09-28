@@ -36,8 +36,32 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// ล็อกอิน LINE ไม่สำเร็จ (ผู้ใช้กดยกเลิก หรือตั๋วหมดอายุ) ให้หน้าเข้าสู่ระบบแจ้ง
+  bool lineLoginFailed = false;
+
+  /// เว็บ: LINE พากลับมาพร้อม ?line_ticket= ให้แลกเป็นโทเคนแล้วลบออกจากแถบที่อยู่ทันที
+  Future<bool> _completeLineLogin() async {
+    final query = browserQueryParameters();
+    final ticket = query['line_ticket'];
+    if (ticket == null && query['line_error'] == null) return false;
+    clearBrowserQuery();
+    if (ticket == null) {
+      lineLoginFailed = true;
+      return false;
+    }
+    try {
+      signIn(await api.exchangeLineTicket(ticket));
+      return true;
+    } catch (_) {
+      api.accessToken = null;
+      lineLoginFailed = true;
+      return false;
+    }
+  }
+
   /// เรียกก่อน runApp ห้าม throw เด็ดขาด ไม่งั้นแอปค้างจอขาวตั้งแต่เปิด
   Future<void> restoreSession() async {
+    if (await _completeLineLogin()) return;
     final String? token;
     try {
       token = await _tokenStore.read();

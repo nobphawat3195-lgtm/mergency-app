@@ -7,13 +7,9 @@ import {
   SetOnlineDto,
   UpdateLocationDto,
   UpdatePayoutInfoDto,
+  UpdatePublicProfileDto,
 } from './dto/provider.dto';
-import {
-  CurrentUser,
-  JwtAuthGuard,
-  Roles,
-  RolesGuard,
-} from '../auth/guards';
+import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
 import { AuthService, JwtPayload } from '../auth/auth.service';
 
 @Controller('providers')
@@ -57,6 +53,14 @@ export class ProvidersController {
   @Post('me/heartbeat')
   heartbeat(@CurrentUser() user: JwtPayload) {
     return this.providers.heartbeat(user.sub);
+  }
+
+  @Patch('me/public-profile')
+  updatePublicProfile(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdatePublicProfileDto,
+  ) {
+    return this.providers.updatePublicProfile(user.sub, dto);
   }
 
   @Patch('me/payout-info')

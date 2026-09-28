@@ -4,6 +4,7 @@ import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import 'public_profile_screen.dart';
 import 'jobs_screen.dart';
 import 'offers_screen.dart';
 import 'wallet_screen.dart';
@@ -136,6 +137,18 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
     _future ??= ProviderAppScope.of(context).api.getProviderProfile();
   }
 
+  Future<void> _editPublicProfile(Map<String, dynamic> profile) async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PublicProfileScreen(profile: profile),
+      ),
+    );
+    if (saved != true || !mounted) return;
+    setState(() {
+      _future = ProviderAppScope.of(context).api.getProviderProfile();
+    });
+  }
+
   Future<void> _editPayoutInfo(Map<String, dynamic> profile) async {
     final bankNameController =
         TextEditingController(text: profile['bankName'] as String? ?? '');
@@ -238,6 +251,18 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
                   leading: const Icon(Icons.verified_outlined),
                   title: const Text('สถานะบัญชี'),
                   subtitle: Text(_statusLabel(profile['status'] as String)),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.badge_outlined),
+                  title: const Text('ข้อมูลที่ลูกค้าเห็น'),
+                  subtitle: Text(
+                    profile['photoUrl'] != null &&
+                            profile['vehiclePlate'] != null
+                        ? 'รูปและทะเบียนรถครบแล้ว'
+                        : 'ใส่รูปและทะเบียนรถ ลูกค้าจะมั่นใจขึ้น',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _editPublicProfile(profile),
                 ),
                 ListTile(
                   leading: const Icon(Icons.account_balance_outlined),

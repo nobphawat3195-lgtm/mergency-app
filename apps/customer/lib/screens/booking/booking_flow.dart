@@ -14,6 +14,7 @@ class BookingFlow extends StatefulWidget {
     this.initialCategory,
     this.pickupLocation,
     this.initialSubServiceKeyword,
+    this.initialNote,
   });
 
   final ServiceCategory? initialCategory;
@@ -21,6 +22,9 @@ class BookingFlow extends StatefulWidget {
   /// ทางลัดจากหน้าแรก เช่น "จั๊ม" สำหรับเมนูจั๊มแบต: เลือกบริการย่อยที่ชื่อมีคำนี้ให้เลย
   /// แล้วข้ามไปขั้นเลือกประเภทรถทันที ผู้ใช้ไม่ต้องเลือกซ้ำ ถ้าหาไม่เจอจะกลับไปขั้นบริการย่อยตามปกติ
   final String? initialSubServiceKeyword;
+
+  /// ข้อความเริ่มต้นในช่องรายละเอียด เช่น อาการที่ลูกค้าเลือกจากหน้าแรก
+  final String? initialNote;
 
   /// ตำแหน่งที่ดึงมาจากหน้า Home แล้ว — ถ้า null (เช่น ผู้ใช้ปฏิเสธสิทธิ์ตอนนั้น)
   /// จะลองขอใหม่อีกครั้งตอนยืนยันออเดอร์
@@ -50,6 +54,7 @@ class _BookingFlowState extends State<BookingFlow> {
   void initState() {
     super.initState();
     _pickupLocation = widget.pickupLocation;
+    _note = widget.initialNote ?? '';
     if (widget.initialCategory != null) {
       _category = widget.initialCategory;
       _step = 1;

@@ -55,6 +55,14 @@
 	templates /index.html {
 		mime text/html
 	}
+	# ลิงก์ติดตามงานที่ลูกค้าแชร์ให้ครอบครัว: หน้า HTML เบาๆ ไม่ต้องโหลดแอป Flutter
+	@track path_regexp ^/track/[A-Za-z0-9_-]{43}$
+	rewrite @track /track.html
+	templates /track.html {
+		mime text/html
+	}
+	header @track Cache-Control "no-store"
+	header @track Referrer-Policy "no-referrer"
 	import flutter_web
 }
 

@@ -215,5 +215,34 @@ describe('environment safety', () => {
       ).toThrow('FCM_PROJECT_ID');
       expect(() => validateEnvironment(withSms)).not.toThrow();
     });
+
+    it('needs both LINE login credentials together', () => {
+      const withSms = {
+        ...base,
+        SMS_PROVIDER: 'none',
+        REVIEW_LOGIN_PHONES: '0811111111',
+        REVIEW_LOGIN_CODE: '482913',
+      };
+      expect(() =>
+        validateEnvironment({
+          ...withSms,
+          LINE_LOGIN_CHANNEL_ID: '1234567890',
+        }),
+      ).toThrow('LINE_LOGIN_CHANNEL_SECRET');
+      expect(() =>
+        validateEnvironment({
+          ...withSms,
+          LINE_LOGIN_CHANNEL_ID: 'not-a-number',
+          LINE_LOGIN_CHANNEL_SECRET: 'secret',
+        }),
+      ).toThrow('numeric');
+      expect(() =>
+        validateEnvironment({
+          ...withSms,
+          LINE_LOGIN_CHANNEL_ID: '1234567890',
+          LINE_LOGIN_CHANNEL_SECRET: 'secret',
+        }),
+      ).not.toThrow();
+    });
   });
 });

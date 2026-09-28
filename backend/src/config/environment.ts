@@ -148,6 +148,18 @@ export function validateEnvironment(
     }
   }
 
+  // ล็อกอินด้วย LINE (ไม่บังคับ) ต้องมีทั้ง Channel ID และ Channel secret
+  const lineId = String(config.LINE_LOGIN_CHANNEL_ID ?? '').trim();
+  const lineSecret = String(config.LINE_LOGIN_CHANNEL_SECRET ?? '').trim();
+  if (Boolean(lineId) !== Boolean(lineSecret)) {
+    throw new Error(
+      'LINE_LOGIN_CHANNEL_ID and LINE_LOGIN_CHANNEL_SECRET must be set together',
+    );
+  }
+  if (lineId && !/^\d+$/.test(lineId)) {
+    throw new Error('LINE_LOGIN_CHANNEL_ID must be the numeric Channel ID');
+  }
+
   const reviewPhones = String(config.REVIEW_LOGIN_PHONES ?? '').trim();
   if (reviewPhones && !/^\d{6}$/.test(String(config.REVIEW_LOGIN_CODE ?? ''))) {
     throw new Error(
@@ -181,4 +193,26 @@ export function allowedCorsOrigins(): string[] | true {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+}
+
+function trimUrl(value: string): string {
+  return value.trim().replace(/\/+$/, '');
+}
+
+/** ที่อยู่เว็บลูกค้า เช่น https://fixgo.co.th ใช้สร้างลิงก์ติดตามงานและพากลับหลังล็อกอิน LINE */
+export function publicWebUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const explicit = env.PUBLIC_WEB_URL?.trim();
+  if (explicit) return trimUrl(explicit);
+  const domain = env.WEB_DOMAIN?.trim();
+  return domain ? `https://${domain}` : null;
+}
+
+/** ที่อยู่ API ที่คนภายนอกเรียกได้ เช่น https://api.fixgo.co.th */
+export function publicApiUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const explicit = env.PUBLIC_API_URL?.trim();
+  if (explicit) return trimUrl(explicit);
+  const domain = env.API_DOMAIN?.trim();
+  return domain ? `https://${domain}` : 'http://localhost:3000';
 }

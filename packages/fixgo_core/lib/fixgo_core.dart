@@ -1,6 +1,7 @@
 library fixgo_core;
 
 export 'src/api_client.dart';
+export 'src/browser_url.dart';
 export 'src/category_icons.dart';
 export 'src/format.dart';
 export 'src/inspection.dart';

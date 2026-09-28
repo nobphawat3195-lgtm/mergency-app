@@ -14,6 +14,7 @@ import {
   RegisterProviderDto,
   UpdateLocationDto,
   UpdatePayoutInfoDto,
+  UpdatePublicProfileDto,
 } from './dto/provider.dto';
 
 @Injectable()
@@ -115,6 +116,7 @@ export class ProvidersService {
       data: {
         currentLat: dto.lat,
         currentLng: dto.lng,
+        locationAt: new Date(),
         lastSeenAt: new Date(),
       },
     });
@@ -143,6 +145,43 @@ export class ProvidersService {
       data: { lastSeenAt: new Date() },
     });
     return { ok: true };
+  }
+
+  /** ข้อมูลในการ์ดช่างที่ลูกค้าเห็น: ค่า "" = ลบ, ไม่ส่งฟิลด์ = ไม่เปลี่ยน */
+  async updatePublicProfile(
+    providerId: string,
+    dto: UpdatePublicProfileDto,
+  ): Promise<Provider> {
+    const current = await this.prisma.provider.findUnique({
+      where: { id: providerId },
+      select: { photoUrl: true },
+    });
+    if (!current) throw new NotFoundException('ไม่พบข้อมูลช่าง');
+
+    const clean = (value: string | undefined) =>
+      value === undefined ? undefined : value.trim() || null;
+    const photoUrl = clean(dto.photoUrl);
+    if (photoUrl) {
+      this.uploads.assertOwnedUploads([photoUrl], providerId, 'PROVIDER_TOOL');
+    }
+
+    const updated = await this.prisma.provider.update({
+      where: { id: providerId },
+      data: {
+        photoUrl,
+        vehicleDesc: clean(dto.vehicleDesc),
+        vehiclePlate: clean(dto.vehiclePlate)?.toUpperCase(),
+      },
+    });
+    // เปลี่ยนรูปแล้วลบรูปเก่า ไม่เก็บรูปหน้าช่างไว้เกินจำเป็น
+    const old = current.photoUrl;
+    if (photoUrl !== undefined && old && old !== photoUrl) {
+      const alsoToolPhoto = await this.prisma.providerToolPhoto.count({
+        where: { providerId, url: old },
+      });
+      if (alsoToolPhoto === 0) await this.uploads.deleteUploads([old]);
+    }
+    return updated;
   }
 
   async updatePayoutInfo(
