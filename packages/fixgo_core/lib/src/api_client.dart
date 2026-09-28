@@ -542,6 +542,29 @@ class FixGoApiClient {
     await _send('POST', '/wallet/withdrawals', body: {'amount': amount});
   }
 
+  /// ค่าบริการแพลตฟอร์มที่ช่างค้างจากงานเงินสด (สตางค์) และสถานะสลิปโอนคืน
+  Future<WalletDebt> getWalletDebt() async {
+    final result = await _send('GET', '/wallet/debt') as Map<String, dynamic>;
+    return WalletDebt.fromJson(result);
+  }
+
+  /// QR พร้อมเพย์ของบริษัท ล็อกยอดเท่ากับค่าบริการที่ค้างทั้งหมด
+  Future<({int amount, String qrPayload, String? payeeName})>
+      getSettlementQr() async {
+    final result =
+        await _send('GET', '/wallet/settlement-qr') as Map<String, dynamic>;
+    return (
+      amount: result['amount'] as int,
+      qrPayload: result['qrPayload'] as String,
+      payeeName: result['payeeName'] as String?,
+    );
+  }
+
+  /// ส่งสลิปโอนค่าบริการค้าง (อัปโหลดรูปด้วย [uploadImage] scope PAYMENT_SLIP ก่อน)
+  Future<void> submitSettlementSlip(String slipUrl) async {
+    await _send('POST', '/wallet/settlements', body: {'slipUrl': slipUrl});
+  }
+
   // ---------- Payments (ลูกค้า) ----------
 
   /// ขอ QR พร้อมเพย์ การได้ QR ไม่ใช่การชำระสำเร็จ ต้องรอ backend ยืนยันจาก gateway

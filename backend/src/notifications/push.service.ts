@@ -19,6 +19,7 @@ export type PushType =
   | 'COMPLETED'
   | 'CANCELLED'
   | 'ACCOUNT'
+  | 'WALLET'
   | 'PAID'
   | 'PAYMENT_REVIEW';
 
@@ -67,6 +68,34 @@ export class PushService {
   }
 
   /** แจ้งผลตรวจใบสมัครช่าง (ไม่ผูกกับงาน orderId ว่าง) */
+  /** แจ้งเรื่องกระเป๋าเงินของช่าง เช่น ค้างค่าบริการเกินเพดาน หรือยืนยันยอดโอนคืนแล้ว */
+  async providerWalletNotice(
+    providerId: string,
+    title: string,
+    body: string,
+  ): Promise<void> {
+    try {
+      const devices = await this.prisma.deviceToken.findMany({
+        where: { role: Role.PROVIDER, userId: providerId },
+        select: { token: true },
+      });
+      const message: PushMessage = {
+        title,
+        body,
+        data: { type: 'WALLET', orderId: '', orderNo: '' },
+      };
+      await Promise.all(
+        devices.map(({ token }) =>
+          this.sender.send(token, message).catch((error: Error) => {
+            this.logger.warn(`ส่ง push ไม่สำเร็จ: ${error.message}`);
+          }),
+        ),
+      );
+    } catch (error) {
+      this.logger.error('แจ้งเรื่องกระเป๋าเงินช่างไม่สำเร็จ', error as Error);
+    }
+  }
+
   async providerReviewed(
     providerId: string,
     approved: boolean,

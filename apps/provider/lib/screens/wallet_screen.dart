@@ -2,6 +2,7 @@ import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import 'wallet_debt_card.dart';
 
 /// กระเป๋าเงินช่าง — ยอดคงเหลือหลังหักค่าบริการแพลตฟอร์มแล้ว กดขอเบิกได้ตลอดเวลา
 class WalletScreen extends StatefulWidget {
@@ -13,6 +14,7 @@ class WalletScreen extends StatefulWidget {
 
 class _WalletScreenState extends State<WalletScreen> {
   int? _balance;
+  WalletDebt? _debt;
   List<WalletEntry> _entries = const [];
   bool _loading = true;
   String? _error;
@@ -30,9 +32,16 @@ class _WalletScreenState extends State<WalletScreen> {
       final api = ProviderAppScope.of(context).api;
       final balance = await api.getWalletBalance();
       final entries = await api.listWalletEntries();
+      // ยอดค้างเป็นข้อมูลเสริม โหลดไม่ได้ก็ยังแสดงกระเป๋าเงินตามปกติ
+      final debt =
+          await api.getWalletDebt().then<WalletDebt?>((d) => d).catchError(
+                (_) => null,
+                test: (error) => error is ApiException,
+              );
       if (!mounted) return;
       setState(() {
         _balance = balance;
+        _debt = debt;
         _entries = entries;
         _loading = false;
         _error = null;
@@ -145,17 +154,25 @@ class _WalletScreenState extends State<WalletScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'ยอดคงเหลือ',
-                                style: TextStyle(color: Color(0xFFC9DDD4)),
+                              // ยอดติดลบ = ค่าบริการที่ค้างจากงานเงินสด แสดงเป็นยอดค้างสีแดง
+                              Text(
+                                (_balance ?? 0) < 0
+                                    ? 'ยอดติดลบ (ค่าบริการค้าง)'
+                                    : 'ยอดคงเหลือ',
+                                style:
+                                    const TextStyle(color: Color(0xFFC9DDD4)),
                               ),
                               const SizedBox(height: FixGoSpacing.xs),
                               Text(
-                                formatSatang(_balance ?? 0),
-                                style: const TextStyle(
+                                (_balance ?? 0) < 0
+                                    ? '-${formatSatang(-_balance!)}'
+                                    : formatSatang(_balance ?? 0),
+                                style: TextStyle(
                                   fontSize: 36,
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFFC7EE77),
+                                  color: (_balance ?? 0) < 0
+                                      ? const Color(0xFFFFB4A8)
+                                      : const Color(0xFFC7EE77),
                                 ),
                               ),
                             ],
@@ -165,6 +182,14 @@ class _WalletScreenState extends State<WalletScreen> {
                       ],
                     ),
                   ),
+                  if ((_debt?.owed ?? 0) > 0) ...[
+                    const SizedBox(height: FixGoSpacing.md),
+                    WalletDebtCard(
+                      debt: _debt!,
+                      api: ProviderAppScope.of(context).api,
+                      onChanged: _reload,
+                    ),
+                  ],
                   if (_error != null) ...[
                     const SizedBox(height: FixGoSpacing.md),
                     Text(_error!,

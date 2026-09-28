@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../app_state.dart';
+import 'wallet_debt_card.dart';
 import 'register_screen.dart';
 
 /// หน้าหลักแอปช่าง (FixGo Fixer): สถานะพร้อมรับงาน งานเข้าใหม่ งานที่กำลังทำ
@@ -34,6 +35,9 @@ class _OffersScreenState extends State<OffersScreen> {
   /// สถานะบัญชีจาก backend: PENDING / VERIFIED / REJECTED / SUSPENDED
   String? _accountStatus;
   String? _reviewNote;
+
+  /// ค้างค่าบริการจากงานเงินสด แสดงการ์ดในหน้าหลักเฉพาะตอนเกินเพดาน (เปิดรับงานไม่ได้)
+  WalletDebt? _debt;
   StreamSubscription<PushEvent>? _pushSub;
 
   @override
@@ -45,7 +49,9 @@ class _OffersScreenState extends State<OffersScreen> {
     final push = PushNotifications.instance;
     _pushSub = push.onAny.listen(
       (event) => unawaited(
-        event.type == 'ACCOUNT' ? _syncOnlineStatus() : _refresh(),
+        event.type == 'ACCOUNT' || event.type == 'WALLET'
+            ? _syncOnlineStatus()
+            : _refresh(),
       ),
     );
     // ดึงงานใหม่ทุก 10 วิ และให้ countdown เดินด้วย
@@ -66,6 +72,8 @@ class _OffersScreenState extends State<OffersScreen> {
         _accountStatus = profile['status'] as String?;
         _reviewNote = profile['reviewNote'] as String?;
       });
+      final debt = await state.api.getWalletDebt();
+      if (mounted) setState(() => _debt = debt);
     } on ApiException {
       // ใช้ค่าที่มีอยู่ต่อไป
     }
@@ -184,6 +192,8 @@ class _OffersScreenState extends State<OffersScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message)));
+      // ถูกปิดเพราะค้างค่าบริการ: ดึงยอดล่าสุดมาแสดงการ์ดโอนชำระ
+      if (error.statusCode == 403) unawaited(_syncOnlineStatus());
     }
   }
 
@@ -243,6 +253,14 @@ class _OffersScreenState extends State<OffersScreen> {
                       ),
                       const SizedBox(height: FixGoSpacing.md),
                     ],
+                    if (_debt?.blocked == true) ...[
+                      WalletDebtCard(
+                        debt: _debt!,
+                        api: ProviderAppScope.of(context).api,
+                        onChanged: () => unawaited(_syncOnlineStatus()),
+                      ),
+                      const SizedBox(height: FixGoSpacing.md),
+                    ],
                     _SectionCard(
                       icon: Icons.location_on,
                       iconAsset: emergencyIconAsset,
@@ -262,13 +280,16 @@ class _OffersScreenState extends State<OffersScreen> {
                                       (_accountStatus != null &&
                                               _accountStatus != 'VERIFIED'
                                           ? 'รับงานได้หลังทีมงานอนุมัติบัญชี'
-                                          : isOnline
-                                              ? 'กำลังรองานใกล้คุณ ระบบเช็กงานใหม่ทุก 10 วินาที'
-                                              : 'ตอนนี้ปิดรับงานอยู่ เปิดแล้วงานใกล้คุณจะเด้งขึ้นที่นี่'),
-                                  actionLabel:
-                                      !isOnline && _accountStatus == 'VERIFIED'
-                                          ? 'เปิดรับงานเลย'
-                                          : null,
+                                          : _debt?.blocked == true
+                                              ? 'โอนชำระค่าบริการที่ค้างด้านบน แล้วเปิดรับงานต่อได้'
+                                              : isOnline
+                                                  ? 'กำลังรองานใกล้คุณ ระบบเช็กงานใหม่ทุก 10 วินาที'
+                                                  : 'ตอนนี้ปิดรับงานอยู่ เปิดแล้วงานใกล้คุณจะเด้งขึ้นที่นี่'),
+                                  actionLabel: !isOnline &&
+                                          _accountStatus == 'VERIFIED' &&
+                                          _debt?.blocked != true
+                                      ? 'เปิดรับงานเลย'
+                                      : null,
                                   onAction: () => _toggleOnline(true),
                                 )
                               : Column(

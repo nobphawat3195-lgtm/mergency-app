@@ -212,6 +212,8 @@ export class AdminService {
       pendingWithdrawals,
       noMatchOrders,
       pendingSlips,
+      pendingSettlements,
+      outstandingDebt,
     ] = await Promise.all([
       this.prisma.order.count(),
       this.prisma.order.findMany({
@@ -228,6 +230,8 @@ export class AdminService {
       this.prisma.payment.count({
         where: { status: 'PENDING', slipSubmittedAt: { not: null } },
       }),
+      this.prisma.commissionSettlement.count({ where: { status: 'PENDING' } }),
+      this.wallet.totalOutstandingDebt(),
     ]);
 
     const commissionRevenue = completedOrders.reduce(
@@ -244,6 +248,9 @@ export class AdminService {
       pendingWithdrawals,
       noMatchOrders,
       pendingSlips,
+      pendingSettlements,
+      /** ค่าบริการที่ช่างค้างจากงานเงินสดรวมกัน (สตางค์) ยังไม่ได้เข้าบัญชีบริษัท */
+      outstandingDebt,
     };
   }
 }

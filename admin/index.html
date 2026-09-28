@@ -168,6 +168,13 @@
       </tr></thead><tbody id="slips-body"></tbody></table></div>
     </div>
 
+    <div class="card" id="settlements-card">
+      <h2>ช่างโอนค่าบริการค้างคืน <span class="muted">(ค่าคอมจากงานเงินสด เช็คยอดเข้าบัญชีจริงก่อนกดยืนยัน)</span></h2>
+      <div class="table-wrap"><table><thead><tr>
+        <th>สลิป</th><th>ช่าง</th><th>ยอดที่ต้องได้รับ</th><th>ส่งเมื่อ</th><th></th>
+      </tr></thead><tbody id="settlements-body"></tbody></table></div>
+    </div>
+
     <div class="card">
       <h2>ช่างรออนุมัติ <span class="muted">(ตรวจรูปหน้า เครื่องมือ และบริการที่รับ ก่อนกดอนุมัติ)</span></h2>
       <div id="providers-body" class="applicants"></div>
@@ -275,7 +282,7 @@ async function showDashboard() {
 
 async function refreshAll() {
   await Promise.all([
-    loadSummary(), loadNoMatch(), loadSlips(), loadProviders(), loadWithdrawals(), loadOrders(),
+    loadSummary(), loadNoMatch(), loadSlips(), loadSettlements(), loadProviders(), loadWithdrawals(), loadOrders(),
   ]);
 }
 
@@ -351,6 +358,51 @@ async function rejectSlip(id) {
   await refreshAll();
 }
 
+async function loadSettlements() {
+  const rows = await api('/admin/settlements');
+  el('settlements-card').classList.toggle('alert', rows.length > 0);
+  el('settlements-body').innerHTML = rows.length === 0
+    ? '<tr><td colspan="5">ไม่มีสลิปรอตรวจ</td></tr>'
+    : rows.map((row) => `
+      <tr>
+        <td><a href="${escapeHtml(row.slipUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(row.slipUrl)}" alt="สลิป" style="width:64px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"></a></td>
+        <td>${escapeHtml(row.provider.realName)} (${escapeHtml(row.provider.nickname)})<br><small>${escapeHtml(row.provider.phone)}</small></td>
+        <td><strong>${escapeHtml(formatSatang(row.amount))}</strong></td>
+        <td>${escapeHtml(new Date(row.createdAt).toLocaleString('th-TH'))}</td>
+        <td>
+          <button onclick="confirmSettlement('${row.id}','${escapeHtml(formatSatang(row.amount))}')">ยอดเข้าแล้ว</button>
+          <button class="danger" onclick="rejectSettlement('${row.id}')">ไม่ผ่าน</button>
+        </td>
+      </tr>`).join('');
+}
+
+async function confirmSettlement(id, amountText) {
+  if (!confirm(`ยืนยันว่ายอด ${amountText} เข้าบัญชีแล้ว? ระบบจะลงยอดคืนในกระเป๋าช่าง และช่างเปิดรับงานต่อได้`)) return;
+  try {
+    await api('/admin/settlements/' + id + '/confirm', { method: 'POST' });
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
+}
+
+async function rejectSettlement(id) {
+  const reason = prompt(
+    'เหตุผลที่สลิปไม่ผ่าน (ส่งถึงช่าง)',
+    'ยังไม่พบยอดเงินเข้าบัญชี หรือยอดในสลิปไม่ตรงกับยอดค้าง',
+  );
+  if (!reason) return;
+  try {
+    await api('/admin/settlements/' + id + '/reject', {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
+}
+
 async function redispatch(id) {
   try {
     const result = await api('/admin/orders/' + id + '/redispatch', { method: 'POST' });
@@ -388,6 +440,8 @@ async function loadSummary() {
     { label: 'สลิปรอตรวจ', value: summary.pendingSlips ?? 0, alert: (summary.pendingSlips ?? 0) > 0 },
     { label: 'งานที่เสร็จแล้ว', value: summary.completedCount },
     { label: 'รายได้ค่าธรรมเนียม', value: formatSatang(summary.commissionRevenue) },
+    { label: 'ค่าคอมที่ช่างค้าง (งานเงินสด)', value: formatSatang(summary.outstandingDebt ?? 0) },
+    { label: 'สลิปค่าคอมรอตรวจ', value: summary.pendingSettlements ?? 0, alert: (summary.pendingSettlements ?? 0) > 0 },
     { label: 'ช่างรออนุมัติ', value: summary.pendingProviders },
     { label: 'คำขอเบิกค้าง', value: summary.pendingWithdrawals },
   ].map((stat) => `<div class="stat${stat.alert ? ' alert' : ''}"><div class="value">${escapeHtml(stat.value)}</div><div class="label">${escapeHtml(stat.label)}</div></div>`).join('');

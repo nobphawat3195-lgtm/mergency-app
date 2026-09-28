@@ -142,8 +142,13 @@ export class UploadsService {
     ) {
       throw new ForbiddenException('บัญชีนี้แนบรูปเครื่องมือช่างไม่ได้');
     }
-    if (dto.scope === 'PAYMENT_SLIP' && role !== 'CUSTOMER') {
-      throw new ForbiddenException('แนบสลิปได้เฉพาะลูกค้า');
+    // ลูกค้าแนบสลิปค่างาน ช่างแนบสลิปโอนค่าบริการที่ค้างคืนบริษัท
+    if (
+      dto.scope === 'PAYMENT_SLIP' &&
+      role !== 'CUSTOMER' &&
+      role !== 'PROVIDER'
+    ) {
+      throw new ForbiddenException('บัญชีนี้แนบสลิปไม่ได้');
     }
 
     const key = `${DIRECTORIES[dto.scope]}/${userId}/${randomUUID()}.${EXTENSIONS[dto.contentType]}`;

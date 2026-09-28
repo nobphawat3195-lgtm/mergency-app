@@ -17,6 +17,7 @@ import {
   DISPATCH_BATCH_SIZE,
   PROVIDER_HEARTBEAT_STALE_MS,
 } from '../common/constants';
+import { WalletService } from '../wallet/wallet.service';
 
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
   OrderStatus.MATCHED,
@@ -51,6 +52,7 @@ export class DispatchService {
     private readonly push: PushService,
     private readonly adminAlert: AdminAlertService,
     private readonly events: OrderEventsService,
+    private readonly wallet: WalletService,
   ) {}
 
   /** เริ่มกระจายงาน: หาช่างที่เข้าเงื่อนไข เรียงตามระยะทาง แล้วเสนอให้คนใกล้สุดก่อน */
@@ -248,6 +250,7 @@ export class DispatchService {
     if (attempt.order.status !== OrderStatus.SEARCHING) {
       throw new BadRequestException('งานนี้ถูกรับไปแล้ว');
     }
+    await this.wallet.assertCanTakeJobs(providerId);
 
     await this.prisma.$transaction(
       async (tx) => {

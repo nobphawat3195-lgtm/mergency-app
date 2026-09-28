@@ -9,6 +9,7 @@ import { OrderStatus, Provider, ProviderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from '../auth/auth.service';
 import { UploadsService } from '../uploads/uploads.service';
+import { WalletService } from '../wallet/wallet.service';
 import { AdminAlertService } from '../notifications/admin-alert.service';
 import { OrderEventsService } from '../notifications/order-events.service';
 import {
@@ -25,6 +26,7 @@ export class ProvidersService {
     private readonly uploads: UploadsService,
     private readonly adminAlert: AdminAlertService,
     private readonly events: OrderEventsService,
+    private readonly wallet: WalletService,
   ) {}
 
   /**
@@ -174,6 +176,7 @@ export class ProvidersService {
 
   async setOnline(providerId: string, isOnline: boolean): Promise<Provider> {
     await this.requireVerified(providerId);
+    if (isOnline) await this.wallet.assertCanTakeJobs(providerId);
     return this.prisma.provider.update({
       where: { id: providerId },
       data: { isOnline, lastSeenAt: new Date() },

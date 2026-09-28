@@ -55,9 +55,9 @@ enum ProviderStatus {
 }
 
 model Provider {
-  id              String @id @default(uuid())
+  id              String  @id @default(uuid())
   /// ช่างที่ล็อกอินด้วย OTP: เบอร์ที่ยืนยันแล้ว / ช่างที่สมัครผ่าน LINE: เบอร์ที่กรอกเองในใบสมัคร
-  phone           String @unique
+  phone           String  @unique
   /// userId จาก LINE Login (ไม่มีถ้าสมัครด้วยเบอร์โทร) แอดมินควรโทรยืนยันเบอร์ก่อนอนุมัติ
   lineUserId      String? @unique
   realName        String
@@ -113,6 +113,7 @@ model Provider {
   dispatchAttempts  DispatchAttempt[]
   walletEntries     WalletEntry[]
   withdrawals       WithdrawalRequest[]
+  settlements       CommissionSettlement[]
 
   @@index([status, isOnline])
 }
@@ -442,6 +443,7 @@ enum WalletEntryType {
   WITHDRAWAL // กันยอดไว้ทันทีที่ช่างกดขอเบิก (ค่าติดลบ)
   ADJUSTMENT // คืนยอดเมื่อแอดมินปฏิเสธคำขอเบิก หรือแอดมินปรับยอดเอง
   COMMISSION_DUE // งานเงินสด: ช่างถือเงินเต็มจำนวน จึงหักค่าธรรมเนียมที่ต้องคืนบริษัท (ค่าติดลบ)
+  COMMISSION_PAID // ช่างโอนค่าบริการที่ค้างคืนบริษัท แอดมินตรวจสลิปแล้ว (ค่าบวก)
 }
 
 // หมายเหตุ: คอมมิชชัน 35% ไม่ถูกบันทึกในกระเป๋าช่าง
@@ -506,6 +508,29 @@ model Rating {
   createdAt DateTime @default(now())
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+enum SettlementStatus {
+  PENDING // ช่างแนบสลิปแล้ว รอแอดมินตรวจยอดเข้าบัญชี
+  CONFIRMED
+  REJECTED
+}
+
+/// ช่างโอนค่าบริการแพลตฟอร์มที่ค้าง (จากงานเงินสด) คืนเข้าพร้อมเพย์ของบริษัท
+/// ยอดในกระเป๋าเปลี่ยนเมื่อแอดมินยืนยันเท่านั้น
+model CommissionSettlement {
+  id           String           @id @default(uuid())
+  providerId   String
+  amount       Int // สตางค์ ยอดค้าง ณ เวลาที่แนบสลิป
+  slipUrl      String
+  status       SettlementStatus @default(PENDING)
+  rejectReason String?
+  createdAt    DateTime         @default(now())
+  reviewedAt   DateTime?
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, status])
 }
 
 // ---------- Admin ----------
