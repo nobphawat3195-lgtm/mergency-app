@@ -25,11 +25,14 @@ The platform has three parts: a customer app, a mechanic app ("FixGo Fixer") and
 - **Live map with ETA.** While the mechanic is on the way, the customer sees both pins on an OpenStreetMap map and an estimated arrival time. The server only shares the mechanic's position during that window and hides stale positions.
 - **Mechanic trust card.** Photo, verified badge, rating, completed jobs, experience, and the vehicle and licence plate to look for.
 - **Share with family + SOS.** A read-only tracking link (random 256-bit token, no login) that shows the status and the mechanic on the way but no phone numbers or prices. It expires 2 hours after the job ends and can be revoked. One-tap Thai emergency numbers are also available.
-- **LINE Login (web).** OAuth 2.1 + OpenID Connect with a signed state cookie, nonce and a single-use 60-second ticket, so no access token ever appears in a URL. It saves SMS OTP cost.
+- **LINE Login (web, customers and mechanics).** OAuth 2.1 + OpenID Connect with a signed state cookie, nonce and a single-use 60-second ticket, so no access token ever appears in a URL. One channel serves both apps. New mechanics apply with a self-declared phone that the admin confirms before approval. It saves SMS OTP cost.
+- **Owner finance report.** Revenue split by PromptPay (paid into the owner's account) and cash (held by the mechanic), commission earned, money held for mechanics, commission owed by mechanics, and a per-mechanic table, for any Thai-time date range, with CSV export.
+- **Cash commission cap.** Cash jobs put the platform fee on the mechanic's wallet as a negative balance. Past a configurable limit (default 1,000 baht) the mechanic is switched offline and can't accept jobs until they pay back through a locked-amount PromptPay QR and the admin confirms the slip. Confirmation is idempotent.
 - **Real-time tracking** uses Server-Sent Events, falls back to polling, and sends push notifications through FCM HTTP v1 with a self-signed JWT.
 - **Used-car inspection mode.** A 134-point checklist in 11 categories, with measured values (paint thickness, tread, brake pads, battery), required photo evidence, weighted A–E grading and red flags for flood, crash, odometer and paperwork problems.
 - **Security and privacy (PDPA).**
   - OTP login is rate-limited.
+  - Mechanics are reviewed before they can take jobs: profile photo, licence plate, tool photos, services and vehicle types; admins approve or reject with a reason the mechanic sees in the app, and a rejected mechanic can fix and resubmit.
   - Order ownership and role guards return 404 to strangers.
   - Upload URLs must be signed and are write-once. Files are checked by magic bytes and served with `nosniff` and a CSP.
   - Internal fields such as the commission rate are stripped from API responses.
@@ -42,7 +45,7 @@ The platform has three parts: a customer app, a mechanic app ("FixGo Fixer") and
   - The API refuses to start with missing or placeholder secrets.
   - A trial mode lets the team test before SMS is paid for.
 - **CI (GitHub Actions)** runs:
-  - backend typecheck and tests (108 unit tests)
+  - backend typecheck and tests (112 unit tests)
   - Flutter analyze and tests (shared package and customer app)
   - a Docker boot test
   - a web image smoke test through the real Caddyfile
@@ -121,7 +124,7 @@ Quality checks: `npm run typecheck && npm test` (backend), `flutter analyze && f
 - แผนที่สดพร้อมเวลาช่างถึงโดยประมาณ
 - การ์ดข้อมูลช่าง: รูป ป้ายยืนยันตัวตน คะแนน จำนวนงาน และทะเบียนรถ
 - แชร์ลิงก์ให้ครอบครัวติดตาม และปุ่มโทรเบอร์ฉุกเฉิน
-- เข้าสู่ระบบด้วย LINE บนเว็บ ไม่ต้องรอ OTP
+- เข้าสู่ระบบด้วย LINE บนเว็บ ทั้งลูกค้าและช่าง ไม่ต้องรอ OTP
 
 **จุดเด่นทางเทคนิค**
 - ระบบจับคู่ช่างแบบส่งเป็นกลุ่มตามระยะทาง
@@ -145,5 +148,5 @@ Quality checks: `npm run typecheck && npm test` (backend), `flutter analyze && f
 ## Attribution
 
 - The main 3D service icons were made by the project owner.
-- Lightning, siren and mechanic icons come from [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT). The license is in `packages/fixgo_core/assets/icons/licenses/`.
+- Lightning, siren, mechanic and the 3D vehicle-type icons come from [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT). The license is in `packages/fixgo_core/assets/icons/licenses/`.
 - Noto Sans Thai is used under the SIL Open Font License (`packages/fixgo_core/assets/fonts/OFL.txt`).

@@ -155,24 +155,41 @@ class FixGoApiClient {
     return result['devCode'] as String?;
   }
 
-  /// เซิร์ฟเวอร์เปิดให้ลูกค้าเข้าสู่ระบบด้วย LINE หรือยัง (ต้องตั้ง Channel ID/secret)
-  Future<bool> isLineLoginEnabled() async {
-    final result =
-        await _send('GET', '/auth/line/config') as Map<String, dynamic>;
+  /// เซิร์ฟเวอร์เปิดให้เข้าสู่ระบบด้วย LINE หรือยัง (ต้องตั้ง Channel ID/secret และที่อยู่เว็บของแอปนั้น)
+  Future<bool> isLineLoginEnabled({ApiRole role = ApiRole.customer}) async {
+    final result = await _send(
+      'GET',
+      '/auth/line/config${_lineAppQuery(role)}',
+    ) as Map<String, dynamic>;
     return result['enabled'] as bool? ?? false;
   }
 
   /// หน้าเริ่มล็อกอิน LINE: เปิดในแท็บเดิม LINE จะพากลับมาที่เว็บพร้อม ?line_ticket=
-  Uri get lineLoginStartUri => Uri.parse('$baseUrl/api/auth/line/start');
+  Uri get lineLoginStartUri => lineLoginStartUriFor(ApiRole.customer);
+
+  Uri lineLoginStartUriFor(ApiRole role) =>
+      Uri.parse('$baseUrl/api/auth/line/start${_lineAppQuery(role)}');
+
+  String _lineAppQuery(ApiRole role) =>
+      role == ApiRole.provider ? '?app=provider' : '';
 
   /// แลกตั๋วจาก LINE (ใช้ได้ครั้งเดียว ภายใน 60 วินาที) เป็น accessToken
-  Future<String> exchangeLineTicket(String ticket) async {
+  Future<String> exchangeLineTicket(String ticket) async =>
+      (await exchangeLineTicketSession(ticket)).accessToken;
+
+  /// เหมือน [exchangeLineTicket] แต่บอกด้วยว่าเคยสมัครแล้วหรือยัง (ช่างใหม่ต้องส่งใบสมัครก่อน)
+  Future<({String accessToken, bool hasProfile})> exchangeLineTicketSession(
+    String ticket,
+  ) async {
     final result = await _send('POST', '/auth/line/exchange', body: {
       'ticket': ticket,
     }) as Map<String, dynamic>;
     final token = result['accessToken'] as String;
     accessToken = token;
-    return token;
+    return (
+      accessToken: token,
+      hasProfile: result['hasProfile'] as bool? ?? true,
+    );
   }
 
   /// ลบบัญชีของผู้ที่ล็อกอินอยู่ (ลูกค้าหรือช่าง) กู้คืนไม่ได้
@@ -523,6 +540,29 @@ class FixGoApiClient {
 
   Future<void> requestWithdrawal(int amount) async {
     await _send('POST', '/wallet/withdrawals', body: {'amount': amount});
+  }
+
+  /// ค่าบริการแพลตฟอร์มที่ช่างค้างจากงานเงินสด (สตางค์) และสถานะสลิปโอนคืน
+  Future<WalletDebt> getWalletDebt() async {
+    final result = await _send('GET', '/wallet/debt') as Map<String, dynamic>;
+    return WalletDebt.fromJson(result);
+  }
+
+  /// QR พร้อมเพย์ของบริษัท ล็อกยอดเท่ากับค่าบริการที่ค้างทั้งหมด
+  Future<({int amount, String qrPayload, String? payeeName})>
+      getSettlementQr() async {
+    final result =
+        await _send('GET', '/wallet/settlement-qr') as Map<String, dynamic>;
+    return (
+      amount: result['amount'] as int,
+      qrPayload: result['qrPayload'] as String,
+      payeeName: result['payeeName'] as String?,
+    );
+  }
+
+  /// ส่งสลิปโอนค่าบริการค้าง (อัปโหลดรูปด้วย [uploadImage] scope PAYMENT_SLIP ก่อน)
+  Future<void> submitSettlementSlip(String slipUrl) async {
+    await _send('POST', '/wallet/settlements', body: {'slipUrl': slipUrl});
   }
 
   // ---------- Payments (ลูกค้า) ----------

@@ -1,4 +1,5 @@
 import 'package:fixgo_core/fixgo_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -18,6 +19,37 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
   bool _otpSent = false;
   bool _loading = false;
   String? _error;
+
+  /// ปุ่ม LINE แสดงเฉพาะบนเว็บ และเมื่อเซิร์ฟเวอร์ตั้งค่า LINE Login ของแอปช่างแล้ว
+  Future<bool>? _lineEnabled;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_lineEnabled != null) return;
+    final appState = ProviderAppScope.of(context);
+    _lineEnabled = kIsWeb
+        ? appState.api
+            .isLineLoginEnabled(role: ApiRole.provider)
+            .catchError((_) => false)
+        : Future.value(false);
+    if (appState.lineLoginFailed) {
+      appState.lineLoginFailed = false;
+      _error = 'เข้าสู่ระบบด้วย LINE ไม่สำเร็จ กรุณาลองใหม่';
+    }
+  }
+
+  Future<void> _loginWithLine() async {
+    final uri =
+        ProviderAppScope.of(context).api.lineLoginStartUriFor(ApiRole.provider);
+    setState(() => _loading = true);
+    if (!await openLineLoginPage(uri) && mounted) {
+      setState(() {
+        _loading = false;
+        _error = 'เปิดหน้า LINE ไม่สำเร็จ';
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -78,6 +110,29 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!_otpSent)
+            FutureBuilder<bool>(
+              future: _lineEnabled,
+              builder: (context, snapshot) {
+                if (snapshot.data != true) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'ช่างใหม่สมัครด้วย LINE ได้เลย ไม่ต้องรอ SMS',
+                      style: TextStyle(color: FixGoColors.textSecondary),
+                    ),
+                    const SizedBox(height: FixGoSpacing.sm),
+                    LineLoginButton(
+                      onPressed: _loading ? null : _loginWithLine,
+                    ),
+                    const SizedBox(height: FixGoSpacing.md),
+                    const LoginOrDivider(),
+                    const SizedBox(height: FixGoSpacing.md),
+                  ],
+                );
+              },
+            ),
           Text(
             _otpSent ? 'ใส่รหัส OTP' : 'เข้าสู่ระบบสำหรับช่าง',
             style: Theme.of(context).textTheme.titleMedium,

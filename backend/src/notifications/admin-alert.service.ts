@@ -133,6 +133,12 @@ export class AdminAlertService {
     return this.send(`🧰 ช่างสมัครใหม่: ${nickname} รอตรวจเอกสารและอนุมัติ`);
   }
 
+  settlementSubmitted(nickname: string, amountText: string) {
+    return this.send(
+      `🧾 ช่าง ${nickname} โอนค่าบริการค้าง ${amountText} ตรวจยอดเข้าบัญชีแล้วกดยืนยันในหน้าแอดมิน`,
+    );
+  }
+
   withdrawalRequested(nickname: string, amountText: string) {
     return this.send(`💸 คำขอเบิกเงิน ${amountText} จาก ${nickname} รอโอน`);
   }

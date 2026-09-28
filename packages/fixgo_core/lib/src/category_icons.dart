@@ -28,6 +28,26 @@ String categoryIconAsset(String iconKey) {
   }
 }
 
+/// ไอคอน 3D ประเภทรถ จาก Microsoft Fluent Emoji (MIT) ชุดเดียวกับ emergency/technician
+/// slug มาจาก VehicleType ใน backend/prisma/seed.ts (รถ EV = รถเก๋ง + สายฟ้า)
+String vehicleIconAsset(String slug) {
+  const base = 'packages/fixgo_core/assets/icons/vehicles';
+  switch (slug) {
+    case 'sedan':
+    case 'suv':
+    case 'pickup':
+    case 'van':
+    case 'motorcycle':
+    case 'ev':
+    case 'euro':
+    case 'truck':
+    case 'machinery':
+      return '$base/vehicle_$slug.png';
+    default:
+      return '$base/vehicle_sedan.png';
+  }
+}
+
 /// widget ไอคอนหมวดบริการขนาดคงที่ ใช้ในลิสต์และกริด
 class CategoryIconArt extends StatelessWidget {
   const CategoryIconArt({super.key, required this.iconKey, this.size = 58});
@@ -52,6 +72,18 @@ const emergencyIconAsset = 'packages/fixgo_core/assets/icons/emergency.png';
 
 /// ภาพช่าง 3D ใช้เป็น avatar ช่างเมื่อยังไม่มีรูปโปรไฟล์จริง
 const technicianIconAsset = 'packages/fixgo_core/assets/icons/technician.png';
+
+/// ไอคอน 3D ประกอบหน้าจอ (Fluent Emoji 3D, MIT) ใช้แทนไอคอนเส้นในแอปช่าง
+const uiIconClipboard = 'packages/fixgo_core/assets/icons/ui/clipboard.png';
+const uiIconTravel = 'packages/fixgo_core/assets/icons/ui/travel.png';
+const uiIconRepair = 'packages/fixgo_core/assets/icons/ui/repair.png';
+const uiIconDone = 'packages/fixgo_core/assets/icons/ui/done.png';
+const uiIconMoneyBag = 'packages/fixgo_core/assets/icons/ui/money_bag.png';
+const uiIconBanknote = 'packages/fixgo_core/assets/icons/ui/banknote.png';
+const uiIconBell = 'packages/fixgo_core/assets/icons/ui/bell.png';
+const uiIconPin = 'packages/fixgo_core/assets/icons/ui/pin.png';
+const uiIconChart = 'packages/fixgo_core/assets/icons/ui/chart.png';
+const uiIconHome = 'packages/fixgo_core/assets/icons/ui/home.png';
 
 /// โลโก้ FixGo (รถ + ประแจ + "24" บนพื้นเขียวเข้ม) ต้นฉบับ tool/brand/fixgo_logo.svg
 const brandLogoAsset = 'packages/fixgo_core/assets/brand/logo_mark.png';

@@ -110,6 +110,35 @@
   .hidden { display: none; }
   .error { color: var(--error); margin-top: 12px; }
   .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .applicants { display: grid; gap: 14px; }
+  .applicant { border: 1px solid var(--line, #D5E8DE); border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+  .applicant-head { display: flex; gap: 12px; align-items: center; }
+  .applicant-head img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; background: #ECF8F1; }
+  .applicant dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: 14px; }
+  .applicant dt { color: #4A6259; }
+  .applicant dd { margin: 0; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { background: #ECF8F1; border-radius: 999px; padding: 2px 10px; font-size: 13px; }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tools img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; border: 1px solid #D5E8DE; }
+  .plate { border: 2px solid #122821; border-radius: 6px; padding: 1px 8px; font-weight: 800; }
+  .line-note { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: #FFF4DB; color: #7A4B00; font-size: 14px; }
+  .applicant-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  /* การเงิน */
+  .finance-filters { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; margin-bottom: 16px; }
+  .finance-filters label { display: grid; gap: 4px; font-size: 13px; color: var(--text-secondary); }
+  .finance-filters input, .finance-filters select { width: auto; min-width: 150px; }
+  select { padding: 11px 12px; border: 1px solid var(--border); border-radius: 12px; font-size: 14px; font-family: inherit; background: #fff; }
+  .finance-note { margin: 12px 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+  .money-pos { color: #0B7A55; font-weight: 700; }
+  .money-neg { color: var(--error); font-weight: 700; }
+  .pill { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; }
+  .pill.promptpay { background: #E6F2FF; color: #1D4F91; }
+  .pill.cash { background: #ECF8F1; color: #0B5F45; }
+  .pill.unpaid { background: #FFF4DB; color: #7A4B00; }
+  .finance-sub { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin: 24px 0 8px; }
+  .finance-sub h3 { margin: 0; font-size: 15px; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -140,6 +169,48 @@
       <div class="stats" id="stats"></div>
     </div>
 
+    <div class="card" id="finance-card">
+      <h2>การเงิน <span class="muted">(ยอดรวม รายได้ของคุณ และรายช่าง แยกพร้อมเพย์/เงินสด)</span></h2>
+      <div class="finance-filters">
+        <label>ตั้งแต่วันที่<input type="date" id="fin-from"></label>
+        <label>ถึงวันที่<input type="date" id="fin-to"></label>
+        <button onclick="loadFinance()">ดูรายงาน</button>
+        <button class="ghost" onclick="setFinanceMonth(0)">เดือนนี้</button>
+        <button class="ghost" onclick="setFinanceMonth(-1)">เดือนก่อน</button>
+      </div>
+      <div class="stats" id="finance-stats"></div>
+      <p class="finance-note" id="finance-note"></p>
+
+      <div class="finance-sub">
+        <h3>รายชื่อช่าง</h3>
+        <div class="row">
+          <input id="fin-search" placeholder="ค้นหาชื่อหรือเบอร์ช่าง" oninput="renderFinance()" style="width:220px">
+          <button class="ghost" onclick="exportMechanicsCsv()">ดาวน์โหลด CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table><thead><tr>
+        <th>ช่าง</th><th class="num">งานที่ปิด</th><th class="num">พร้อมเพย์ (เข้าบัญชีคุณ)</th><th class="num">เงินสด (ช่างรับเอง)</th>
+        <th class="num">ค่าคอมของคุณ</th><th class="num">ส่วนของช่าง</th><th class="num">ยอดกระเป๋าตอนนี้</th><th class="num">รอโอนให้ช่าง</th>
+      </tr></thead><tbody id="fin-mechanics-body"></tbody></table></div>
+
+      <div class="finance-sub">
+        <h3>งานที่ปิดแล้วในช่วงนี้</h3>
+        <div class="row">
+          <select id="fin-method" onchange="renderFinance()">
+            <option value="">ทุกวิธีรับเงิน</option>
+            <option value="PROMPTPAY">พร้อมเพย์</option>
+            <option value="CASH">เงินสด</option>
+            <option value="UNPAID">ยังไม่ชำระ</option>
+          </select>
+          <button class="ghost" onclick="exportOrdersCsv()">ดาวน์โหลด CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table><thead><tr>
+        <th>ปิดงานเมื่อ</th><th>เลขที่</th><th>บริการ</th><th>ช่าง</th><th>ลูกค้า</th><th>รับเงินแบบ</th>
+        <th class="num">ยอดเต็ม</th><th class="num">ค่าคอม</th><th class="num">ส่วนของช่าง</th>
+      </tr></thead><tbody id="fin-orders-body"></tbody></table></div>
+    </div>
+
     <div class="card" id="nomatch-card">
       <h2>งานที่ไม่มีช่างรับ <span class="muted">(ลูกค้ารออยู่ ต้องจัดการด่วน)</span></h2>
       <div class="table-wrap"><table><thead><tr>
@@ -154,11 +225,16 @@
       </tr></thead><tbody id="slips-body"></tbody></table></div>
     </div>
 
-    <div class="card">
-      <h2>ช่างรออนุมัติ</h2>
+    <div class="card" id="settlements-card">
+      <h2>ช่างโอนค่าบริการค้างคืน <span class="muted">(ค่าคอมจากงานเงินสด เช็คยอดเข้าบัญชีจริงก่อนกดยืนยัน)</span></h2>
       <div class="table-wrap"><table><thead><tr>
-        <th>ชื่อ</th><th>เบอร์</th><th>ร้าน/อู่</th><th>เฟซบุ๊ก</th><th>เวลาทำงาน</th><th></th>
-      </tr></thead><tbody id="providers-body"></tbody></table></div>
+        <th>สลิป</th><th>ช่าง</th><th>ยอดที่ต้องได้รับ</th><th>ส่งเมื่อ</th><th></th>
+      </tr></thead><tbody id="settlements-body"></tbody></table></div>
+    </div>
+
+    <div class="card">
+      <h2>ช่างรออนุมัติ <span class="muted">(ตรวจรูปหน้า เครื่องมือ และบริการที่รับ ก่อนกดอนุมัติ)</span></h2>
+      <div id="providers-body" class="applicants"></div>
     </div>
 
     <div class="card">
@@ -263,7 +339,7 @@ async function showDashboard() {
 
 async function refreshAll() {
   await Promise.all([
-    loadSummary(), loadNoMatch(), loadSlips(), loadProviders(), loadWithdrawals(), loadOrders(),
+    loadSummary(), loadFinance(), loadNoMatch(), loadSlips(), loadSettlements(), loadProviders(), loadWithdrawals(), loadOrders(),
   ]);
 }
 
@@ -339,6 +415,182 @@ async function rejectSlip(id) {
   await refreshAll();
 }
 
+// ---------- การเงิน ----------
+let financeData = null;
+const METHOD_LABELS = { PROMPTPAY: 'พร้อมเพย์', CASH: 'เงินสด', UNPAID: 'ยังไม่ชำระ' };
+const PROVIDER_STATUS_LABELS = { VERIFIED: 'อนุมัติแล้ว', PENDING: 'รออนุมัติ', REJECTED: 'ไม่ผ่าน', SUSPENDED: 'ระงับ' };
+
+function bangkokDate(offsetMonths = 0, lastDay = false) {
+  const now = new Date(Date.now() + 7 * 3600_000);
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offsetMonths + (lastDay ? 1 : 0), lastDay ? 0 : 1));
+  return d.toISOString().slice(0, 10);
+}
+
+function setFinanceMonth(offset) {
+  el('fin-from').value = bangkokDate(offset);
+  const today = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
+  el('fin-to').value = offset === 0 ? today : bangkokDate(offset, true);
+  loadFinance().catch((error) => alert(error.message));
+}
+
+async function loadFinance() {
+  if (!el('fin-from').value) setFinanceMonthInputsOnly();
+  const query = new URLSearchParams({ from: el('fin-from').value, to: el('fin-to').value });
+  financeData = await api('/admin/finance?' + query);
+  renderFinance();
+}
+
+function setFinanceMonthInputsOnly() {
+  el('fin-from').value = bangkokDate(0);
+  el('fin-to').value = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
+}
+
+function signedMoney(satang) {
+  if (satang > 0) return `<span class="money-pos">${escapeHtml(formatSatang(satang))}</span>`;
+  if (satang < 0) return `<span class="money-neg">-${escapeHtml(formatSatang(-satang))}</span>`;
+  return escapeHtml(formatSatang(0));
+}
+
+function renderFinance() {
+  const data = financeData;
+  if (!data) return;
+  const t = data.totals;
+  const p = data.position;
+  el('finance-stats').innerHTML = [
+    { label: 'รายได้ของคุณ (ค่าคอมงานที่ชำระแล้ว)', value: formatSatang(t.commissionEarned) },
+    { label: `ยอดงานที่ชำระแล้ว (${t.promptPayJobs + t.cashJobs} งาน)`, value: formatSatang(t.grossPaid) },
+    { label: `เข้าบัญชีคุณทางพร้อมเพย์ (${t.promptPayJobs} งาน)`, value: formatSatang(t.promptPayReceived) },
+    { label: `ช่างรับเงินสดเอง (${t.cashJobs} งาน)`, value: formatSatang(t.cashCollectedByMechanics) },
+    { label: `ปิดงานแล้วยังไม่ชำระ (${t.unpaidJobs} งาน)`, value: formatSatang(t.unpaidAmount), alert: t.unpaidJobs > 0 },
+    { label: 'เงินของช่างที่อยู่ในบัญชีคุณ (ต้องสำรองไว้)', value: formatSatang(p.owedToMechanics) },
+    { label: 'ค่าคอมที่ช่างค้างคุณ (งานเงินสด)', value: formatSatang(p.owedByMechanics), alert: p.owedByMechanics > 0 },
+  ].map((stat) => `<div class="stat${stat.alert ? ' alert' : ''}"><div class="value">${escapeHtml(stat.value)}</div><div class="label">${escapeHtml(stat.label)}</div></div>`).join('');
+  el('finance-note').innerHTML =
+    `ช่วง ${escapeHtml(data.range.from)} ถึง ${escapeHtml(data.range.to)} (นับตามวันที่ปิดงาน เวลาไทย) · ` +
+    'ค่าคอมจากงานเงินสด ' + escapeHtml(formatSatang(t.commissionFromCash)) + ' อยู่กับช่างจนกว่าช่างจะโอนคืน · ' +
+    'สองช่องล่างสุดเป็นยอด ณ ตอนนี้ ไม่ขึ้นกับช่วงวันที่';
+
+  const search = el('fin-search').value.trim().toLowerCase();
+  const mechanics = data.mechanics.filter((m) => !search ||
+    `${m.realName} ${m.nickname} ${m.phone}`.toLowerCase().includes(search));
+  el('fin-mechanics-body').innerHTML = mechanics.length === 0
+    ? '<tr><td colspan="8">ไม่พบช่าง</td></tr>'
+    : mechanics.map((m) => `
+      <tr>
+        <td><strong>${escapeHtml(m.realName)}</strong> (${escapeHtml(m.nickname)})<br>
+          <small>${escapeHtml(m.phone)} · ${escapeHtml(PROVIDER_STATUS_LABELS[m.status] || m.status)}</small></td>
+        <td class="num">${escapeHtml(m.jobs)}${m.unpaidJobs ? `<br><small>ยังไม่ชำระ ${escapeHtml(m.unpaidJobs)}</small>` : ''}</td>
+        <td class="num">${escapeHtml(formatSatang(m.promptPayGross))}<br><small>${escapeHtml(m.promptPayJobs)} งาน</small></td>
+        <td class="num">${escapeHtml(formatSatang(m.cashGross))}<br><small>${escapeHtml(m.cashJobs)} งาน</small></td>
+        <td class="num">${escapeHtml(formatSatang(m.commission))}</td>
+        <td class="num">${escapeHtml(formatSatang(m.mechanicNet))}</td>
+        <td class="num">${signedMoney(m.balance)}<br><small>${m.balance > 0 ? 'ต้องจ่ายช่าง' : m.balance < 0 ? 'ช่างค้างคุณ' : ''}</small></td>
+        <td class="num">${escapeHtml(formatSatang(m.pendingWithdrawal))}</td>
+      </tr>`).join('');
+
+  const names = new Map(data.mechanics.map((m) => [m.id, `${m.nickname} (${m.phone})`]));
+  const method = el('fin-method').value;
+  const orders = data.orders.filter((o) => !method || o.method === method);
+  el('fin-orders-body').innerHTML = orders.length === 0
+    ? '<tr><td colspan="9">ไม่มีงานในช่วงนี้</td></tr>'
+    : orders.map((o) => `
+      <tr>
+        <td>${escapeHtml(new Date(o.completedAt).toLocaleString('th-TH'))}</td>
+        <td><strong>${escapeHtml(o.orderNo)}</strong></td>
+        <td>${escapeHtml(o.serviceName)}</td>
+        <td>${escapeHtml(names.get(o.providerId) || '-')}</td>
+        <td>${escapeHtml(o.customer || '-')}</td>
+        <td><span class="pill ${o.method.toLowerCase()}">${escapeHtml(METHOD_LABELS[o.method])}</span></td>
+        <td class="num">${escapeHtml(formatSatang(o.gross))}</td>
+        <td class="num">${escapeHtml(formatSatang(o.commission))}</td>
+        <td class="num">${escapeHtml(formatSatang(o.mechanicNet))}</td>
+      </tr>`).join('');
+}
+
+// CSV เปิดใน Excel ได้ภาษาไทยถูก (ใส่ BOM) ยอดเงินเป็นบาท
+function downloadCsv(filename, header, rows) {
+  const cell = (value) => {
+    const text = String(value ?? '');
+    return /[",\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  };
+  const csv = [header, ...rows].map((row) => row.map(cell).join(',')).join('\r\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+const baht = (satang) => (satang / 100).toFixed(2);
+
+function exportMechanicsCsv() {
+  if (!financeData) return;
+  const { range, mechanics } = financeData;
+  downloadCsv(`fixgo-mechanics-${range.from}-to-${range.to}.csv`,
+    ['ชื่อจริง', 'ชื่อเล่น', 'เบอร์', 'สถานะ', 'งานที่ปิด', 'งานพร้อมเพย์', 'ยอดพร้อมเพย์', 'งานเงินสด', 'ยอดเงินสด',
+      'ยังไม่ชำระ (งาน)', 'ค่าคอม', 'ส่วนของช่าง', 'ยอดกระเป๋าตอนนี้', 'รอโอนให้ช่าง'],
+    mechanics.map((m) => [m.realName, m.nickname, m.phone, PROVIDER_STATUS_LABELS[m.status] || m.status, m.jobs,
+      m.promptPayJobs, baht(m.promptPayGross), m.cashJobs, baht(m.cashGross), m.unpaidJobs, baht(m.commission),
+      baht(m.mechanicNet), baht(m.balance), baht(m.pendingWithdrawal)]));
+}
+
+function exportOrdersCsv() {
+  if (!financeData) return;
+  const { range, orders, mechanics } = financeData;
+  const names = new Map(mechanics.map((m) => [m.id, m]));
+  downloadCsv(`fixgo-orders-${range.from}-to-${range.to}.csv`,
+    ['ปิดงานเมื่อ', 'เลขที่', 'บริการ', 'ช่าง', 'เบอร์ช่าง', 'ลูกค้า', 'รับเงินแบบ', 'ยอดเต็ม', 'ค่าคอม', 'ส่วนของช่าง'],
+    orders.map((o) => [new Date(o.completedAt).toLocaleString('th-TH'), o.orderNo, o.serviceName,
+      names.get(o.providerId)?.realName || '', names.get(o.providerId)?.phone || '', o.customer || '',
+      METHOD_LABELS[o.method], baht(o.gross), baht(o.commission), baht(o.mechanicNet)]));
+}
+
+async function loadSettlements() {
+  const rows = await api('/admin/settlements');
+  el('settlements-card').classList.toggle('alert', rows.length > 0);
+  el('settlements-body').innerHTML = rows.length === 0
+    ? '<tr><td colspan="5">ไม่มีสลิปรอตรวจ</td></tr>'
+    : rows.map((row) => `
+      <tr>
+        <td><a href="${escapeHtml(row.slipUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(row.slipUrl)}" alt="สลิป" style="width:64px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"></a></td>
+        <td>${escapeHtml(row.provider.realName)} (${escapeHtml(row.provider.nickname)})<br><small>${escapeHtml(row.provider.phone)}</small></td>
+        <td><strong>${escapeHtml(formatSatang(row.amount))}</strong></td>
+        <td>${escapeHtml(new Date(row.createdAt).toLocaleString('th-TH'))}</td>
+        <td>
+          <button onclick="confirmSettlement('${row.id}','${escapeHtml(formatSatang(row.amount))}')">ยอดเข้าแล้ว</button>
+          <button class="danger" onclick="rejectSettlement('${row.id}')">ไม่ผ่าน</button>
+        </td>
+      </tr>`).join('');
+}
+
+async function confirmSettlement(id, amountText) {
+  if (!confirm(`ยืนยันว่ายอด ${amountText} เข้าบัญชีแล้ว? ระบบจะลงยอดคืนในกระเป๋าช่าง และช่างเปิดรับงานต่อได้`)) return;
+  try {
+    await api('/admin/settlements/' + id + '/confirm', { method: 'POST' });
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
+}
+
+async function rejectSettlement(id) {
+  const reason = prompt(
+    'เหตุผลที่สลิปไม่ผ่าน (ส่งถึงช่าง)',
+    'ยังไม่พบยอดเงินเข้าบัญชี หรือยอดในสลิปไม่ตรงกับยอดค้าง',
+  );
+  if (!reason) return;
+  try {
+    await api('/admin/settlements/' + id + '/reject', {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
+}
+
 async function redispatch(id) {
   try {
     const result = await api('/admin/orders/' + id + '/redispatch', { method: 'POST' });
@@ -376,6 +628,8 @@ async function loadSummary() {
     { label: 'สลิปรอตรวจ', value: summary.pendingSlips ?? 0, alert: (summary.pendingSlips ?? 0) > 0 },
     { label: 'งานที่เสร็จแล้ว', value: summary.completedCount },
     { label: 'รายได้ค่าธรรมเนียม', value: formatSatang(summary.commissionRevenue) },
+    { label: 'ค่าคอมที่ช่างค้าง (งานเงินสด)', value: formatSatang(summary.outstandingDebt ?? 0) },
+    { label: 'สลิปค่าคอมรอตรวจ', value: summary.pendingSettlements ?? 0, alert: (summary.pendingSettlements ?? 0) > 0 },
     { label: 'ช่างรออนุมัติ', value: summary.pendingProviders },
     { label: 'คำขอเบิกค้าง', value: summary.pendingWithdrawals },
   ].map((stat) => `<div class="stat${stat.alert ? ' alert' : ''}"><div class="value">${escapeHtml(stat.value)}</div><div class="label">${escapeHtml(stat.label)}</div></div>`).join('');
@@ -384,25 +638,57 @@ async function loadSummary() {
 async function loadProviders() {
   const providers = await api('/admin/providers?status=PENDING');
   el('providers-body').innerHTML = providers.length === 0
-    ? '<tr><td colspan="6">ไม่มีช่างรออนุมัติ</td></tr>'
-    : providers.map((provider) => `
-      <tr>
-        <td>${escapeHtml(provider.realName)} (${escapeHtml(provider.nickname)})<br><small>ประสบการณ์ ${escapeHtml(provider.experienceYears)} ปี</small></td>
-        <td>${escapeHtml(provider.phone)}</td>
-        <td>${escapeHtml(provider.shopName || '-')}</td>
-        <td>${escapeHtml(provider.facebookPage || '-')}</td>
-        <td>${escapeHtml(formatMinute(provider.openMinute))}-${escapeHtml(formatMinute(provider.closeMinute))}</td>
-        <td>
+    ? '<p class="muted">ไม่มีช่างรออนุมัติ</p>'
+    : providers.map((provider) => {
+      const photo = provider.photoUrl
+        ? `<a href="${escapeHtml(provider.photoUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(provider.photoUrl)}" alt="รูปช่าง"></a>`
+        : '<img alt="ไม่มีรูป">';
+      const tools = (provider.toolPhotos || []).map((photo) =>
+        `<a href="${escapeHtml(photo.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(photo.url)}" alt="รูปเครื่องมือ"></a>`).join('');
+      const categories = (provider.serviceCategories || []).map((item) =>
+        `<span class="tag">${escapeHtml(item.category.name)}</span>`).join('');
+      const vehicles = (provider.vehicleTypes || []).map((item) =>
+        `<span class="tag">${escapeHtml(item.vehicleType.name)}</span>`).join('');
+      const map = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(provider.baseLat + ',' + provider.baseLng)}`;
+      return `
+      <div class="applicant">
+        <div class="applicant-head">
+          ${photo}
+          <div>
+            <strong>${escapeHtml(provider.realName)} (${escapeHtml(provider.nickname)})</strong><br>
+            <span class="muted">${escapeHtml(provider.phone)} · ประสบการณ์ ${escapeHtml(provider.experienceYears)} ปี · สมัครเมื่อ ${escapeHtml(new Date(provider.createdAt).toLocaleString('th-TH'))}</span>
+          </div>
+        </div>
+        ${provider.lineUserId ? `<p class="line-note">สมัครผ่าน LINE: เบอร์นี้ช่างกรอกเอง ยังไม่ได้ยืนยันด้วย OTP ควรโทรเช็กก่อนกดอนุมัติ</p>` : ''}
+        <dl>
+          <dt>ร้าน/อู่</dt><dd>${escapeHtml(provider.shopName || '-')}</dd>
+          <dt>เฟซบุ๊ก</dt><dd>${escapeHtml(provider.facebookPage || '-')}</dd>
+          <dt>เวลาทำงาน</dt><dd>${escapeHtml(formatMinute(provider.openMinute))}-${escapeHtml(formatMinute(provider.closeMinute))}</dd>
+          <dt>พื้นที่รับงาน</dt><dd><a href="${escapeHtml(map)}" target="_blank" rel="noopener">ดูบนแผนที่</a></dd>
+          <dt>รถที่ใช้</dt><dd>${provider.vehiclePlate ? `<span class="plate">${escapeHtml(provider.vehiclePlate)}</span>` : '-'} ${escapeHtml(provider.vehicleDesc || '')}</dd>
+          <dt>บริการที่รับ</dt><dd class="tags">${categories || '-'}</dd>
+          <dt>ประเภทรถที่รับ</dt><dd class="tags">${vehicles || '-'}</dd>
+        </dl>
+        <div><span class="muted">รูปเครื่องมือ (${(provider.toolPhotos || []).length} รูป กดเพื่อดูภาพใหญ่)</span><div class="tools">${tools || '-'}</div></div>
+        <div class="applicant-actions">
           <button onclick="setProviderStatus('${provider.id}','VERIFIED')">อนุมัติ</button>
-          <button class="danger" onclick="setProviderStatus('${provider.id}','SUSPENDED')">ปฏิเสธ</button>
-        </td>
-      </tr>`).join('');
+          <button class="danger" onclick="setProviderStatus('${provider.id}','REJECTED')">ปฏิเสธพร้อมเหตุผล</button>
+        </div>
+      </div>`;
+    }).join('');
 }
 
 async function setProviderStatus(id, status) {
+  let note;
+  if (status !== 'VERIFIED') {
+    note = prompt('เหตุผลที่ช่างจะเห็นในแอป เช่น "รูปเครื่องมือไม่ชัด กรุณาถ่ายใหม่"');
+    if (!note || note.trim().length < 3) return;
+  } else if (!confirm('อนุมัติช่างคนนี้ให้เริ่มรับงาน?')) {
+    return;
+  }
   await api('/admin/providers/' + id + '/status', {
     method: 'PATCH',
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(note ? { status, note: note.trim() } : { status }),
   });
   await Promise.all([loadProviders(), loadSummary()]);
 }

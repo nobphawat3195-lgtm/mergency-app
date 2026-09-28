@@ -17,7 +17,9 @@ import {
 } from '@prisma/client';
 
 import { AdminService } from './admin.service';
+import { FinanceService } from './finance.service';
 import { PaymentsService } from '../payments/payments.service';
+import { WalletService } from '../wallet/wallet.service';
 import { JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
 
 export class AdminLoginDto {
@@ -31,6 +33,12 @@ export class AdminLoginDto {
 export class SetProviderStatusDto {
   @IsEnum(ProviderStatus)
   status!: ProviderStatus;
+
+  /** เหตุผลที่ช่างเห็นในแอป บังคับเมื่อปฏิเสธ (REJECTED) หรือระงับ (SUSPENDED) */
+  @IsOptional()
+  @IsString()
+  @Length(3, 300)
+  note?: string;
 }
 
 export class CancelOrderDto {
@@ -55,6 +63,8 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly payments: PaymentsService,
+    private readonly wallet: WalletService,
+    private readonly finance: FinanceService,
   ) {}
 
   @Post('login')
@@ -83,7 +93,7 @@ export class AdminController {
     @Param('id') id: string,
     @Body() dto: SetProviderStatusDto,
   ) {
-    return this.admin.setProviderStatus(id, dto.status);
+    return this.admin.setProviderStatus(id, dto.status, dto.note);
   }
 
   @Get('orders')
@@ -126,6 +136,39 @@ export class AdminController {
   @Roles(Role.ADMIN)
   rejectSlip(@Param('id') id: string, @Body() dto: CancelOrderDto) {
     return this.payments.rejectSlip(id, dto.reason);
+  }
+
+  /**
+   * รายงานการเงินของเจ้าของ: ยอดรวม แยกพร้อมเพย์/เงินสด ค่าคอม และรายช่าง
+   * ?from=YYYY-MM-DD&to=YYYY-MM-DD (เวลาไทย) ไม่ใส่ = เดือนนี้
+   */
+  @Get('finance')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  financeReport(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.finance.report(from, to);
+  }
+
+  /** สลิปที่ช่างโอนค่าบริการค้าง (จากงานเงินสด) คืนบริษัท รอตรวจ */
+  @Get('settlements')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  listSettlements() {
+    return this.wallet.listSettlementsForReview();
+  }
+
+  @Post('settlements/:id/confirm')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  confirmSettlement(@Param('id') id: string) {
+    return this.wallet.confirmSettlement(id);
+  }
+
+  @Post('settlements/:id/reject')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  rejectSettlement(@Param('id') id: string, @Body() dto: CancelOrderDto) {
+    return this.wallet.rejectSettlement(id, dto.reason);
   }
 
   @Get('withdrawals')

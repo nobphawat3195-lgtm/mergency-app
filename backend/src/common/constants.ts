@@ -17,6 +17,23 @@ export function commissionRate(env: NodeJS.ProcessEnv = process.env): number {
   return rate;
 }
 
+/** เพดานค่าบริการค้างเริ่มต้น (บาท) ใช้เมื่อไม่ได้ตั้ง CASH_DEBT_LIMIT_BAHT */
+export const DEFAULT_CASH_DEBT_LIMIT_BAHT = 1000;
+
+/**
+ * งานเงินสดทำให้ช่างค้างค่าบริการแพลตฟอร์ม (ยอดกระเป๋าติดลบ)
+ * ถ้าค้างเกินเพดานนี้ ช่างเปิดรับงานไม่ได้จนกว่าจะโอนคืน คืนค่าเป็นสตางค์
+ */
+export function cashDebtLimit(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.CASH_DEBT_LIMIT_BAHT?.trim();
+  if (!raw) return DEFAULT_CASH_DEBT_LIMIT_BAHT * 100;
+  const baht = Number(raw);
+  if (!Number.isFinite(baht) || baht < 0) {
+    throw new Error('CASH_DEBT_LIMIT_BAHT must be a number of baht >= 0');
+  }
+  return Math.round(baht * 100);
+}
+
 /** เวลาที่ช่างมีให้กดรับงาน ช่วงสั้นเพื่อให้ลูกค้าไม่รอนานในเหตุฉุกเฉิน */
 export const DISPATCH_OFFER_TIMEOUT_MS = 90 * 1000;
 

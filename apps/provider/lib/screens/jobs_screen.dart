@@ -23,9 +23,7 @@ class _JobsScreenState extends State<JobsScreen> {
     super.didChangeDependencies();
     _future ??= ProviderAppScope.of(context).api.listAssignedOrders();
     final push = PushNotifications.instance;
-    _pushSub ??= push.onAny
-        .where((event) => event.type != 'OFFER')
-        .listen((_) {
+    _pushSub ??= push.onAny.where((event) => event.type != 'OFFER').listen((_) {
       if (mounted) unawaited(_reload());
     });
   }
@@ -308,12 +306,19 @@ class _JobsScreenState extends State<JobsScreen> {
             if (orders.isEmpty) {
               return ListView(
                 children: [
-                  const SizedBox(height: 120),
-                  Center(
-                    child: Text(
-                      'ยังไม่มีงานที่รับไว้',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
+                  const SizedBox(height: 100),
+                  Image.asset(technicianIconAsset, height: 96),
+                  const SizedBox(height: FixGoSpacing.md),
+                  const Text(
+                    'ยังไม่มีงานที่รับไว้',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'กดรับงานที่หน้าหลัก งานที่รับแล้วจะแสดงที่นี่\nพร้อมปุ่มออกเดินทาง ส่งราคา และปิดงาน',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               );

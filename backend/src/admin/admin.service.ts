@@ -72,21 +72,42 @@ export class AdminService {
     });
   }
 
-  async setProviderStatus(providerId: string, status: ProviderStatus) {
+  async setProviderStatus(
+    providerId: string,
+    status: ProviderStatus,
+    note?: string,
+  ) {
     const provider = await this.prisma.provider.findUnique({
       where: { id: providerId },
     });
     if (!provider) throw new NotFoundException('ไม่พบข้อมูลช่าง');
+    if (status === ProviderStatus.PENDING) {
+      throw new BadRequestException('เลือกอนุมัติ ปฏิเสธ หรือระงับเท่านั้น');
+    }
+    const reviewNote = note?.trim() || null;
+    if (status !== ProviderStatus.VERIFIED && !reviewNote) {
+      throw new BadRequestException('กรุณาใส่เหตุผลให้ช่างทราบ');
+    }
 
-    return this.prisma.provider.update({
+    const updated = await this.prisma.provider.update({
       where: { id: providerId },
       data: {
         status,
-        // ระงับบัญชีแล้วต้องออฟไลน์ทันที ไม่ให้รับงานใหม่
+        reviewNote: status === ProviderStatus.VERIFIED ? null : reviewNote,
+        reviewedAt: new Date(),
+        // ไม่ได้รับอนุมัติต้องออฟไลน์ทันที ไม่ให้รับงานใหม่
         isOnline:
           status === ProviderStatus.VERIFIED ? provider.isOnline : false,
       },
     });
+    if (provider.status !== status) {
+      void this.push.providerReviewed(
+        providerId,
+        status === ProviderStatus.VERIFIED,
+        reviewNote,
+      );
+    }
+    return updated;
   }
 
   listOrders(status?: OrderStatus) {
@@ -191,6 +212,8 @@ export class AdminService {
       pendingWithdrawals,
       noMatchOrders,
       pendingSlips,
+      pendingSettlements,
+      outstandingDebt,
     ] = await Promise.all([
       this.prisma.order.count(),
       this.prisma.order.findMany({
@@ -207,6 +230,8 @@ export class AdminService {
       this.prisma.payment.count({
         where: { status: 'PENDING', slipSubmittedAt: { not: null } },
       }),
+      this.prisma.commissionSettlement.count({ where: { status: 'PENDING' } }),
+      this.wallet.totalOutstandingDebt(),
     ]);
 
     const commissionRevenue = completedOrders.reduce(
@@ -223,6 +248,9 @@ export class AdminService {
       pendingWithdrawals,
       noMatchOrders,
       pendingSlips,
+      pendingSettlements,
+      /** ค่าบริการที่ช่างค้างจากงานเงินสดรวมกัน (สตางค์) ยังไม่ได้เข้าบัญชีบริษัท */
+      outstandingDebt,
     };
   }
 }

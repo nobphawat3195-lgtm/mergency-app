@@ -27,8 +27,8 @@ export class ProvidersController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: RegisterProviderDto,
   ) {
-    const provider = await this.providers.register(user.phone, dto, user.sub);
-    const session = await this.auth.issueProviderSession(user.phone);
+    const provider = await this.providers.register(user, dto);
+    const session = await this.auth.issueProviderSession(provider.phone);
     return { provider, ...session };
   }
 

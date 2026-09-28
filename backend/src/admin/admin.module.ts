@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 
 import { AdminService } from './admin.service';
 import { AdminController } from './admin.controller';
+import { FinanceService } from './finance.service';
 import { WalletModule } from '../wallet/wallet.module';
 import { DispatchModule } from '../dispatch/dispatch.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -19,7 +20,7 @@ import { PaymentsModule } from '../payments/payments.module';
       },
     }),
   ],
-  providers: [AdminService],
+  providers: [AdminService, FinanceService],
   controllers: [AdminController],
 })
 export class AdminModule {}

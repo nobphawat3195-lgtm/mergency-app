@@ -193,6 +193,7 @@ export class AccountService {
         where: { id: providerId },
         data: {
           phone: `deleted:${providerId}`,
+          lineUserId: null,
           realName: 'บัญชีที่ลบแล้ว',
           nickname: '',
           shopName: null,

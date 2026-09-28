@@ -38,6 +38,7 @@ class SubService {
     required this.priceType,
     this.description,
     this.infoNote,
+    this.fixedPrice = false,
   });
 
   final String id;
@@ -45,6 +46,9 @@ class SubService {
 
   /// หน่วยสตางค์
   final int basePrice;
+
+  /// ราคาเดียวจบ (เช่น ตรวจรถมือสอง) ถ้า false คือราคาเริ่มต้น ช่างแจ้งราคาจริงหน้างาน
+  final bool fixedPrice;
   final PriceType priceType;
   final String? description;
   final String? infoNote;
@@ -57,6 +61,7 @@ class SubService {
       priceType: _priceTypeFromJson(json['priceType'] as String),
       description: json['description'] as String?,
       infoNote: json['infoNote'] as String?,
+      fixedPrice: json['fixedPrice'] as bool? ?? false,
     );
   }
 }
@@ -379,6 +384,7 @@ class JobOffer {
     required this.expiresAt,
     required this.priceEstimated,
     this.categoryName,
+    this.categoryIconKey,
     this.subServiceName,
     this.pickupAddress,
     this.photoUrls = const [],
@@ -390,6 +396,7 @@ class JobOffer {
   final DateTime expiresAt;
   final int priceEstimated;
   final String? categoryName;
+  final String? categoryIconKey;
   final String? subServiceName;
   final String? pickupAddress;
   final List<String> photoUrls;
@@ -410,9 +417,54 @@ class JobOffer {
       expiresAt: DateTime.parse(json['expiresAt'] as String),
       priceEstimated: order['priceEstimated'] as int,
       categoryName: category?['name'] as String?,
+      categoryIconKey: category?['iconKey'] as String?,
       subServiceName: subService?['name'] as String?,
       pickupAddress: order['pickupAddress'] as String?,
       photoUrls: photos,
+    );
+  }
+}
+
+/// ค่าบริการแพลตฟอร์มที่ช่างค้างจากงานเงินสด ถ้าค้างเกินเพดานจะเปิดรับงานไม่ได้
+class WalletDebt {
+  const WalletDebt({
+    required this.balance,
+    required this.owed,
+    required this.limit,
+    required this.blocked,
+    this.pendingAmount,
+    this.lastRejectReason,
+  });
+
+  /// ยอดกระเป๋า (สตางค์) ติดลบได้
+  final int balance;
+
+  /// ค่าบริการที่ค้าง (สตางค์)
+  final int owed;
+
+  /// เพดานค่าบริการค้าง (สตางค์)
+  final int limit;
+
+  /// ค้างเกินเพดาน: เปิดรับงานไม่ได้จนกว่าจะโอนคืน
+  final bool blocked;
+
+  /// ยอดในสลิปที่รอทีมงานตรวจ (null = ไม่มีสลิปรอตรวจ)
+  final int? pendingAmount;
+
+  /// เหตุผลที่สลิปล่าสุดไม่ผ่าน
+  final String? lastRejectReason;
+
+  bool get hasPendingSlip => pendingAmount != null;
+
+  factory WalletDebt.fromJson(Map<String, dynamic> json) {
+    final pending = json['pendingSettlement'] as Map<String, dynamic>?;
+    return WalletDebt(
+      balance: json['balance'] as int,
+      owed: json['owed'] as int,
+      limit: json['limit'] as int,
+      blocked: json['blocked'] as bool? ?? false,
+      pendingAmount: pending?['amount'] as int?,
+      lastRejectReason: json['lastRejectReason'] as String?,
     );
   }
 }

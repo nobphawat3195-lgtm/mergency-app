@@ -1,4 +1,4 @@
-import { commissionRate } from '../common/constants';
+import { cashDebtLimit, commissionRate } from '../common/constants';
 const PLACEHOLDER_VALUES = new Set([
   'change-me-in-production',
   'dev-jwt-secret',
@@ -62,6 +62,9 @@ export function validateEnvironment(
 
   // ตรวจตอนเริ่มระบบ ไม่ให้ไปพังตอนลูกค้าสร้างงาน
   commissionRate({ COMMISSION_RATE: String(config.COMMISSION_RATE ?? '') });
+  cashDebtLimit({
+    CASH_DEBT_LIMIT_BAHT: String(config.CASH_DEBT_LIMIT_BAHT ?? ''),
+  });
 
   const corsOrigin = String(config.CORS_ORIGIN ?? '').trim();
   if (!corsOrigin || corsOrigin === '*') {
@@ -206,6 +209,16 @@ export function publicWebUrl(
   const explicit = env.PUBLIC_WEB_URL?.trim();
   if (explicit) return trimUrl(explicit);
   const domain = env.WEB_DOMAIN?.trim();
+  return domain ? `https://${domain}` : null;
+}
+
+/** ที่อยู่เว็บแอปช่าง เช่น https://fixer.fixgo.co.th ใช้พากลับหลังช่างล็อกอิน LINE */
+export function publicFixerUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const explicit = env.PUBLIC_FIXER_URL?.trim();
+  if (explicit) return trimUrl(explicit);
+  const domain = env.FIXER_DOMAIN?.trim();
   return domain ? `https://${domain}` : null;
 }
 

@@ -25,7 +25,7 @@ ServiceCategory (หมวดบริการ)
 SubService
 ├── id, category_id, name, description
 ├── base_price, price_type: enum [call_out_fee, full_service]
-└── vehicle_type_multiplier{} (เก๋ง/SUV/กระบะ ราคาต่างกัน)
+└── vehicle_type_multiplier{} (ตอนนี้ตั้งเป็น 1 ทุกประเภท = ราคาเดียวทุกรถ เก็บไว้เผื่อปรับภายหลัง)
 
 Order (งานฉุกเฉิน)
 ├── id, user_id, provider_id (nullable จนกว่าจะ match)

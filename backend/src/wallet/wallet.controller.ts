@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { IsInt, Min } from 'class-validator';
+import { IsInt, IsString, Length, Min } from 'class-validator';
 import { Role } from '@prisma/client';
 
 import { WalletService } from './wallet.service';
@@ -13,6 +13,12 @@ export class RequestWithdrawalDto {
   amount!: number;
 }
 
+export class SubmitSettlementDto {
+  @IsString()
+  @Length(1, 500)
+  slipUrl!: string;
+}
+
 @Controller('wallet')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.PROVIDER)
@@ -22,6 +28,25 @@ export class WalletController {
   @Get('balance')
   async getBalance(@CurrentUser() user: JwtPayload) {
     return { balance: await this.wallet.getBalance(user.sub) };
+  }
+
+  /** ค่าบริการค้างจากงานเงินสด เพดาน และสถานะสลิปโอนคืน */
+  @Get('debt')
+  getDebt(@CurrentUser() user: JwtPayload) {
+    return this.wallet.getDebtStatus(user.sub);
+  }
+
+  @Get('settlement-qr')
+  settlementQr(@CurrentUser() user: JwtPayload) {
+    return this.wallet.settlementQr(user.sub);
+  }
+
+  @Post('settlements')
+  submitSettlement(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: SubmitSettlementDto,
+  ) {
+    return this.wallet.submitSettlement(user.sub, dto.slipUrl);
   }
 
   @Get('entries')

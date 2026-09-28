@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/widgets.dart';
@@ -25,6 +26,55 @@ class ProviderAppState extends ChangeNotifier {
   /// ช่างที่ยังไม่ได้กรอกแบบฟอร์มลงทะเบียนจะเข้าได้แค่หน้าสมัคร
   bool get hasProfile => _hasProfile;
   bool get isOnline => _isOnline;
+
+  /// เข้าด้วย LINE แล้วยังไม่ได้สมัคร: โทเคนยังไม่มีเบอร์ ต้องกรอกเบอร์ติดต่อในใบสมัคร
+  bool get needsContactPhone {
+    final token = api.accessToken;
+    if (token == null) return false;
+    try {
+      final parts = token.split('.');
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      ) as Map<String, dynamic>;
+      return (payload['phone'] as String? ?? '').isEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// ล็อกอิน LINE ไม่สำเร็จ (ผู้ใช้กดยกเลิก หรือตั๋วหมดอายุ) ให้หน้าเข้าสู่ระบบแจ้ง
+  bool lineLoginFailed = false;
+
+  /// เว็บ: LINE พากลับมาพร้อม ?line_ticket= ให้แลกเป็นโทเคนแล้วลบออกจากแถบที่อยู่ทันที
+  Future<bool> _completeLineLogin() async {
+    final query = browserQueryParameters();
+    final ticket = query['line_ticket'];
+    if (ticket == null && query['line_error'] == null) return false;
+    clearBrowserQuery();
+    if (ticket == null) {
+      lineLoginFailed = true;
+      return false;
+    }
+    try {
+      final session = await api.exchangeLineTicketSession(ticket);
+      signIn(session.accessToken, hasProfile: session.hasProfile);
+      if (session.hasProfile) await _loadOnlineState();
+      return true;
+    } catch (_) {
+      api.accessToken = null;
+      lineLoginFailed = true;
+      return false;
+    }
+  }
+
+  Future<void> _loadOnlineState() async {
+    try {
+      final profile = await api.getProviderProfile();
+      _isOnline = profile['isOnline'] as bool? ?? false;
+    } catch (_) {
+      // โหลดสถานะไม่ได้ก็เริ่มแบบปิดรับงานไว้ก่อน หน้าหลักจะดึงใหม่อีกครั้ง
+    }
+  }
 
   void signIn(String token, {required bool hasProfile}) {
     api.accessToken = token;
@@ -58,6 +108,7 @@ class ProviderAppState extends ChangeNotifier {
 
   /// เรียกก่อน runApp ห้าม throw เด็ดขาด ไม่งั้นแอปค้างจอขาวตั้งแต่เปิด
   Future<void> restoreSession() async {
+    if (await _completeLineLogin()) return;
     final String? token;
     try {
       token = await _tokenStore.read();

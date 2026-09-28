@@ -7,7 +7,9 @@ import {
 import { OrderStatus, Provider, ProviderStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { JwtPayload } from '../auth/auth.service';
 import { UploadsService } from '../uploads/uploads.service';
+import { WalletService } from '../wallet/wallet.service';
 import { AdminAlertService } from '../notifications/admin-alert.service';
 import { OrderEventsService } from '../notifications/order-events.service';
 import {
@@ -24,52 +26,126 @@ export class ProvidersService {
     private readonly uploads: UploadsService,
     private readonly adminAlert: AdminAlertService,
     private readonly events: OrderEventsService,
+    private readonly wallet: WalletService,
   ) {}
 
-  /** uploaderId = sub ของโทเคนที่ใช้ขอ presign (ช่างที่ยังไม่สมัครคือ pending:<เบอร์>) */
+  /**
+   * ยื่นใบสมัคร รูปต้องอัปโหลดด้วยโทเคนเดียวกัน (sub ของช่างที่ยังไม่สมัครคือ pending:<เบอร์>
+   * หรือ pending:line:<LINE userId>)
+   * ใบสมัครที่ถูกปฏิเสธ (REJECTED) ส่งใหม่ได้ ข้อมูลเดิมถูกแทนที่และกลับไปรอตรวจ
+   *
+   * เบอร์โทร: ล็อกอินด้วย OTP ใช้เบอร์จากโทเคน (ยืนยันแล้ว) ห้ามรับจาก body กันการสมัครแทนคนอื่น
+   * สมัครผ่าน LINE ไม่มีเบอร์ที่ยืนยัน จึงใช้เบอร์ที่กรอกในใบสมัคร แอดมินโทรยืนยันก่อนอนุมัติ
+   */
   async register(
-    phone: string,
+    user: JwtPayload,
     dto: RegisterProviderDto,
-    uploaderId: string,
   ): Promise<Provider> {
     this.uploads.assertOwnedUploads(
-      dto.toolPhotoUrls,
-      uploaderId,
+      [...dto.toolPhotoUrls, dto.photoUrl],
+      user.sub,
       'PROVIDER_TOOL',
     );
-    const existing = await this.prisma.provider.findUnique({
-      where: { phone },
-    });
-    if (existing) {
-      throw new BadRequestException('เบอร์นี้ลงทะเบียนเป็นช่างไว้แล้ว');
+    // หาใบสมัครเดิมด้วย id ก่อน (เบอร์ในโทเคนอาจเก่า ถ้าช่าง LINE แก้เบอร์ตอนส่งใหม่)
+    const existing = user.lineUserId
+      ? await this.prisma.provider.findUnique({
+          where: { lineUserId: user.lineUserId },
+        })
+      : !user.sub.startsWith('pending:')
+        ? await this.prisma.provider.findUnique({ where: { id: user.sub } })
+        : await this.prisma.provider.findUnique({
+            where: { phone: user.phone },
+          });
+    if (existing && existing.status !== ProviderStatus.REJECTED) {
+      throw new BadRequestException('บัญชีนี้ลงทะเบียนเป็นช่างไว้แล้ว');
     }
 
-    const provider = await this.prisma.provider.create({
-      data: {
-        phone,
-        realName: dto.realName,
-        nickname: dto.nickname,
-        experienceYears: dto.experienceYears,
-        shopName: dto.shopName,
-        facebookPage: dto.facebookPage,
-        baseLat: dto.baseLat,
-        baseLng: dto.baseLng,
-        openMinute: dto.openMinute,
-        closeMinute: dto.closeMinute,
-        status: ProviderStatus.PENDING,
-        serviceCategories: {
-          create: dto.categoryIds.map((categoryId) => ({ categoryId })),
-        },
-        vehicleTypes: {
-          create: dto.vehicleTypeIds.map((vehicleTypeId) => ({
-            vehicleTypeId,
-          })),
-        },
-        toolPhotos: {
-          create: dto.toolPhotoUrls.map((url) => ({ url })),
-        },
+    const selfDeclaredPhone = Boolean(user.lineUserId || existing?.lineUserId);
+    const phone = selfDeclaredPhone
+      ? (dto.phone ?? existing?.phone ?? '')
+      : user.phone;
+    if (!phone) {
+      throw new BadRequestException('กรุณากรอกเบอร์โทรศัพท์ที่ติดต่อได้');
+    }
+    if (phone !== existing?.phone) {
+      const taken = await this.prisma.provider.findUnique({
+        where: { phone },
+        select: { id: true },
+      });
+      if (taken) {
+        throw new BadRequestException(
+          'เบอร์นี้ลงทะเบียนเป็นช่างไว้แล้ว ให้เข้าสู่ระบบด้วยเบอร์โทรนี้แทน',
+        );
+      }
+    }
+
+    const data = {
+      phone,
+      realName: dto.realName,
+      nickname: dto.nickname,
+      experienceYears: dto.experienceYears,
+      shopName: dto.shopName ?? null,
+      facebookPage: dto.facebookPage ?? null,
+      baseLat: dto.baseLat,
+      baseLng: dto.baseLng,
+      openMinute: dto.openMinute,
+      closeMinute: dto.closeMinute,
+      photoUrl: dto.photoUrl,
+      vehiclePlate: dto.vehiclePlate.trim().toUpperCase(),
+      vehicleDesc: dto.vehicleDesc?.trim() || null,
+      status: ProviderStatus.PENDING,
+      reviewNote: null,
+      reviewedAt: null,
+    };
+    const relations = {
+      serviceCategories: {
+        create: dto.categoryIds.map((categoryId) => ({ categoryId })),
       },
-    });
+      vehicleTypes: {
+        create: dto.vehicleTypeIds.map((vehicleTypeId) => ({ vehicleTypeId })),
+      },
+      toolPhotos: {
+        create: dto.toolPhotoUrls.map((url) => ({ url })),
+      },
+    };
+
+    let replacedPhotos: string[] = [];
+    const provider = existing
+      ? await this.prisma.$transaction(async (tx) => {
+          const old = await tx.providerToolPhoto.findMany({
+            where: { providerId: existing.id },
+            select: { url: true },
+          });
+          replacedPhotos = [
+            ...old.map((photo) => photo.url),
+            ...(existing.photoUrl ? [existing.photoUrl] : []),
+          ].filter(
+            (url) => url !== dto.photoUrl && !dto.toolPhotoUrls.includes(url),
+          );
+          await tx.providerServiceCategory.deleteMany({
+            where: { providerId: existing.id },
+          });
+          await tx.providerVehicleType.deleteMany({
+            where: { providerId: existing.id },
+          });
+          await tx.providerToolPhoto.deleteMany({
+            where: { providerId: existing.id },
+          });
+          return tx.provider.update({
+            where: { id: existing.id },
+            data: { ...data, ...relations },
+          });
+        })
+      : await this.prisma.provider.create({
+          data: {
+            lineUserId: user.lineUserId ?? null,
+            ...data,
+            ...relations,
+          },
+        });
+    if (replacedPhotos.length > 0) {
+      await this.uploads.deleteUploads(replacedPhotos);
+    }
     void this.adminAlert.providerApplied(provider.nickname);
     return provider;
   }
@@ -100,6 +176,7 @@ export class ProvidersService {
 
   async setOnline(providerId: string, isOnline: boolean): Promise<Provider> {
     await this.requireVerified(providerId);
+    if (isOnline) await this.wallet.assertCanTakeJobs(providerId);
     return this.prisma.provider.update({
       where: { id: providerId },
       data: { isOnline, lastSeenAt: new Date() },

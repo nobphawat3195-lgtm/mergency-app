@@ -9,10 +9,13 @@ import {
   IsOptional,
   IsString,
   Length,
+  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
+
+import { THAI_PHONE } from '../../auth/dto/auth.dto';
 
 /** แบบฟอร์มลงทะเบียนช่าง — ฟิลด์ตรงกับฟอร์มจริงที่ใช้คัดกรองช่าง */
 export class RegisterProviderDto {
@@ -72,6 +75,29 @@ export class RegisterProviderDto {
   @ArrayMaxSize(6)
   @IsString({ each: true })
   toolPhotoUrls!: string[];
+
+  /** รูปหน้าตรงของช่าง ทีมงานใช้ตรวจตัวตน และลูกค้าเห็นในการ์ดช่าง */
+  @IsString()
+  @Length(1, 500)
+  photoUrl!: string;
+
+  /** ทะเบียนรถที่ใช้ไปหน้างาน ลูกค้าใช้ยืนยันว่าเป็นช่างตัวจริง */
+  @IsString()
+  @Length(2, 20)
+  vehiclePlate!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  vehicleDesc?: string;
+
+  /**
+   * เบอร์ติดต่อของช่าง ใช้เฉพาะคนที่สมัครผ่าน LINE (ยังไม่มีเบอร์ที่ยืนยันด้วย OTP)
+   * ช่างที่ล็อกอินด้วยเบอร์โทรใช้เบอร์จากโทเคนเสมอ ค่านี้จะถูกเมิน
+   */
+  @IsOptional()
+  @Matches(THAI_PHONE, { message: 'เบอร์โทรศัพท์ไม่ถูกต้อง' })
+  phone?: string;
 }
 
 export class UpdateLocationDto {
