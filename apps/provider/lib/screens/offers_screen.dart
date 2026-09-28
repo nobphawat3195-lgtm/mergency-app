@@ -298,6 +298,7 @@ class _OffersScreenState extends State<OffersScreen> {
                     const SizedBox(height: FixGoSpacing.md),
                     _SectionCard(
                       icon: Icons.insights_outlined,
+                      iconAsset: uiIconChart,
                       title: 'สรุปผลงานวันนี้',
                       actionLabel: 'กระเป๋าเงิน',
                       onAction: () => widget.onOpenTab?.call(2),
@@ -649,10 +650,10 @@ class _JobProgress extends StatelessWidget {
   final Order? order;
 
   static const _steps = [
-    (icon: Icons.assignment_turned_in_outlined, label: 'รับงาน'),
-    (icon: Icons.directions_car_outlined, label: 'เดินทาง'),
-    (icon: Icons.build_outlined, label: 'กำลังซ่อม'),
-    (icon: Icons.check_rounded, label: 'ปิดงาน'),
+    (asset: uiIconClipboard, label: 'รับงาน'),
+    (asset: uiIconTravel, label: 'เดินทาง'),
+    (asset: uiIconRepair, label: 'กำลังซ่อม'),
+    (asset: uiIconDone, label: 'ปิดงาน'),
   ];
 
   int get _current {
@@ -703,29 +704,28 @@ class _JobProgress extends StatelessWidget {
               Column(
                 children: [
                   Container(
-                    height: 40,
-                    width: 40,
+                    height: 44,
+                    width: 44,
+                    padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: index < current
+                      color: index <= current
                           ? FixGoColors.accentSoft
-                          : index == current
-                              ? FixGoColors.accent
-                              : FixGoColors.surface,
+                          : FixGoColors.surface,
                       border: Border.all(
                         color: index <= current
                             ? FixGoColors.accent
                             : FixGoColors.hairline,
+                        width: index == current ? 2.5 : 1,
                       ),
                     ),
-                    child: Icon(
-                      index < current ? Icons.check_rounded : step.icon,
-                      size: 20,
-                      color: index == current
-                          ? Colors.white
-                          : index < current
-                              ? FixGoColors.accent
-                              : FixGoColors.textSecondary,
+                    // ขั้นที่ยังไม่ถึงแสดงจางลง ขั้นที่ผ่านแล้วเป็นเครื่องหมายถูก
+                    child: Opacity(
+                      opacity: index <= current ? 1 : 0.4,
+                      child: Image.asset(
+                        index < current ? uiIconDone : step.asset,
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -763,7 +763,7 @@ class _SummaryRow extends StatelessWidget {
       children: [
         Expanded(
           child: _StatTile(
-            icon: Icons.task_alt_rounded,
+            icon: uiIconDone,
             label: 'งานเสร็จวันนี้',
             value: summary == null ? '–' : '${summary.completedToday}',
             unit: 'งาน',
@@ -772,7 +772,7 @@ class _SummaryRow extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: _StatTile(
-            icon: Icons.account_balance_wallet_outlined,
+            icon: uiIconBanknote,
             label: 'รายได้วันนี้',
             value: summary == null ? '–' : formatSatang(summary.earnedToday),
             unit: 'ยืนยันแล้ว',
@@ -781,7 +781,7 @@ class _SummaryRow extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: _StatTile(
-            icon: Icons.savings_outlined,
+            icon: uiIconMoneyBag,
             label: 'ยอดถอนได้',
             value: summary == null ? '–' : formatSatang(summary.balance),
             unit: 'คงเหลือ',
@@ -800,7 +800,8 @@ class _StatTile extends StatelessWidget {
     required this.unit,
   });
 
-  final IconData icon;
+  /// ไอคอน 3D (asset path)
+  final String icon;
   final String label;
   final String value;
   final String unit;
@@ -816,15 +817,7 @@ class _StatTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            height: 30,
-            width: 30,
-            decoration: const BoxDecoration(
-              color: FixGoColors.accentSoft,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 17, color: FixGoColors.accent),
-          ),
+          Image.asset(icon, height: 32, width: 32),
           const SizedBox(height: 6),
           Text(
             label,
@@ -868,13 +861,9 @@ class _MainMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const items = [
-      (icon: Icons.build_circle_outlined, label: 'งานของฉัน', tab: 1),
-      (
-        icon: Icons.account_balance_wallet_outlined,
-        label: 'กระเป๋าเงิน',
-        tab: 2
-      ),
-      (icon: Icons.person_outline, label: 'โปรไฟล์', tab: 3),
+      (asset: uiIconRepair, label: 'งานของฉัน', tab: 1),
+      (asset: uiIconMoneyBag, label: 'กระเป๋าเงิน', tab: 2),
+      (asset: technicianIconAsset, label: 'โปรไฟล์', tab: 3),
     ];
     return Row(
       children: [
@@ -891,7 +880,7 @@ class _MainMenu extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   child: Column(
                     children: [
-                      Icon(item.icon, color: FixGoColors.accent, size: 28),
+                      Image.asset(item.asset, height: 36, width: 36),
                       const SizedBox(height: 4),
                       Text(
                         item.label,

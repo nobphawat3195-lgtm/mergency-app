@@ -139,22 +139,29 @@ class _WalletScreenState extends State<WalletScreen> {
                         colors: [Color(0xFF1D3F33), FixGoColors.navy],
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        const Text(
-                          'ยอดคงเหลือ',
-                          style: TextStyle(color: Color(0xFFC9DDD4)),
-                        ),
-                        const SizedBox(height: FixGoSpacing.xs),
-                        Text(
-                          formatSatang(_balance ?? 0),
-                          style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFFC7EE77),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'ยอดคงเหลือ',
+                                style: TextStyle(color: Color(0xFFC9DDD4)),
+                              ),
+                              const SizedBox(height: FixGoSpacing.xs),
+                              Text(
+                                formatSatang(_balance ?? 0),
+                                style: const TextStyle(
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFFC7EE77),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
+                        Image.asset(uiIconMoneyBag, width: 64, height: 64),
                       ],
                     ),
                   ),

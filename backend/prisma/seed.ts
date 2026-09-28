@@ -31,12 +31,13 @@ const LABOR_ONLY =
  * เกินจากนั้นประมาณ 20–30 บาท/กม. เจ้าของรถสไลด์ประเมินราคาจริงตามระยะทางอีกครั้ง
  */
 const TOW_NOTE =
-  'ราคาเริ่มต้นรวมระยะทางประมาณ 15 กม. ถ้าไกลกว่านั้นคิดเพิ่มประมาณ 20–30 บาท/กม. ' +
-  'รถใหญ่ รถติดหล่ม หรือขนย้ายข้ามจังหวัดราคาจะสูงขึ้น (ประมาณ 2,000–4,000 บาท) ' +
+  'ราคา 1,500–5,000 บาท ขึ้นกับระยะทาง ขนาดรถ และสภาพหน้างาน ' +
+  'เริ่มต้น 1,500 บาทรวมระยะทางประมาณ 15 กม. ถ้าไกลกว่านั้นคิดเพิ่มประมาณ 20–30 บาท/กม. ' +
   'เจ้าของรถสไลด์แจ้งราคาจริงให้คุณยืนยันก่อนยกรถเสมอ';
 
 // ราคาทั้งหมดกำหนดโดยเจ้าของโปรเจกต์ (ก.ย. 2569) เป็นค่าแรงเริ่มต้น
-// บริการที่ไม่อยู่ในรายการของเจ้าของใช้ค่าแรงเริ่มต้น 650 บาท
+// บริการที่ไม่อยู่ในรายการของเจ้าของใช้ค่าแรงเริ่มต้น 750 บาท
+// ปรับรอบสอง: บวก 100 บาททุกบริการ ยกเว้นรถสไลด์ (1,500–5,000) และตรวจรถมือสอง (1,990)
 const CATEGORIES = [
   {
     slug: 'car-mechanic',
@@ -48,31 +49,31 @@ const CATEGORIES = [
         name: 'เรียกช่างให้ไปดูก่อน จ่ายเงินหน้างาน',
         description:
           'ช่างไปวิเคราะห์อาการที่หน้างาน แล้วเสนอราคาซ่อมให้ยืนยันก่อน',
-        basePrice: baht(650),
+        basePrice: baht(750),
         priceType: PriceType.CALL_OUT_FEE,
       },
       {
         name: 'เช็คโค้ด ไฟเตือนโชว์หน้าปัด',
         description: 'ช่างนำเครื่องอ่านโค้ดไปตรวจหาสาเหตุไฟเตือนที่หน้างาน',
-        basePrice: baht(650),
+        basePrice: baht(750),
         priceType: PriceType.CALL_OUT_FEE,
       },
       {
         name: 'รถดับกลางทาง',
         description: 'ช่างไปดูอาการหน้างานและประเมินเบื้องต้น',
-        basePrice: baht(650),
+        basePrice: baht(750),
         priceType: PriceType.CALL_OUT_FEE,
       },
       {
         name: 'รถสตาร์ทไม่ติด',
         description: 'ช่างไปดูอาการหน้างานและประเมินเบื้องต้น',
-        basePrice: baht(650),
+        basePrice: baht(750),
         priceType: PriceType.CALL_OUT_FEE,
       },
       {
         name: 'ซ่อมนอกสถานที่',
         description: LABOR_ONLY,
-        basePrice: baht(650),
+        basePrice: baht(750),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
@@ -86,25 +87,25 @@ const CATEGORIES = [
       {
         name: 'เรียกช่างให้ไปดูก่อน จ่ายเงินหน้างาน',
         description: 'ช่างไปดูอาการหน้างานและประเมินราคา',
-        basePrice: baht(650),
+        basePrice: baht(750),
         priceType: PriceType.CALL_OUT_FEE,
       },
       {
         name: 'ไดชาร์จ (นอกสถานที่)',
         description: LABOR_ONLY,
-        basePrice: baht(650),
+        basePrice: baht(750),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'ไดสตาร์ท (นอกสถานที่)',
         description: LABOR_ONLY,
-        basePrice: baht(650),
+        basePrice: baht(750),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'ไล่เช็คระบบไฟ (นอกสถานที่)',
         description: LABOR_ONLY,
-        basePrice: baht(650),
+        basePrice: baht(750),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
@@ -118,20 +119,20 @@ const CATEGORIES = [
       {
         name: 'จั๊มแบต (นอกสถานที่)',
         description: 'พ่วงแบตให้สตาร์ทติด',
-        basePrice: baht(500),
+        basePrice: baht(600),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'เปลี่ยนแบตเตอรี่ (นอกสถานที่)',
         description:
           'ค่าแรงติดตั้ง ไม่รวมราคาแบตเตอรี่ ช่างแจ้งราคาแบตตามรุ่นให้ยืนยันก่อน (มีแบตแล้วจ่ายเฉพาะค่าแรง)',
-        basePrice: baht(500),
+        basePrice: baht(600),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'เรียกช่างไปวิเคราะห์อาการ',
         description: 'ช่างตรวจแบตเตอรี่และระบบไฟหน้างาน แล้วเสนอราคาให้ยืนยัน',
-        basePrice: baht(450),
+        basePrice: baht(550),
         priceType: PriceType.CALL_OUT_FEE,
       },
     ],
@@ -145,31 +146,31 @@ const CATEGORIES = [
       {
         name: 'ปะยางตัวหนอน (นอกสถานที่)',
         description: 'ซ่อมรอยรั่วขนาดเล็กบริเวณหน้ายาง',
-        basePrice: baht(690),
+        basePrice: baht(790),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'ปะยางสตีม (นอกสถานที่)',
         description: 'ซ่อมรอยรั่วแบบสตีม ช่างตรวจสภาพยางก่อนว่าซ่อมได้ปลอดภัย',
-        basePrice: baht(890),
+        basePrice: baht(990),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'เปลี่ยนยางอะไหล่ (นอกสถานที่)',
         description: 'เปลี่ยนเป็นยางอะไหล่ของลูกค้า ให้ขับไปร้านยางได้',
-        basePrice: baht(690),
+        basePrice: baht(790),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'เรียกช่างให้ไปดูก่อน จ่ายเงินหน้างาน',
         description: 'ช่างตรวจยางและล้อหน้างานแล้วเสนอราคา',
-        basePrice: baht(650),
+        basePrice: baht(750),
         priceType: PriceType.CALL_OUT_FEE,
       },
       {
         name: 'เปลี่ยนยาง (นอกสถานที่)',
         description: 'ค่าแรงถอดและติดตั้งยางใหม่ ไม่รวมค่ายาง',
-        basePrice: baht(650),
+        basePrice: baht(750),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
@@ -183,20 +184,20 @@ const CATEGORIES = [
       {
         name: 'เรียกช่างให้ไปดูก่อน',
         description: 'ช่างไปดูอาการหน้างานและประเมินราคา',
-        basePrice: baht(700),
+        basePrice: baht(800),
         priceType: PriceType.CALL_OUT_FEE,
       },
       {
         name: 'สะเดาะล็อค เปิดรถ (ลืมกุญแจไว้ในรถ)',
         description: 'เปิดรถจากภายนอก ไม่รวมทำกุญแจใหม่',
-        basePrice: baht(950),
+        basePrice: baht(1050),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'ทำกุญแจ / โปรแกรม Smart Key (นอกสถานที่)',
         description:
           'ราคาเริ่มต้น ช่างแจ้งราคาจริงตามรุ่นรถ (ทำดอกใหม่ ลงชิป Immobilizer, Smart Key, รีโมท)',
-        basePrice: baht(2000),
+        basePrice: baht(2100),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
@@ -210,7 +211,7 @@ const CATEGORIES = [
       {
         name: 'เรียกรถสไลด์ใกล้ฉัน',
         description:
-          'เริ่มต้น 1,500 บาท ในระยะประมาณ 15 กม. เจ้าของรถสไลด์ประเมินราคาจริงตามระยะทาง',
+          '1,500–5,000 บาท ตามระยะทาง เจ้าของรถสไลด์ประเมินราคาจริงให้ยืนยันก่อนยกรถ',
         infoNote: TOW_NOTE,
         basePrice: baht(1500),
         priceType: PriceType.FULL_SERVICE,
@@ -233,7 +234,7 @@ const CATEGORIES = [
       {
         name: 'ส่งน้ำมันฉุกเฉิน',
         description: 'ค่าบริการส่งถึงที่ ไม่รวมค่าน้ำมัน (สูงสุด 10 ลิตร)',
-        basePrice: baht(590),
+        basePrice: baht(690),
         priceType: PriceType.FULL_SERVICE,
       },
     ],
@@ -248,31 +249,31 @@ const CATEGORIES = [
         name: 'ล้างแผงแอร์ คอยล์ร้อน รถ EV',
         description:
           'ล้างแผงคอยล์ร้อนแอร์ถึงที่ ช่วยให้แอร์เย็นและระบายความร้อนแบตได้ดีขึ้น',
-        basePrice: baht(1790),
+        basePrice: baht(1890),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'ตรวจเช็กอาการรถ EV (นอกสถานที่)',
         description: LABOR_ONLY,
-        basePrice: baht(1200),
+        basePrice: baht(1300),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'ตรวจอาการชาร์จไม่เข้าเบื้องต้น (นอกสถานที่)',
         description: LABOR_ONLY,
-        basePrice: baht(1200),
+        basePrice: baht(1300),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'อ่านโค้ด ไฟเตือนระบบ EV (นอกสถานที่)',
         description: LABOR_ONLY,
-        basePrice: baht(1200),
+        basePrice: baht(1300),
         priceType: PriceType.FULL_SERVICE,
       },
       {
         name: 'เรียกช่างให้ไปดูก่อน',
         description: 'ช่างไปดูอาการหน้างานและประเมินราคา',
-        basePrice: baht(650),
+        basePrice: baht(750),
         priceType: PriceType.CALL_OUT_FEE,
       },
     ],

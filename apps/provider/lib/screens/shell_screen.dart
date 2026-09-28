@@ -96,23 +96,23 @@ class _ProviderShellScreenState extends State<ProviderShellScreen> {
           onDestinationSelected: (value) => setState(() => _index = value),
           destinations: const [
             NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
+              icon: _NavIcon(uiIconHome),
+              selectedIcon: _NavIcon(uiIconHome, selected: true),
               label: 'หน้าหลัก',
             ),
             NavigationDestination(
-              icon: Icon(Icons.build_outlined),
-              selectedIcon: Icon(Icons.build),
+              icon: _NavIcon(uiIconRepair),
+              selectedIcon: _NavIcon(uiIconRepair, selected: true),
               label: 'งานของฉัน',
             ),
             NavigationDestination(
-              icon: Icon(Icons.account_balance_wallet_outlined),
-              selectedIcon: Icon(Icons.account_balance_wallet),
+              icon: _NavIcon(uiIconMoneyBag),
+              selectedIcon: _NavIcon(uiIconMoneyBag, selected: true),
               label: 'กระเป๋าเงิน',
             ),
             NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person),
+              icon: _NavIcon(technicianIconAsset),
+              selectedIcon: _NavIcon(technicianIconAsset, selected: true),
               label: 'โปรไฟล์',
             ),
           ],
@@ -309,5 +309,22 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
       default:
         return status;
     }
+  }
+}
+
+/// ไอคอน 3D ของแถบเมนูล่าง: แท็บที่ไม่ได้เลือกแสดงจางลงและเล็กกว่าเล็กน้อย
+class _NavIcon extends StatelessWidget {
+  const _NavIcon(this.asset, {this.selected = false});
+
+  final String asset;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = selected ? 30.0 : 26.0;
+    return Opacity(
+      opacity: selected ? 1 : 0.55,
+      child: Image.asset(asset, width: size, height: size),
+    );
   }
 }
