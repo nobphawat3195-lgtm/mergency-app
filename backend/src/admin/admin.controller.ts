@@ -17,6 +17,7 @@ import {
 } from '@prisma/client';
 
 import { AdminService } from './admin.service';
+import { FinanceService } from './finance.service';
 import { PaymentsService } from '../payments/payments.service';
 import { WalletService } from '../wallet/wallet.service';
 import { JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
@@ -63,6 +64,7 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly payments: PaymentsService,
     private readonly wallet: WalletService,
+    private readonly finance: FinanceService,
   ) {}
 
   @Post('login')
@@ -134,6 +136,17 @@ export class AdminController {
   @Roles(Role.ADMIN)
   rejectSlip(@Param('id') id: string, @Body() dto: CancelOrderDto) {
     return this.payments.rejectSlip(id, dto.reason);
+  }
+
+  /**
+   * รายงานการเงินของเจ้าของ: ยอดรวม แยกพร้อมเพย์/เงินสด ค่าคอม และรายช่าง
+   * ?from=YYYY-MM-DD&to=YYYY-MM-DD (เวลาไทย) ไม่ใส่ = เดือนนี้
+   */
+  @Get('finance')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  financeReport(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.finance.report(from, to);
   }
 
   /** สลิปที่ช่างโอนค่าบริการค้าง (จากงานเงินสด) คืนบริษัท รอตรวจ */
