@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
+  AdminRole,
   DispatchStatus,
   OrderStatus,
   ProviderStatus,
@@ -18,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { DispatchService } from '../dispatch/dispatch.service';
 import { PushService } from '../notifications/push.service';
+import { AdminAuditService } from './admin-access';
 
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString('hex');
@@ -33,6 +35,16 @@ export function verifyPassword(password: string, stored: string): boolean {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
+/** ข้อมูลแอดมินที่ส่งออกได้ (ไม่มี passwordHash) */
+const ADMIN_PUBLIC_FIELDS = {
+  id: true,
+  phone: true,
+  name: true,
+  role: true,
+  disabledAt: true,
+  createdAt: true,
+} as const;
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -41,23 +53,106 @@ export class AdminService {
     private readonly jwt: JwtService,
     private readonly dispatch: DispatchService,
     private readonly push: PushService,
+    private readonly audit: AdminAuditService,
   ) {}
 
   async login(
     phone: string,
     password: string,
-  ): Promise<{ accessToken: string }> {
+  ): Promise<{ accessToken: string; role: AdminRole; name: string }> {
     const admin = await this.prisma.adminUser.findUnique({ where: { phone } });
     if (!admin || !verifyPassword(password, admin.passwordHash)) {
       throw new UnauthorizedException('เบอร์โทรหรือรหัสผ่านไม่ถูกต้อง');
     }
+    if (admin.disabledAt) {
+      throw new UnauthorizedException('บัญชีนี้ถูกปิดแล้ว ติดต่อเจ้าของระบบ');
+    }
+    void this.audit.record(admin, 'LOGIN');
     return {
       accessToken: await this.jwt.signAsync({
         sub: admin.id,
         role: Role.ADMIN,
         phone: admin.phone,
       }),
+      role: admin.role,
+      name: admin.name,
     };
+  }
+
+  // ---------- ทีมงาน ----------
+
+  listAdmins() {
+    return this.prisma.adminUser.findMany({
+      select: ADMIN_PUBLIC_FIELDS,
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async createAdmin(input: {
+    phone: string;
+    name: string;
+    password: string;
+    role: AdminRole;
+  }) {
+    const exists = await this.prisma.adminUser.findUnique({
+      where: { phone: input.phone },
+      select: { id: true },
+    });
+    if (exists) throw new BadRequestException('เบอร์นี้มีบัญชีแอดมินแล้ว');
+    return this.prisma.adminUser.create({
+      data: {
+        phone: input.phone,
+        name: input.name.trim(),
+        passwordHash: hashPassword(input.password),
+        role: input.role,
+      },
+      select: ADMIN_PUBLIC_FIELDS,
+    });
+  }
+
+  /**
+   * เปลี่ยนสิทธิ์ ปิด/เปิดบัญชี หรือตั้งรหัสผ่านใหม่
+   * ห้ามลดสิทธิ์หรือปิดบัญชีตัวเอง และต้องเหลือเจ้าของที่ใช้งานได้อย่างน้อย 1 คนเสมอ
+   */
+  async updateAdmin(
+    actorId: string,
+    targetId: string,
+    input: { role?: AdminRole; disabled?: boolean; password?: string },
+  ) {
+    const target = await this.prisma.adminUser.findUnique({
+      where: { id: targetId },
+    });
+    if (!target) throw new NotFoundException('ไม่พบบัญชีแอดมินนี้');
+    const demoting =
+      input.role === AdminRole.STAFF && target.role === AdminRole.OWNER;
+    const disabling = input.disabled === true && !target.disabledAt;
+    if (actorId === targetId && (demoting || disabling)) {
+      throw new BadRequestException('ลดสิทธิ์หรือปิดบัญชีของตัวเองไม่ได้');
+    }
+    if (target.role === AdminRole.OWNER && (demoting || disabling)) {
+      const owners = await this.prisma.adminUser.count({
+        where: { role: AdminRole.OWNER, disabledAt: null },
+      });
+      if (owners <= 1) {
+        throw new BadRequestException(
+          'ต้องมีเจ้าของที่ใช้งานได้อย่างน้อย 1 คน',
+        );
+      }
+    }
+    return this.prisma.adminUser.update({
+      where: { id: targetId },
+      data: {
+        role: input.role,
+        disabledAt:
+          input.disabled === undefined
+            ? undefined
+            : input.disabled
+              ? (target.disabledAt ?? new Date())
+              : null,
+        passwordHash: input.password ? hashPassword(input.password) : undefined,
+      },
+      select: ADMIN_PUBLIC_FIELDS,
+    });
   }
 
   listProviders(status?: ProviderStatus) {

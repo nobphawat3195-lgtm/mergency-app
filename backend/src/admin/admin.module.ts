@@ -2,7 +2,12 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 
 import { AdminService } from './admin.service';
-import { AdminController } from './admin.controller';
+import { AdminAuthController, AdminController } from './admin.controller';
+import {
+  AdminAccessGuard,
+  AdminAuditInterceptor,
+  AdminAuditService,
+} from './admin-access';
 import { FinanceService } from './finance.service';
 import { WalletModule } from '../wallet/wallet.module';
 import { DispatchModule } from '../dispatch/dispatch.module';
@@ -20,7 +25,13 @@ import { PaymentsModule } from '../payments/payments.module';
       },
     }),
   ],
-  providers: [AdminService, FinanceService],
-  controllers: [AdminController],
+  providers: [
+    AdminService,
+    FinanceService,
+    AdminAuditService,
+    AdminAccessGuard,
+    AdminAuditInterceptor,
+  ],
+  controllers: [AdminAuthController, AdminController],
 })
 export class AdminModule {}

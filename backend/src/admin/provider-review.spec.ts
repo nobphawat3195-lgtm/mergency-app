@@ -21,6 +21,7 @@ function setup(current: ProviderStatus = ProviderStatus.PENDING) {
     {} as never,
     {} as never,
     push as never,
+    { record: jest.fn() } as never,
   );
   return { service, prisma, push };
 }

@@ -535,12 +535,44 @@ model CommissionSettlement {
 
 // ---------- Admin ----------
 
+/// OWNER = เจ้าของ ทำได้ทุกอย่าง รวมเรื่องเงินและจัดการทีมงาน
+/// STAFF = ทีมงาน ดูแลงานประจำวัน (อนุมัติช่าง จัดการงาน ดูสลิป) แต่ยืนยันเงินเข้าออกไม่ได้
+enum AdminRole {
+  OWNER
+  STAFF
+}
+
 model AdminUser {
-  id           String   @id @default(uuid())
-  phone        String   @unique
+  id           String    @id @default(uuid())
+  phone        String    @unique
   name         String
   passwordHash String
-  createdAt    DateTime @default(now())
+  /// บัญชีเดิมก่อนมีระบบสิทธิ์เป็นเจ้าของทั้งหมด
+  role         AdminRole @default(OWNER)
+  /// ปิดบัญชีแล้ว: เข้าสู่ระบบไม่ได้ และโทเคนเดิมใช้ต่อไม่ได้ทันที
+  disabledAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  auditLogs AdminAuditLog[]
+}
+
+/// บันทึกว่าแอดมินคนไหนทำอะไร เมื่อไหร่ (append-only) ใช้ตรวจย้อนหลังเรื่องเงินและการอนุมัติ
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  adminId    String
+  /// ชื่อ ณ เวลาที่ทำ เผื่อแก้ชื่อภายหลัง
+  adminName  String
+  action     String
+  targetType String?
+  targetId   String?
+  /// รายละเอียดสั้นๆ เช่น สถานะใหม่ เหตุผล (ไม่เก็บรหัสผ่าน)
+  detail     Json?
+  createdAt  DateTime @default(now())
+
+  admin AdminUser @relation(fields: [adminId], references: [id])
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
 }
 
 enum DevicePlatform {
