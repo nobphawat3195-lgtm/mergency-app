@@ -140,7 +140,9 @@ Quality checks: `npm run typecheck && npm test` (backend), `flutter analyze && f
 **สถานะ:** โค้ดพร้อมใช้งานและผ่านการทดสอบทั้งหมด กำลังเตรียมเซิร์ฟเวอร์เพื่อเปิดให้บริการจริง
 
 เอกสารเพิ่มเติม:
+- [เช็กลิสต์เปิดตัว](docs/LAUNCH_CHECKLIST.md)
 - [การติดตั้ง](docs/DEPLOY.md)
+- [ข้อความและภาพลงสโตร์](docs/STORE_LISTING.md)
 - [ระบบชำระเงิน](docs/PAYMENTS.md)
 - [การแจ้งเตือน](docs/PUSH.md)
 - [การ build แอป](docs/BUILD.md)
