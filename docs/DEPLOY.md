@@ -16,7 +16,10 @@
    ```
    สคริปต์จะถามโดเมน เบอร์พร้อมเพย์ ชื่อบัญชี และเบอร์ติดต่อ แล้วติดตั้งให้ครบ ทั้ง HTTPS, ฐานข้อมูล, เก็บรูปบนเครื่อง, สำรองข้อมูลทุกวัน และบัญชีแอดมิน
    - ถ้ามี LINE Login channel แล้ว ใส่ Channel ID และ Channel secret ตอนสคริปต์ถามได้เลย (กด Enter เพื่อข้ามแล้วใส่ทีหลังได้)
+   - หลังใส่โดเมน สคริปต์ตรวจก่อนว่า DNS ทั้ง 4 ชื่อชี้มาที่เครื่องนี้ พอร์ต 80/443 ว่าง และดิสก์พอ (`deploy/preflight.sh`) ถ้าไม่ผ่านจะหยุดก่อนขอใบรับรอง HTTPS เพื่อไม่ให้โดน Let's Encrypt บล็อกชั่วคราวจากการขอพลาดซ้ำ ตรวจเองก่อนได้ด้วย `sudo bash deploy/preflight.sh fixgo.duckdns.org`
    - ขั้นตอนนี้ซ้อมติดตั้งจริงด้วย docker compose แล้ว: ติดตั้งจากศูนย์, รันซ้ำ, สำรองข้อมูล และกู้คืน ผ่านทั้งหมด
+4. **ตรวจหลังติดตั้ง:** `sudo bash deploy/doctor.sh` ตรวจคอนเทนเนอร์, HTTPS ทั้ง 4 ลิงก์, ฐานข้อมูล, LINE Login, เบอร์พร้อมเพย์, cron และไฟล์สำรองล่าสุด, ดิสก์ ในคำสั่งเดียว ไม่แสดงค่าลับ
+   - เพิ่ม `--local` เพื่อต่อ Caddy ในเครื่องตรง ถ้า `--local` ผ่านแต่แบบปกติไม่ผ่าน แปลว่าปัญหาอยู่ที่ DNS หรือ firewall ของผู้ให้บริการ ไม่ใช่ที่เซิร์ฟเวอร์
 
 **ยังไม่มี SMS ก็เปิดได้:** เลือก "โหมดทดลอง" แล้วใส่เบอร์ทีมงาน เบอร์เหล่านี้ล็อกอินด้วยรหัสตายตัวที่สคริปต์สุ่มให้ ส่วนคนอื่นจะเห็นปุ่มโทรหาทีมงานแทน
 - พร้อมเปิดให้ทุกคน: ใส่ค่า ThaiBulkSMS ใน `deploy/.env.production` เปลี่ยน `SMS_PROVIDER=thaibulksms` ลบ `REVIEW_LOGIN_PHONES` แล้วรัน `sudo bash deploy/install.sh` อีกครั้ง
@@ -253,9 +256,11 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production ps
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production logs -f api
 ```
 
+เริ่มจาก `sudo bash deploy/doctor.sh` ทุกครั้ง บอกว่าส่วนไหนเสียและคำสั่งที่ใช้แก้
+
 | อาการ | สาเหตุที่พบบ่อย |
 |---|---|
 | api ไม่ยอมเริ่ม แล้ว log แจ้ง `... is required` | ยังไม่ได้ตั้งตัวแปรนั้นใน `.env.production` |
-| HTTPS ไม่ขึ้น | DNS ยังไม่ชี้มาที่เครื่อง หรือพอร์ต 80/443 ถูก firewall ปิด |
+| HTTPS ไม่ขึ้น | DNS ยังไม่ชี้มาที่เครื่อง หรือพอร์ต 80/443 ถูก firewall ปิด ตรวจด้วย `sudo bash deploy/preflight.sh <โดเมน>` |
 | แอปอัปโหลดรูปไม่ได้ | ค่า `S3_*` ผิด หรือ token ของ R2 ไม่มีสิทธิ์เขียน |
 | ชำระเงินแล้วสถานะไม่เปลี่ยน | URL webhook หรือ `STRIPE_WEBHOOK_SECRET` ไม่ตรงกับที่ตั้งไว้ใน Stripe ดูได้ที่ Stripe > Webhooks > Event deliveries |

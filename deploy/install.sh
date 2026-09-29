@@ -72,6 +72,12 @@ if [ ! -f "$ENV_FILE" ]; then
   [ -n "$DOMAIN" ] || fail "ต้องใส่โดเมน"
   echo "จะใช้: https://$DOMAIN (ลูกค้า) https://fixer.$DOMAIN (ช่าง) https://admin.$DOMAIN (แอดมิน) https://api.$DOMAIN (API)"
 
+  # DNS ต้องชี้มาที่เครื่องนี้ก่อน ไม่งั้น Caddy ขอใบรับรองไม่ผ่านและอาจโดน Let's Encrypt บล็อกชั่วคราว
+  if ! bash "$ROOT/deploy/preflight.sh" "$DOMAIN"; then
+    ask CONTINUE "ยังมีข้อที่ต้องแก้ แนะนำให้กด Enter เพื่อหยุดแล้วแก้ก่อน พิมพ์ y เพื่อติดตั้งต่อ" "n"
+    [ "$CONTINUE" = y ] || fail "หยุดติดตั้ง แก้ตามรายการด้านบนแล้วรัน sudo bash deploy/install.sh ใหม่"
+  fi
+
   ask PROMPTPAY_ID "เบอร์พร้อมเพย์ที่รับเงิน (10 หลัก)"
   ask PROMPTPAY_NAME "ชื่อบัญชีพร้อมเพย์ ให้ตรงกับที่แอปธนาคารแสดง"
   ask COMPANY "ชื่อกิจการ (แสดงในนโยบายความเป็นส่วนตัว)" "FixGo"
@@ -212,6 +218,7 @@ cat <<EOF
 
   HTTPS อาจใช้เวลา 1-2 นาทีหลังเปิดครั้งแรก (Caddy ขอใบรับรองให้อัตโนมัติ)
   สำรองข้อมูลทุกวันตี 3 ไว้ที่ deploy/backups/ ควรคัดลอกออกนอกเครื่องเป็นระยะ
+  ตรวจสุขภาพระบบเมื่อไหร่ก็ได้: sudo bash deploy/doctor.sh
 EOF
 if [ -n "${LINE_LOGIN_CHANNEL_ID:-}" ]; then
   cat <<EOF
