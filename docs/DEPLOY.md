@@ -15,6 +15,8 @@
    sudo bash deploy/install.sh
    ```
    สคริปต์จะถามโดเมน เบอร์พร้อมเพย์ ชื่อบัญชี และเบอร์ติดต่อ แล้วติดตั้งให้ครบ ทั้ง HTTPS, ฐานข้อมูล, เก็บรูปบนเครื่อง, สำรองข้อมูลทุกวัน และบัญชีแอดมิน
+   - ถ้ามี LINE Login channel แล้ว ใส่ Channel ID และ Channel secret ตอนสคริปต์ถามได้เลย (กด Enter เพื่อข้ามแล้วใส่ทีหลังได้)
+   - ขั้นตอนนี้ซ้อมติดตั้งจริงด้วย docker compose แล้ว: ติดตั้งจากศูนย์, รันซ้ำ, สำรองข้อมูล และกู้คืน ผ่านทั้งหมด
 
 **ยังไม่มี SMS ก็เปิดได้:** เลือก "โหมดทดลอง" แล้วใส่เบอร์ทีมงาน เบอร์เหล่านี้ล็อกอินด้วยรหัสตายตัวที่สคริปต์สุ่มให้ ส่วนคนอื่นจะเห็นปุ่มโทรหาทีมงานแทน
 - พร้อมเปิดให้ทุกคน: ใส่ค่า ThaiBulkSMS ใน `deploy/.env.production` เปลี่ยน `SMS_PROVIDER=thaibulksms` ลบ `REVIEW_LOGIN_PHONES` แล้วรัน `sudo bash deploy/install.sh` อีกครั้ง
@@ -224,6 +226,15 @@ gunzip -c deploy/backups/fixgo-YYYYMMDD-HHMMSS.sql.gz | \
   docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production \
   exec -T db psql -U fixgo -d fixgo
 ```
+
+กู้คืนรูป (กรณีใช้ `STORAGE_PROVIDER=local`):
+
+```bash
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production \
+  exec -T api tar -C /data -xzf - < deploy/backups/fixgo-uploads-YYYYMMDD-HHMMSS.tar.gz
+```
+
+ไฟล์สำรองอ่านได้เฉพาะ root เพราะมีข้อมูลส่วนตัวของลูกค้าและช่าง
 
 ควรลองกู้คืนบนเครื่องทดสอบอย่างน้อยเดือนละครั้ง จะได้มั่นใจว่า backup ใช้งานได้จริง
 
