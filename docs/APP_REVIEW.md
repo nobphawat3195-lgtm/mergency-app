@@ -65,7 +65,7 @@ LEGAL_UPDATED_AT="..."
 | User ID | ✓ | ✓ |
 | Crash Data (Sentry: stack trace และรุ่นอุปกรณ์ ไม่มีข้อมูลผู้ใช้ ใช้แก้บั๊ก, App Functionality, ไม่ผูกกับตัวตน) | ✓ | ✓ |
 | Device ID (push token ของ FCM ใช้ส่งแจ้งเตือนสถานะงาน, App Functionality, ไม่ใช้ติดตาม) | ✓ | ✓ |
-| Name | | ✓ |
+| Name (ช่าง: ชื่อจริง / ลูกค้า: ชื่อที่แสดงใน LINE เมื่อเข้าสู่ระบบด้วย LINE) | ✓ | ✓ |
 | Other Financial Info (บัญชีรับเงิน) | | ✓ |
 
 ## 5. สิ่งที่ยังต้องทำเองก่อนส่ง
@@ -73,4 +73,4 @@ LEGAL_UPDATED_AT="..."
 - สมัคร Apple Developer Program และลงทะเบียน Bundle ID `com.fixgo.fixgoCustomer`, `com.fixgo.fixgoProvider`
 - Build และเซ็นแอปบน Mac ที่มี Xcode (หรือบริการ build บนคลาวด์) แล้วทดสอบผ่าน TestFlight บน iPhone จริง
 - เซิร์ฟเวอร์จริงพร้อม HTTPS, SMS จริง, ที่เก็บรูป และระบบรับชำระเงินจริง
-- ภาพหน้าจอ iPhone 6.9 นิ้ว คำอธิบายแอป หมวดหมู่ และอายุผู้ใช้
+- ภาพหน้าจอ คำอธิบายแอป หมวดหมู่ และคำค้น เตรียมไว้แล้วใน `docs/STORE_LISTING.md` และ `docs/store/`

@@ -8,6 +8,7 @@
 #   2. ถามค่าที่จำเป็นแล้วสร้าง deploy/.env.production (ค่าลับสุ่มให้เอง) ถ้ายังไม่มี
 #   3. build และเปิดระบบ ใส่หมวดบริการ/ราคา และสร้างบัญชีแอดมิน
 # รันซ้ำได้: ถ้ามี .env.production แล้วจะไม่ถามใหม่ แค่อัปเดตระบบ
+# คำสั่ง docker compose exec ต้องรับ stdin จาก /dev/null ไม่งั้นจะกินคำตอบของคำถามถัดไป
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -102,6 +103,16 @@ THAIBULKSMS_FORCE=corporate"
     SMS_BLOCK="SMS_PROVIDER=none"
   fi
 
+  echo
+  echo "เข้าสู่ระบบด้วย LINE (ไม่บังคับ แนะนำ: ลูกค้าและช่างสมัครได้โดยไม่ต้องใช้ SMS)"
+  echo "  ต้องมี channel ประเภท LINE Login ที่ตั้ง Callback URL เป็น https://api.$DOMAIN/api/auth/line/callback"
+  ask LINE_ID "LINE Login Channel ID (ตัวเลข กด Enter เพื่อข้าม)"
+  LINE_SECRET=""
+  if [ -n "$LINE_ID" ]; then
+    ask_secret LINE_SECRET "LINE Login Channel secret (พิมพ์แล้วจะไม่แสดง)"
+    [ -n "$LINE_SECRET" ] || fail "ต้องใส่ Channel secret คู่กับ Channel ID"
+  fi
+
   umask 077
   cat > "$ENV_FILE" <<EOF
 # สร้างโดย deploy/install.sh $(date -u +%Y-%m-%d) ดูคำอธิบายทุกค่าใน deploy/.env.production.example
@@ -126,6 +137,11 @@ REVIEW_LOGIN_CODE=$REVIEW_CODE
 PAYMENT_PROVIDER=promptpay_manual
 PROMPTPAY_ID=$PROMPTPAY_ID
 PROMPTPAY_NAME="$PROMPTPAY_NAME"
+# เพดานค่าคอมที่ช่างค้างจากงานเงินสด (บาท) เกินแล้วเปิดรับงานไม่ได้จนกว่าจะโอนคืน
+CASH_DEBT_LIMIT_BAHT=1000
+
+LINE_LOGIN_CHANNEL_ID=$LINE_ID
+LINE_LOGIN_CHANNEL_SECRET=$LINE_SECRET
 
 PUSH_PROVIDER=console
 ADMIN_ALERT_CHANNEL=none
@@ -148,7 +164,7 @@ say "build และเปิดระบบ (ครั้งแรกประ�
 
 say "รอ API พร้อม"
 for _ in $(seq 1 60); do
-  if "${COMPOSE[@]}" exec -T api node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null; then
+  if "${COMPOSE[@]}" exec -T api node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" </dev/null 2>/dev/null; then
     ready=1
     break
   fi
@@ -157,7 +173,7 @@ done
 [ "${ready:-}" = 1 ] || fail "API ไม่พร้อม ดู log: docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production logs api"
 
 say "ใส่หมวดบริการและราคา (รันซ้ำได้ ไม่ลบของเดิม)"
-"${COMPOSE[@]}" exec -T api node dist-scripts/prisma/seed.js
+"${COMPOSE[@]}" exec -T api node dist-scripts/prisma/seed.js </dev/null
 
 if [ ! -f "$ROOT/deploy/.admin-created" ]; then
   say "สร้างบัญชีแอดมิน"
@@ -165,13 +181,23 @@ if [ ! -f "$ROOT/deploy/.admin-created" ]; then
   ask ADMIN_NAME "ชื่อแอดมิน" "แอดมิน"
   ask_secret ADMIN_PASSWORD "รหัสผ่านแอดมิน (อย่างน้อย 12 ตัว พิมพ์แล้วจะไม่แสดง)"
   [ "${#ADMIN_PASSWORD}" -ge 12 ] || fail "รหัสผ่านสั้นเกินไป รัน sudo bash deploy/install.sh ใหม่ได้"
-  "${COMPOSE[@]}" exec -T api node dist-scripts/prisma/create-admin.js "$ADMIN_PHONE" "$ADMIN_NAME" "$ADMIN_PASSWORD"
+  "${COMPOSE[@]}" exec -T api node dist-scripts/prisma/create-admin.js "$ADMIN_PHONE" "$ADMIN_NAME" "$ADMIN_PASSWORD" </dev/null
   touch "$ROOT/deploy/.admin-created"
 fi
 
 # ---------- 6. สำรองข้อมูลทุกวัน ----------
-CRON_LINE="0 3 * * * $ROOT/deploy/backup.sh >> /var/log/fixgo-backup.log 2>&1"
-{ crontab -l 2>/dev/null | grep -v 'deploy/backup.sh' || true; echo "$CRON_LINE"; } | crontab -
+if ! command -v crontab >/dev/null 2>&1; then
+  say "ติดตั้ง cron สำหรับสำรองข้อมูลทุกวัน"
+  if command -v apt-get >/dev/null 2>&1; then
+    { apt-get update -qq && apt-get install -y -qq cron >/dev/null; } || true
+  fi
+fi
+if command -v crontab >/dev/null 2>&1; then
+  CRON_LINE="0 3 * * * $ROOT/deploy/backup.sh >> /var/log/fixgo-backup.log 2>&1"
+  { crontab -l 2>/dev/null | grep -v 'deploy/backup.sh' || true; echo "$CRON_LINE"; } | crontab -
+else
+  echo "ไม่พบ crontab: ตั้งสำรองข้อมูลเองด้วย $ROOT/deploy/backup.sh (แนะนำวันละครั้ง)"
+fi
 
 set -a
 # shellcheck disable=SC1090
@@ -187,10 +213,24 @@ cat <<EOF
   HTTPS อาจใช้เวลา 1-2 นาทีหลังเปิดครั้งแรก (Caddy ขอใบรับรองให้อัตโนมัติ)
   สำรองข้อมูลทุกวันตี 3 ไว้ที่ deploy/backups/ ควรคัดลอกออกนอกเครื่องเป็นระยะ
 EOF
+if [ -n "${LINE_LOGIN_CHANNEL_ID:-}" ]; then
+  cat <<EOF
+
+  LINE Login เปิดแล้วทั้งเว็บลูกค้าและเว็บช่าง
+  Callback URL ใน LINE Developers ต้องเป็น https://$API_DOMAIN/api/auth/line/callback
+  ระหว่าง channel ยังเป็น Developing ใช้ได้เฉพาะบัญชีที่เพิ่มเป็น tester กด Publish เมื่อพร้อมเปิดให้ทุกคน
+EOF
+else
+  cat <<EOF
+
+  ยังไม่ได้เปิด LINE Login: ใส่ LINE_LOGIN_CHANNEL_ID และ LINE_LOGIN_CHANNEL_SECRET ใน deploy/.env.production
+  แล้วรัน sudo bash deploy/install.sh อีกครั้ง
+EOF
+fi
 if [ "${SMS_PROVIDER:-}" = "none" ]; then
   cat <<EOF
 
-  โหมดทดลอง (ยังไม่ส่ง SMS): เข้าสู่ระบบได้เฉพาะเบอร์ $REVIEW_LOGIN_PHONES
+  โหมดทดลอง (ยังไม่ส่ง SMS): เข้าสู่ระบบด้วยเบอร์โทรได้เฉพาะเบอร์ $REVIEW_LOGIN_PHONES (LINE ใช้ได้ทุกคน)
   รหัส OTP ของทุกเบอร์นี้คือ $REVIEW_LOGIN_CODE (ดูอีกครั้งได้ใน deploy/.env.production)
   เมื่อพร้อมเปิดให้ทุกคน: ใส่ค่า ThaiBulkSMS ใน deploy/.env.production เปลี่ยน SMS_PROVIDER=thaibulksms
   ลบ REVIEW_LOGIN_PHONES แล้วรัน sudo bash deploy/install.sh อีกครั้ง

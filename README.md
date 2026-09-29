@@ -26,6 +26,7 @@ The platform has three parts: a customer app, a mechanic app ("FixGo Fixer") and
 - **Mechanic trust card.** Photo, verified badge, rating, completed jobs, experience, and the vehicle and licence plate to look for.
 - **Share with family + SOS.** A read-only tracking link (random 256-bit token, no login) that shows the status and the mechanic on the way but no phone numbers or prices. It expires 2 hours after the job ends and can be revoked. One-tap Thai emergency numbers are also available.
 - **LINE Login (web, customers and mechanics).** OAuth 2.1 + OpenID Connect with a signed state cookie, nonce and a single-use 60-second ticket, so no access token ever appears in a URL. One channel serves both apps. New mechanics apply with a self-declared phone that the admin confirms before approval. It saves SMS OTP cost.
+- **Owner and staff roles with an audit log.** Staff handle daily operations. Only the owner can confirm money in or out, see revenue, or manage the team. Roles are checked against the database on every request, so disabling an account takes effect immediately. Every login, approval and money action is recorded.
 - **Owner finance report.** Revenue split by PromptPay (paid into the owner's account) and cash (held by the mechanic), commission earned, money held for mechanics, commission owed by mechanics, and a per-mechanic table, for any Thai-time date range, with CSV export.
 - **Cash commission cap.** Cash jobs put the platform fee on the mechanic's wallet as a negative balance. Past a configurable limit (default 1,000 baht) the mechanic is switched offline and can't accept jobs until they pay back through a locked-amount PromptPay QR and the admin confirms the slip. Confirmation is idempotent.
 - **Real-time tracking** uses Server-Sent Events, falls back to polling, and sends push notifications through FCM HTTP v1 with a self-signed JWT.
@@ -139,7 +140,9 @@ Quality checks: `npm run typecheck && npm test` (backend), `flutter analyze && f
 **สถานะ:** โค้ดพร้อมใช้งานและผ่านการทดสอบทั้งหมด กำลังเตรียมเซิร์ฟเวอร์เพื่อเปิดให้บริการจริง
 
 เอกสารเพิ่มเติม:
+- [เช็กลิสต์เปิดตัว](docs/LAUNCH_CHECKLIST.md)
 - [การติดตั้ง](docs/DEPLOY.md)
+- [ข้อความและภาพลงสโตร์](docs/STORE_LISTING.md)
 - [ระบบชำระเงิน](docs/PAYMENTS.md)
 - [การแจ้งเตือน](docs/PUSH.md)
 - [การ build แอป](docs/BUILD.md)

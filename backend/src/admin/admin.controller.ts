@@ -7,9 +7,19 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { IsEnum, IsOptional, IsString, Length, Matches } from 'class-validator';
 import {
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+} from 'class-validator';
+import {
+  AdminRole,
+  AdminUser,
   OrderStatus,
   ProviderStatus,
   Role,
@@ -21,6 +31,14 @@ import { FinanceService } from './finance.service';
 import { PaymentsService } from '../payments/payments.service';
 import { WalletService } from '../wallet/wallet.service';
 import { JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
+import {
+  AdminAccessGuard,
+  AdminAuditInterceptor,
+  AdminAuditService,
+  Audit,
+  CurrentAdmin,
+  OwnerOnly,
+} from './admin-access';
 
 export class AdminLoginDto {
   @Matches(/^0[0-9]{8,9}$/)
@@ -58,37 +76,99 @@ export class ResolveWithdrawalDto {
   note?: string;
 }
 
+export class CreateAdminDto {
+  @Matches(/^0[0-9]{8,9}$/, { message: 'เบอร์โทรศัพท์ไม่ถูกต้อง' })
+  phone!: string;
+
+  @IsString()
+  @Length(1, 60)
+  name!: string;
+
+  /** อย่างน้อย 12 ตัว เท่ากับที่ install.sh บังคับ */
+  @IsString()
+  @Length(12, 128, { message: 'รหัสผ่านต้องยาว 12 ตัวขึ้นไป' })
+  password!: string;
+
+  @IsEnum(AdminRole)
+  role!: AdminRole;
+}
+
+export class UpdateAdminDto {
+  @IsOptional()
+  @IsEnum(AdminRole)
+  role?: AdminRole;
+
+  /** true = ปิดบัญชี, false = เปิดใช้อีกครั้ง */
+  @IsOptional()
+  @IsBoolean()
+  disabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @Length(12, 128, { message: 'รหัสผ่านต้องยาว 12 ตัวขึ้นไป' })
+  password?: string;
+}
+
+/** เข้าสู่ระบบหน้าแอดมิน (ไม่ต้องมีโทเคน) */
 @Controller('admin')
+export class AdminAuthController {
+  constructor(private readonly admin: AdminService) {}
+
+  @Post('login')
+  login(@Body() dto: AdminLoginDto) {
+    return this.admin.login(dto.phone, dto.password);
+  }
+}
+
+/**
+ * ทุก endpoint ต้องเป็นแอดมินที่ยังใช้งานได้ (ตรวจจากฐานข้อมูลทุกคำขอ)
+ * @OwnerOnly = เจ้าของเท่านั้น (เงินเข้าออก รายงานการเงิน จัดการทีมงาน บันทึกการทำงาน)
+ * @Audit = บันทึกว่าใครทำ เมื่อทำสำเร็จ
+ */
+@Controller('admin')
+@UseGuards(JwtAuthGuard, RolesGuard, AdminAccessGuard)
+@Roles(Role.ADMIN)
+@UseInterceptors(AdminAuditInterceptor)
 export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly payments: PaymentsService,
     private readonly wallet: WalletService,
     private readonly finance: FinanceService,
+    private readonly audit: AdminAuditService,
   ) {}
 
-  @Post('login')
-  login(@Body() dto: AdminLoginDto) {
-    return this.admin.login(dto.phone, dto.password);
+  /** ข้อมูลของแอดมินที่ล็อกอินอยู่ หน้าแอดมินใช้ซ่อนส่วนที่ไม่มีสิทธิ์ */
+  @Get('me')
+  me(@CurrentAdmin() admin: AdminUser) {
+    return {
+      id: admin.id,
+      name: admin.name,
+      phone: admin.phone,
+      role: admin.role,
+    };
   }
 
+  /** ทีมงานเห็นงานค้าง แต่ไม่เห็นตัวเลขรายได้ของเจ้าของ */
   @Get('summary')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
-  summary() {
-    return this.admin.summary();
+  async summary(@CurrentAdmin() admin: AdminUser) {
+    const summary = await this.admin.summary();
+    if (admin.role === AdminRole.OWNER) return summary;
+    const { commissionRevenue, outstandingDebt, ...operational } = summary;
+    void commissionRevenue;
+    void outstandingDebt;
+    return operational;
   }
+
+  // ---------- ช่าง ----------
 
   @Get('providers')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
   listProviders(@Query('status') status?: ProviderStatus) {
     return this.admin.listProviders(status);
   }
 
   @Patch('providers/:id/status')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @Audit('PROVIDER_STATUS', 'provider')
   setProviderStatus(
     @Param('id') id: string,
     @Body() dto: SetProviderStatusDto,
@@ -96,44 +176,42 @@ export class AdminController {
     return this.admin.setProviderStatus(id, dto.status, dto.note);
   }
 
+  // ---------- งาน ----------
+
   @Get('orders')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
   listOrders(@Query('status') status?: OrderStatus) {
     return this.admin.listOrders(status);
   }
 
   @Post('orders/:id/redispatch')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @Audit('ORDER_REDISPATCH', 'order')
   redispatch(@Param('id') id: string) {
     return this.admin.redispatchOrder(id);
   }
 
   @Post('orders/:id/cancel')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @Audit('ORDER_CANCEL', 'order')
   cancelOrder(@Param('id') id: string, @Body() dto: CancelOrderDto) {
     return this.admin.cancelOrder(id, dto.reason);
   }
 
+  // ---------- เงินเข้า: สลิปลูกค้า (ทีมงานดูได้ เจ้าของเป็นคนยืนยัน) ----------
+
   @Get('payments/slips')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
   listSlips() {
     return this.payments.listSlipsForReview();
   }
 
   @Post('payments/:id/confirm')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @OwnerOnly()
+  @Audit('PAYMENT_CONFIRM', 'payment')
   confirmSlip(@Param('id') id: string) {
     return this.payments.confirmSlip(id);
   }
 
   @Post('payments/:id/reject')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @OwnerOnly()
+  @Audit('PAYMENT_REJECT', 'payment')
   rejectSlip(@Param('id') id: string, @Body() dto: CancelOrderDto) {
     return this.payments.rejectSlip(id, dto.reason);
   }
@@ -143,52 +221,91 @@ export class AdminController {
    * ?from=YYYY-MM-DD&to=YYYY-MM-DD (เวลาไทย) ไม่ใส่ = เดือนนี้
    */
   @Get('finance')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @OwnerOnly()
   financeReport(@Query('from') from?: string, @Query('to') to?: string) {
     return this.finance.report(from, to);
   }
 
-  /** สลิปที่ช่างโอนค่าบริการค้าง (จากงานเงินสด) คืนบริษัท รอตรวจ */
+  // ---------- ค่าคอมที่ช่างโอนคืน (งานเงินสด) ----------
+
   @Get('settlements')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
   listSettlements() {
     return this.wallet.listSettlementsForReview();
   }
 
   @Post('settlements/:id/confirm')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @OwnerOnly()
+  @Audit('SETTLEMENT_CONFIRM', 'settlement')
   confirmSettlement(@Param('id') id: string) {
     return this.wallet.confirmSettlement(id);
   }
 
   @Post('settlements/:id/reject')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @OwnerOnly()
+  @Audit('SETTLEMENT_REJECT', 'settlement')
   rejectSettlement(@Param('id') id: string, @Body() dto: CancelOrderDto) {
     return this.wallet.rejectSettlement(id, dto.reason);
   }
 
+  // ---------- เงินออก: ช่างขอเบิก ----------
+
   @Get('withdrawals')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
   listWithdrawals(@Query('status') status?: WithdrawalStatus) {
     return this.admin.listWithdrawals(status);
   }
 
   @Post('withdrawals/:id/transferred')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @OwnerOnly()
+  @Audit('WITHDRAWAL_TRANSFERRED', 'withdrawal')
   markTransferred(@Param('id') id: string, @Body() dto: ResolveWithdrawalDto) {
     return this.admin.markWithdrawalTransferred(id, dto.slipUrl, dto.note);
   }
 
   @Post('withdrawals/:id/reject')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @OwnerOnly()
+  @Audit('WITHDRAWAL_REJECT', 'withdrawal')
   reject(@Param('id') id: string, @Body() dto: ResolveWithdrawalDto) {
     return this.admin.rejectWithdrawal(id, dto.note);
+  }
+
+  // ---------- ทีมงานและบันทึกการทำงาน (เจ้าของ) ----------
+
+  @Get('admins')
+  @OwnerOnly()
+  listAdmins() {
+    return this.admin.listAdmins();
+  }
+
+  @Post('admins')
+  @OwnerOnly()
+  async createAdmin(
+    @CurrentAdmin() owner: AdminUser,
+    @Body() dto: CreateAdminDto,
+  ) {
+    const created = await this.admin.createAdmin(dto);
+    await this.audit.record(
+      owner,
+      'ADMIN_CREATE',
+      { type: 'admin', id: created.id },
+      { name: created.name, role: created.role },
+    );
+    return created;
+  }
+
+  @Patch('admins/:id')
+  @OwnerOnly()
+  @Audit('ADMIN_UPDATE', 'admin')
+  updateAdmin(
+    @CurrentAdmin() owner: AdminUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateAdminDto,
+  ) {
+    return this.admin.updateAdmin(owner.id, id, dto);
+  }
+
+  @Get('audit')
+  @OwnerOnly()
+  listAudit(@Query('limit') limit?: string) {
+    return this.audit.list(limit ? Number(limit) || 200 : 200);
   }
 }

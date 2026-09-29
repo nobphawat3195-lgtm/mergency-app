@@ -139,6 +139,12 @@
   .finance-sub { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin: 24px 0 8px; }
   .finance-sub h3 { margin: 0; font-size: 15px; }
   td.num, th.num { text-align: right; white-space: nowrap; }
+  .role { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; margin-left: 6px; }
+  .role.owner { background: #0B5F45; color: #fff; }
+  .role.staff { background: #ECF8F1; color: #0B5F45; }
+  .owner-only.locked { display: none; }
+  .team-form { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); align-items: end; margin-bottom: 16px; }
+  .team-form input, .team-form select { max-width: none; }
 </style>
 </head>
 <body>
@@ -149,6 +155,7 @@
   <h1>FixGo</h1>
   <span class="sub">ระบบหลังบ้าน</span>
   <span style="flex:1"></span>
+  <span id="whoami" class="muted hidden"></span>
   <button id="logout" class="ghost hidden">ออกจากระบบ</button>
 </header>
 
@@ -169,7 +176,7 @@
       <div class="stats" id="stats"></div>
     </div>
 
-    <div class="card" id="finance-card">
+    <div class="card owner-only" id="finance-card">
       <h2>การเงิน <span class="muted">(ยอดรวม รายได้ของคุณ และรายช่าง แยกพร้อมเพย์/เงินสด)</span></h2>
       <div class="finance-filters">
         <label>ตั้งแต่วันที่<input type="date" id="fin-from"></label>
@@ -244,6 +251,27 @@
       </tr></thead><tbody id="withdrawals-body"></tbody></table></div>
     </div>
 
+    <div class="card owner-only" id="team-card">
+      <h2>ทีมงาน <span class="muted">(เจ้าของทำได้ทุกอย่าง ทีมงานดูแลงานประจำวันแต่ยืนยันเงินเข้าออกไม่ได้)</span></h2>
+      <div class="team-form">
+        <input id="team-phone" placeholder="เบอร์โทร" inputmode="numeric">
+        <input id="team-name" placeholder="ชื่อ">
+        <input id="team-password" type="password" placeholder="รหัสผ่านอย่างน้อย 12 ตัว" autocomplete="new-password">
+        <select id="team-role"><option value="STAFF">ทีมงาน</option><option value="OWNER">เจ้าของ</option></select>
+        <button onclick="createTeamMember()">เพิ่มบัญชี</button>
+      </div>
+      <div class="table-wrap"><table><thead><tr>
+        <th>ชื่อ</th><th>เบอร์</th><th>สิทธิ์</th><th>สถานะ</th><th></th>
+      </tr></thead><tbody id="team-body"></tbody></table></div>
+    </div>
+
+    <div class="card owner-only" id="audit-card">
+      <h2>บันทึกการทำงาน <span class="muted">(ใครทำอะไร เมื่อไหร่ ล่าสุด 200 รายการ)</span></h2>
+      <div class="table-wrap"><table><thead><tr>
+        <th>เวลา</th><th>ผู้ทำ</th><th>การกระทำ</th><th>รายการ</th><th>รายละเอียด</th>
+      </tr></thead><tbody id="audit-body"></tbody></table></div>
+    </div>
+
     <div class="card">
       <h2>ออเดอร์ล่าสุด</h2>
       <div class="table-wrap"><table><thead><tr>
@@ -316,7 +344,7 @@ async function login() {
     });
     token = result.accessToken;
     sessionStorage.setItem('fixgo_admin_token', token);
-    showDashboard();
+    await showDashboard();
   } catch (error) {
     el('login-error').textContent = error.message;
   }
@@ -324,13 +352,35 @@ async function login() {
 
 function logout() {
   token = null;
+  me = null;
   sessionStorage.removeItem('fixgo_admin_token');
+  el('whoami').classList.add('hidden');
   el('dashboard-view').classList.add('hidden');
   el('login-view').classList.remove('hidden');
   el('logout').classList.add('hidden');
 }
 
+// แอดมินที่ล็อกอินอยู่ { id, name, phone, role } ใช้ซ่อนส่วนที่ไม่มีสิทธิ์ (backend ตรวจสิทธิ์ซ้ำทุกคำขอ)
+let me = null;
+const isOwner = () => me?.role === 'OWNER';
+const ROLE_LABELS = { OWNER: 'เจ้าของ', STAFF: 'ทีมงาน' };
+
+// ปุ่มยืนยันเงินเข้าออก: ทีมงานเห็นรายการแต่กดไม่ได้
+function ownerActions(html) {
+  return isOwner() ? html : '<span class="muted">รอเจ้าของยืนยัน</span>';
+}
+
 async function showDashboard() {
+  try {
+    me = await api('/admin/me');
+  } catch (error) {
+    logout();
+    el('login-error').textContent = error.message;
+    return;
+  }
+  el('whoami').innerHTML = `${escapeHtml(me.name)} <span class="role ${me.role.toLowerCase()}">${escapeHtml(ROLE_LABELS[me.role])}</span>`;
+  el('whoami').classList.remove('hidden');
+  document.querySelectorAll('.owner-only').forEach((node) => node.classList.toggle('locked', !isOwner()));
   el('login-view').classList.add('hidden');
   el('dashboard-view').classList.remove('hidden');
   el('logout').classList.remove('hidden');
@@ -339,8 +389,95 @@ async function showDashboard() {
 
 async function refreshAll() {
   await Promise.all([
-    loadSummary(), loadFinance(), loadNoMatch(), loadSlips(), loadSettlements(), loadProviders(), loadWithdrawals(), loadOrders(),
+    loadSummary(), loadNoMatch(), loadSlips(), loadSettlements(), loadProviders(), loadWithdrawals(), loadOrders(),
+    ...(isOwner() ? [loadFinance(), loadTeam(), loadAudit()] : []),
   ]);
+}
+
+// ---------- ทีมงาน ----------
+async function loadTeam() {
+  const admins = await api('/admin/admins');
+  el('team-body').innerHTML = admins.map((admin) => {
+    const self = admin.id === me.id;
+    const disabled = Boolean(admin.disabledAt);
+    return `
+      <tr>
+        <td><strong>${escapeHtml(admin.name)}</strong>${self ? ' <span class="muted">(คุณ)</span>' : ''}</td>
+        <td>${escapeHtml(admin.phone)}</td>
+        <td><span class="role ${admin.role.toLowerCase()}">${escapeHtml(ROLE_LABELS[admin.role])}</span></td>
+        <td>${disabled ? '<span class="money-neg">ปิดแล้ว</span>' : 'ใช้งานได้'}</td>
+        <td>${self ? '' : `
+          <button class="ghost" onclick="updateTeamMember('${admin.id}', { role: '${admin.role === 'OWNER' ? 'STAFF' : 'OWNER'}' })">${admin.role === 'OWNER' ? 'เปลี่ยนเป็นทีมงาน' : 'ให้สิทธิ์เจ้าของ'}</button>
+          <button class="ghost" onclick="resetTeamPassword('${admin.id}')">ตั้งรหัสใหม่</button>
+          <button class="${disabled ? '' : 'danger'}" onclick="updateTeamMember('${admin.id}', { disabled: ${!disabled} })">${disabled ? 'เปิดใช้' : 'ปิดบัญชี'}</button>`}
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+async function createTeamMember() {
+  try {
+    await api('/admin/admins', {
+      method: 'POST',
+      body: JSON.stringify({
+        phone: el('team-phone').value.trim(),
+        name: el('team-name').value.trim(),
+        password: el('team-password').value,
+        role: el('team-role').value,
+      }),
+    });
+    el('team-phone').value = el('team-name').value = el('team-password').value = '';
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
+}
+
+async function updateTeamMember(id, change) {
+  if (change.disabled && !confirm('ปิดบัญชีนี้? คนนี้จะออกจากระบบทันทีและเข้าใหม่ไม่ได้')) return;
+  if (change.role === 'OWNER' && !confirm('ให้สิทธิ์เจ้าของ? คนนี้จะยืนยันเงินเข้าออกและจัดการทีมงานได้')) return;
+  try {
+    await api('/admin/admins/' + id, { method: 'PATCH', body: JSON.stringify(change) });
+  } catch (error) {
+    alert(error.message);
+  }
+  await refreshAll();
+}
+
+async function resetTeamPassword(id) {
+  const password = prompt('รหัสผ่านใหม่ (อย่างน้อย 12 ตัว) แจ้งให้เจ้าตัวทราบทางช่องทางส่วนตัว');
+  if (!password) return;
+  await updateTeamMember(id, { password });
+}
+
+// ---------- บันทึกการทำงาน ----------
+const AUDIT_LABELS = {
+  LOGIN: 'เข้าสู่ระบบ',
+  PROVIDER_STATUS: 'เปลี่ยนสถานะช่าง',
+  ORDER_REDISPATCH: 'ส่งงานหาช่างใหม่',
+  ORDER_CANCEL: 'ยกเลิกงาน',
+  PAYMENT_CONFIRM: 'ยืนยันสลิปลูกค้า',
+  PAYMENT_REJECT: 'ปฏิเสธสลิปลูกค้า',
+  SETTLEMENT_CONFIRM: 'ยืนยันค่าคอมที่ช่างโอนคืน',
+  SETTLEMENT_REJECT: 'ปฏิเสธสลิปค่าคอม',
+  WITHDRAWAL_TRANSFERRED: 'โอนเงินให้ช่างแล้ว',
+  WITHDRAWAL_REJECT: 'ปฏิเสธคำขอเบิก',
+  ADMIN_CREATE: 'เพิ่มบัญชีแอดมิน',
+  ADMIN_UPDATE: 'แก้ไขบัญชีแอดมิน',
+};
+
+async function loadAudit() {
+  const rows = await api('/admin/audit?limit=200');
+  el('audit-body').innerHTML = rows.length === 0
+    ? '<tr><td colspan="5">ยังไม่มีบันทึก</td></tr>'
+    : rows.map((row) => `
+      <tr>
+        <td>${escapeHtml(new Date(row.createdAt).toLocaleString('th-TH'))}</td>
+        <td>${escapeHtml(row.adminName)}</td>
+        <td>${escapeHtml(AUDIT_LABELS[row.action] || row.action)}</td>
+        <td><small>${escapeHtml(row.targetType ? `${row.targetType} ${String(row.targetId || '').slice(0, 8)}` : '-')}</small></td>
+        <td><small>${escapeHtml(row.detail ? Object.entries(row.detail).map(([k, v]) => `${k}: ${v}`).join(' · ') : '')}</small></td>
+      </tr>`).join('');
 }
 
 // งานไม่มีช่างรับต้องเห็นเร็ว รีเฟรชทุก 30 วินาทีขณะเปิดหน้าอยู่
@@ -382,8 +519,8 @@ async function loadSlips() {
         <td>${escapeHtml(payment.order.provider?.nickname || '-')}</td>
         <td>${escapeHtml(new Date(payment.slipSubmittedAt).toLocaleString('th-TH'))}</td>
         <td>
-          <button onclick="confirmSlip('${payment.id}','${escapeHtml(formatSatang(payment.amount))}')">ยอดเข้าแล้ว</button>
-          <button class="danger" onclick="rejectSlip('${payment.id}')">ไม่ผ่าน</button>
+          ${ownerActions(`<button onclick="confirmSlip('${payment.id}','${escapeHtml(formatSatang(payment.amount))}')">ยอดเข้าแล้ว</button>
+          <button class="danger" onclick="rejectSlip('${payment.id}')">ไม่ผ่าน</button>`)}
         </td>
       </tr>`).join('');
 }
@@ -558,8 +695,8 @@ async function loadSettlements() {
         <td><strong>${escapeHtml(formatSatang(row.amount))}</strong></td>
         <td>${escapeHtml(new Date(row.createdAt).toLocaleString('th-TH'))}</td>
         <td>
-          <button onclick="confirmSettlement('${row.id}','${escapeHtml(formatSatang(row.amount))}')">ยอดเข้าแล้ว</button>
-          <button class="danger" onclick="rejectSettlement('${row.id}')">ไม่ผ่าน</button>
+          ${ownerActions(`<button onclick="confirmSettlement('${row.id}','${escapeHtml(formatSatang(row.amount))}')">ยอดเข้าแล้ว</button>
+          <button class="danger" onclick="rejectSettlement('${row.id}')">ไม่ผ่าน</button>`)}
         </td>
       </tr>`).join('');
 }
@@ -627,12 +764,13 @@ async function loadSummary() {
     { label: 'งานไม่มีช่างรับ', value: summary.noMatchOrders ?? 0, alert: (summary.noMatchOrders ?? 0) > 0 },
     { label: 'สลิปรอตรวจ', value: summary.pendingSlips ?? 0, alert: (summary.pendingSlips ?? 0) > 0 },
     { label: 'งานที่เสร็จแล้ว', value: summary.completedCount },
-    { label: 'รายได้ค่าธรรมเนียม', value: formatSatang(summary.commissionRevenue) },
-    { label: 'ค่าคอมที่ช่างค้าง (งานเงินสด)', value: formatSatang(summary.outstandingDebt ?? 0) },
+    { label: 'รายได้ค่าธรรมเนียม', value: summary.commissionRevenue === undefined ? undefined : formatSatang(summary.commissionRevenue) },
+    { label: 'ค่าคอมที่ช่างค้าง (งานเงินสด)', value: summary.outstandingDebt === undefined ? undefined : formatSatang(summary.outstandingDebt) },
     { label: 'สลิปค่าคอมรอตรวจ', value: summary.pendingSettlements ?? 0, alert: (summary.pendingSettlements ?? 0) > 0 },
     { label: 'ช่างรออนุมัติ', value: summary.pendingProviders },
     { label: 'คำขอเบิกค้าง', value: summary.pendingWithdrawals },
-  ].map((stat) => `<div class="stat${stat.alert ? ' alert' : ''}"><div class="value">${escapeHtml(stat.value)}</div><div class="label">${escapeHtml(stat.label)}</div></div>`).join('');
+  ].filter((stat) => !String(stat.value).includes('NaN') && stat.value !== undefined)
+    .map((stat) => `<div class="stat${stat.alert ? ' alert' : ''}"><div class="value">${escapeHtml(stat.value)}</div><div class="label">${escapeHtml(stat.label)}</div></div>`).join('');
 }
 
 async function loadProviders() {
@@ -704,8 +842,8 @@ async function loadWithdrawals() {
         <td>${escapeHtml(withdrawal.promptPayId ? 'พร้อมเพย์ ' + withdrawal.promptPayId : (withdrawal.bankName || '') + ' ' + (withdrawal.bankAccountNumber || ''))}<br><small>${escapeHtml(withdrawal.bankAccountName || '')}</small></td>
         <td>${escapeHtml(new Date(withdrawal.requestedAt).toLocaleString('th-TH'))}</td>
         <td>
-          <button onclick="resolveWithdrawal('${withdrawal.id}','transferred')">โอนแล้ว</button>
-          <button class="danger" onclick="resolveWithdrawal('${withdrawal.id}','reject')">ปฏิเสธ</button>
+          ${ownerActions(`<button onclick="resolveWithdrawal('${withdrawal.id}','transferred')">โอนแล้ว</button>
+          <button class="danger" onclick="resolveWithdrawal('${withdrawal.id}','reject')">ปฏิเสธ</button>`)}
         </td>
       </tr>`).join('');
 }
