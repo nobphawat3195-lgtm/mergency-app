@@ -214,10 +214,25 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production \
 
 ```bash
 cd /opt/fixgo && git pull
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production up -d --build
+sudo bash deploy/install.sh
+sudo bash deploy/doctor.sh
 ```
 
-migration ใหม่จะรันเองตอน API เริ่ม (`prisma migrate deploy` รันเฉพาะ migration ที่ยังไม่ได้รัน ไม่ลบข้อมูล) ควร backup ก่อนอัปเดตทุกครั้ง
+`install.sh` บนเครื่องที่ใช้งานอยู่จะทำตามลำดับนี้
+1. สำรองฐานข้อมูลและรูปลง `deploy/backups/` ถ้าสำรองไม่สำเร็จจะหยุด ระบบเดิมยังทำงานต่อ
+2. เก็บ image รุ่นเดิมเป็น `fixgo-rollback/api:<เวลา>` และ `fixgo-rollback/caddy:<เวลา>` (เก็บ 2 รุ่นล่าสุด)
+3. build รุ่นใหม่ migration ใหม่รันเองตอน API เริ่ม (`prisma migrate deploy` รันเฉพาะ migration ที่ยังไม่ได้รัน ไม่ลบข้อมูล)
+
+**ย้อนกลับรุ่นเดิม** (เวลาดูจากข้อความตอนอัปเกรด หรือ `docker images fixgo-rollback/api`)
+
+```bash
+cd /opt/fixgo
+docker tag fixgo-rollback/api:<เวลา> deploy-api:latest
+docker tag fixgo-rollback/caddy:<เวลา> deploy-caddy:latest
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env.production up -d --no-build
+```
+
+migration ของ FixGo เป็นแบบเพิ่มคอลัมน์หรือตาราง รุ่นเดิมจึงรันบนฐานข้อมูลใหม่ได้ ไม่ต้องกู้ฐานข้อมูลคืนเพื่อย้อนรุ่น ถ้าต้องกู้ข้อมูลจริง ดูหัวข้อ 7 และระวังว่ารายการที่เกิดหลังเวลาสำรองจะหายไป
 
 ## 7. Backup และกู้คืน
 

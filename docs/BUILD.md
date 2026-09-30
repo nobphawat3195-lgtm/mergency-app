@@ -25,6 +25,13 @@ GitHub Actions build แอปให้อัตโนมัติ:
 | `ANDROID_CUSTOMER_KEYSTORE_PASSWORD`, `ANDROID_CUSTOMER_KEY_ALIAS`, `ANDROID_CUSTOMER_KEY_PASSWORD` | ค่าที่ใช้ตอนสร้าง keystore |
 | `ANDROID_PROVIDER_*` | ชุดเดียวกันของแอปช่าง |
 
+**ดูชื่อ artifact ก่อนแจก:** ถ้าตั้งค่าไม่ครบ CI ยัง build ให้ แต่เติมท้ายชื่อเพื่อเตือน
+- `-no-api-url` ไม่ได้ตั้ง `API_BASE_URL` แอปจะต่อ `http://10.0.2.2:3000` (emulator) ใช้บนมือถือจริงไม่ได้
+- `-debug-signed` ไม่มี keystore อัปโหลด Google Play ไม่ได้
+
+ถ้า `API_BASE_URL` ไม่ขึ้นต้นด้วย `https://` CI จะหยุด build เพราะ Android release ไม่อนุญาต http ถ้าไม่ได้ตั้งค่า Firebase จะขึ้นคำเตือนว่า build นี้ไม่มีแจ้งเตือน push
+ชื่อ `fixgo-customer-android` ที่ไม่มีคำต่อท้ายเท่านั้นที่พร้อมแจกหรืออัปโหลด
+
 ## Android: สร้าง upload key (ครั้งเดียวต่อแอป)
 
 ```bash
