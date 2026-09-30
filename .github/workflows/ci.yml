@@ -55,6 +55,8 @@ jobs:
       - run: npm run prisma:generate
       - run: npm run migrate:deploy
       - run: npm run test:integration
+      - run: npm run build
+      - run: npm run test:http
 
   docker:
     runs-on: ubuntu-latest
