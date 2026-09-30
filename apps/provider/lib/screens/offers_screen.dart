@@ -1005,6 +1005,11 @@ class _OfferCardState extends State<_OfferCard> {
               ),
             ],
           ),
+          if (widget.offer.appointmentAt != null) ...[
+            const SizedBox(height: FixGoSpacing.sm),
+            Text('นัดตรวจ ${formatThaiDateTime(widget.offer.appointmentAt!)}',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+          ],
           const SizedBox(height: FixGoSpacing.sm),
           Row(
             children: [

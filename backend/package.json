@@ -15,7 +15,8 @@
     "seed:review": "ts-node prisma/seed-review.ts",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
-    "test:ci": "jest --runInBand --coverage"
+    "test:ci": "jest --runInBand --coverage",
+    "test:integration": "node -e \"if (!process.env.FIXGO_TEST_DATABASE_URL) throw new Error('Set FIXGO_TEST_DATABASE_URL to the local fixgo_audit_test database')\" && jest --runInBand src/audit.integration.spec.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.0.0",

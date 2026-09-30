@@ -17,6 +17,7 @@ import {
   DISPATCH_BATCH_SIZE,
   PROVIDER_HEARTBEAT_STALE_MS,
 } from '../common/constants';
+import { serializable } from '../common/transaction';
 import { WalletService } from '../wallet/wallet.service';
 
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
@@ -57,10 +58,23 @@ export class DispatchService {
 
   /** เริ่มกระจายงาน: หาช่างที่เข้าเงื่อนไข เรียงตามระยะทาง แล้วเสนอให้คนใกล้สุดก่อน */
   async startDispatch(orderId: string): Promise<void> {
-    await this.prisma.order.update({
-      where: { id: orderId },
+    const started = await this.prisma.order.updateMany({
+      where: {
+        id: orderId,
+        status: OrderStatus.CREATED,
+        OR: [
+          { inspection: null },
+          { inspection: { appointmentAt: null } },
+          {
+            inspection: {
+              appointmentAt: { lte: new Date(Date.now() + 60 * 60_000) },
+            },
+          },
+        ],
+      },
       data: { status: OrderStatus.SEARCHING },
     });
+    if (started.count !== 1) return;
     await this.offerToNextBatch(orderId);
   }
 
@@ -250,58 +264,67 @@ export class DispatchService {
     if (attempt.order.status !== OrderStatus.SEARCHING) {
       throw new BadRequestException('งานนี้ถูกรับไปแล้ว');
     }
-    await this.wallet.assertCanTakeJobs(providerId);
+    await serializable(this.prisma, async (tx) => {
+      const provider = await tx.provider.findUnique({
+        where: { id: providerId },
+      });
+      if (
+        !provider ||
+        provider.status !== ProviderStatus.VERIFIED ||
+        provider.deletedAt ||
+        !provider.isOnline
+      ) {
+        throw new BadRequestException(
+          'บัญชีช่างต้องได้รับอนุมัติและเปิดรับงานอยู่',
+        );
+      }
+      await this.wallet.assertCanTakeJobs(providerId, tx);
+      const activeOrder = await tx.order.findFirst({
+        where: { providerId, status: { in: ACTIVE_ORDER_STATUSES } },
+        select: { id: true },
+      });
+      if (activeOrder) {
+        throw new BadRequestException('คุณมีงานที่กำลังดำเนินการอยู่แล้ว');
+      }
 
-    await this.prisma.$transaction(
-      async (tx) => {
-        const activeOrder = await tx.order.findFirst({
-          where: { providerId, status: { in: ACTIVE_ORDER_STATUSES } },
-          select: { id: true },
-        });
-        if (activeOrder) {
-          throw new BadRequestException('คุณมีงานที่กำลังดำเนินการอยู่แล้ว');
-        }
+      const accepted = await tx.dispatchAttempt.updateMany({
+        where: {
+          id: attempt.id,
+          status: DispatchStatus.OFFERED,
+          expiresAt: { gt: new Date() },
+        },
+        data: { status: DispatchStatus.ACCEPTED, respondedAt: new Date() },
+      });
+      if (accepted.count !== 1) {
+        throw new BadRequestException('งานนี้หมดเวลาหรือถูกรับไปแล้ว');
+      }
 
-        const accepted = await tx.dispatchAttempt.updateMany({
-          where: {
-            id: attempt.id,
-            status: DispatchStatus.OFFERED,
-            expiresAt: { gt: new Date() },
-          },
-          data: { status: DispatchStatus.ACCEPTED, respondedAt: new Date() },
-        });
-        if (accepted.count !== 1) {
-          throw new BadRequestException('งานนี้หมดเวลาหรือถูกรับไปแล้ว');
-        }
+      const claimed = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          status: OrderStatus.SEARCHING,
+          providerId: null,
+        },
+        data: {
+          providerId,
+          status: OrderStatus.MATCHED,
+          matchedAt: new Date(),
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new BadRequestException('งานนี้ถูกรับไปแล้ว');
+      }
 
-        const claimed = await tx.order.updateMany({
-          where: {
-            id: orderId,
-            status: OrderStatus.SEARCHING,
-            providerId: null,
-          },
-          data: {
-            providerId,
-            status: OrderStatus.MATCHED,
-            matchedAt: new Date(),
-          },
-        });
-        if (claimed.count !== 1) {
-          throw new BadRequestException('งานนี้ถูกรับไปแล้ว');
-        }
-
-        // ปิดข้อเสนอที่ค้างอยู่ของช่างคนอื่น ไม่ให้เห็นงานที่ถูกรับไปแล้ว
-        await tx.dispatchAttempt.updateMany({
-          where: {
-            orderId,
-            status: DispatchStatus.OFFERED,
-            id: { not: attempt.id },
-          },
-          data: { status: DispatchStatus.EXPIRED },
-        });
-      },
-      { isolationLevel: 'Serializable' },
-    );
+      // ปิดข้อเสนอที่ค้างอยู่ของช่างคนอื่น ไม่ให้เห็นงานที่ถูกรับไปแล้ว
+      await tx.dispatchAttempt.updateMany({
+        where: {
+          orderId,
+          status: DispatchStatus.OFFERED,
+          id: { not: attempt.id },
+        },
+        data: { status: DispatchStatus.EXPIRED },
+      });
+    });
 
     const provider = await this.prisma.provider.findUnique({
       where: { id: providerId },
@@ -324,10 +347,12 @@ export class DispatchService {
       throw new BadRequestException('งานนี้ไม่ได้ถูกเสนอให้คุณ');
     }
 
-    await this.prisma.dispatchAttempt.update({
-      where: { id: attempt.id },
+    const changed = await this.prisma.dispatchAttempt.updateMany({
+      where: { id: attempt.id, status: DispatchStatus.OFFERED },
       data: { status: DispatchStatus.REJECTED, respondedAt: new Date() },
     });
+    if (changed.count !== 1)
+      throw new BadRequestException('ข้อเสนอนี้เปลี่ยนสถานะแล้ว');
 
     const otherActiveOffers = await this.prisma.dispatchAttempt.count({
       where: {
@@ -346,6 +371,7 @@ export class DispatchService {
         providerId,
         status: DispatchStatus.OFFERED,
         expiresAt: { gt: new Date() },
+        order: { status: OrderStatus.SEARCHING },
       },
       include: {
         order: {
@@ -354,6 +380,7 @@ export class DispatchService {
             subService: true,
             vehicleType: true,
             photos: true,
+            inspection: { select: { appointmentAt: true } },
           },
         },
       },
@@ -364,6 +391,28 @@ export class DispatchService {
   /** ตรวจข้อเสนอที่หมดเวลาทุก 30 วินาที แล้วส่งงานต่อให้ช่างคนถัดไป */
   @Cron(CronExpression.EVERY_30_SECONDS)
   async expireStaleOffers(): Promise<void> {
+    const due = await this.prisma.order.findMany({
+      where: {
+        status: OrderStatus.CREATED,
+        OR: [
+          { inspection: null },
+          { inspection: { appointmentAt: null } },
+          {
+            inspection: {
+              appointmentAt: { lte: new Date(Date.now() + 60 * 60_000) },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+      take: 100,
+      orderBy: { createdAt: 'asc' },
+    });
+    for (const order of due) {
+      await this.startDispatch(order.id).catch((error) =>
+        this.logger.error(`เริ่มหาช่างไม่สำเร็จ ${order.id}`, error),
+      );
+    }
     const expired = await this.prisma.dispatchAttempt.findMany({
       where: {
         status: DispatchStatus.OFFERED,
@@ -371,14 +420,39 @@ export class DispatchService {
       },
     });
 
-    if (expired.length === 0) return;
-
     await this.prisma.dispatchAttempt.updateMany({
-      where: { id: { in: expired.map((attempt) => attempt.id) } },
+      where: {
+        id: { in: expired.map((attempt) => attempt.id) },
+        status: DispatchStatus.OFFERED,
+        expiresAt: { lt: new Date() },
+      },
       data: { status: DispatchStatus.EXPIRED },
     });
 
-    const orderIds = [...new Set(expired.map((attempt) => attempt.orderId))];
-    for (const orderId of orderIds) await this.offerToNextBatch(orderId);
+    const searching = await this.prisma.order.findMany({
+      where: {
+        status: OrderStatus.SEARCHING,
+        dispatchAttempts: {
+          none: {
+            status: DispatchStatus.OFFERED,
+            expiresAt: { gt: new Date() },
+          },
+        },
+      },
+      select: { id: true },
+      take: 100,
+      orderBy: { createdAt: 'asc' },
+    });
+    const orderIds = [
+      ...new Set([
+        ...expired.map((attempt) => attempt.orderId),
+        ...searching.map((order) => order.id),
+      ]),
+    ];
+    for (const orderId of orderIds) {
+      await this.offerToNextBatch(orderId).catch((error) =>
+        this.logger.error(`ส่งงานต่อไม่สำเร็จ ${orderId}`, error),
+      );
+    }
   }
 }

@@ -1,24 +1,37 @@
 import {
   BadRequestException,
   ForbiddenException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { OrderStatus, PaymentStatus, QuoteStatus, Role } from '@prisma/client';
-import { randomInt } from 'node:crypto';
+import {
+  OrderStatus,
+  PaymentStatus,
+  QuoteStatus,
+  Role,
+  DispatchStatus,
+  Prisma,
+} from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { DispatchService } from '../dispatch/dispatch.service';
 import { PushService } from '../notifications/push.service';
 import { UploadsService } from '../uploads/uploads.service';
+import { serializable } from '../common/transaction';
 import { commissionRate } from '../common/constants';
 import {
   INSPECTION_CATEGORY_SLUG,
   InspectionsService,
 } from '../inspections/inspections.service';
 import { PROVIDER_CARD_SELECT, presentProviderCard } from './provider-card';
-import { CreateOrderDto, ProposeQuoteDto, RateOrderDto } from './dto/order.dto';
+import {
+  CreateOrderDto,
+  ProposeQuoteDto,
+  RateOrderDto,
+  RespondQuoteDto,
+} from './dto/order.dto';
 
 /** ไม่ส่งรูปสลิปออกไปกับข้อมูลงาน (ช่างไม่ควรเห็นบัญชีธนาคารของลูกค้า) แอดมินดูได้ในหน้าตรวจสลิป */
 const PAYMENT_SUMMARY = {
@@ -50,29 +63,55 @@ export class OrdersService {
     private readonly uploads: UploadsService,
   ) {}
 
-  private generateOrderNo(): string {
-    const now = new Date();
-    const datePart = now.toISOString().slice(2, 10).replace(/-/g, '');
-    const randomPart = randomInt(0, 10_000).toString().padStart(4, '0');
-    return `FG${datePart}${randomPart}`;
+  private async generateOrderNo(tx: Prisma.TransactionClient): Promise<string> {
+    const [row] = await tx.$queryRaw<
+      { value: bigint }[]
+    >`SELECT nextval('fixgo_order_no_seq') AS value`;
+    const datePart = new Date(Date.now() + 7 * 3600000)
+      .toISOString()
+      .slice(2, 10)
+      .replace(/-/g, '');
+    return `FG${datePart}-${row.value.toString().padStart(8, '0')}`;
   }
 
   async create(customerId: string, dto: CreateOrderDto) {
     this.uploads.assertOwnedUploads(dto.photoUrls, customerId, 'ORDER');
-    const quote = await this.catalog.quote(dto.subServiceId, dto.vehicleTypeId);
-    const subService = await this.prisma.subService.findUniqueOrThrow({
-      where: { id: dto.subServiceId },
-      include: { category: { select: { slug: true } } },
-    });
-    if (subService.categoryId !== dto.categoryId) {
-      throw new BadRequestException('บริการย่อยไม่ตรงกับหมวดบริการที่เลือก');
-    }
-    const isInspection = subService.category.slug === INSPECTION_CATEGORY_SLUG;
+    const order = await serializable(this.prisma, async (tx) => {
+      const quote = await this.catalog.quote(
+        dto.subServiceId,
+        dto.vehicleTypeId,
+        tx,
+      );
+      const subService = await tx.subService.findUniqueOrThrow({
+        where: { id: dto.subServiceId },
+        include: { category: { select: { slug: true } } },
+      });
+      if (subService.categoryId !== dto.categoryId) {
+        throw new BadRequestException('บริการย่อยไม่ตรงกับหมวดบริการที่เลือก');
+      }
+      const isInspection =
+        subService.category.slug === INSPECTION_CATEGORY_SLUG;
 
-    const order = await this.prisma.$transaction(async (tx) => {
+      if (isInspection && dto.inspection?.appointmentAt) {
+        const appointment = new Date(dto.inspection.appointmentAt).getTime();
+        if (
+          appointment < Date.now() + 60 * 60_000 ||
+          appointment > Date.now() + 30 * 86_400_000
+        ) {
+          throw new BadRequestException(
+            'นัดตรวจล่วงหน้าอย่างน้อย 1 ชั่วโมง และไม่เกิน 30 วัน',
+          );
+        }
+      }
+      const customer = await tx.customer.findUnique({
+        where: { id: customerId },
+        select: { deletedAt: true },
+      });
+      if (!customer || customer.deletedAt)
+        throw new ForbiddenException('บัญชีนี้ใช้งานไม่ได้');
       const created = await tx.order.create({
         data: {
-          orderNo: this.generateOrderNo(),
+          orderNo: await this.generateOrderNo(tx),
           customerId,
           categoryId: dto.categoryId,
           subServiceId: dto.subServiceId,
@@ -206,6 +245,7 @@ export class OrdersService {
     const cancellableBeforeWork =
       order.status === OrderStatus.CREATED ||
       order.status === OrderStatus.SEARCHING ||
+      order.status === OrderStatus.NO_MATCH ||
       order.status === OrderStatus.MATCHED ||
       (order.status === OrderStatus.EN_ROUTE &&
         order.quoteStatus !== QuoteStatus.APPROVED);
@@ -213,9 +253,23 @@ export class OrdersService {
       throw new BadRequestException('ออเดอร์นี้ยกเลิกไม่ได้แล้ว');
     }
 
-    const cancelled = await this.prisma.order.update({
-      where: { id: orderId },
-      data: { status: OrderStatus.CANCELLED, cancelledAt: new Date() },
+    const cancelled = await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          customerId,
+          status: order.status,
+          quoteStatus: order.quoteStatus,
+        },
+        data: { status: OrderStatus.CANCELLED, cancelledAt: new Date() },
+      });
+      if (changed.count !== 1)
+        throw new ConflictException('สถานะงานเปลี่ยนแล้ว กรุณาโหลดใหม่');
+      await tx.dispatchAttempt.updateMany({
+        where: { orderId, status: DispatchStatus.OFFERED },
+        data: { status: DispatchStatus.EXPIRED },
+      });
+      return tx.order.findUniqueOrThrow({ where: { id: orderId } });
     });
     void this.push.cancelledByCustomer(order.providerId, order);
     return cancelled;
@@ -246,9 +300,24 @@ export class OrdersService {
       throw new BadRequestException('ต้องให้ลูกค้ายืนยันราคาก่อนเริ่มงาน');
     }
 
-    const updated = await this.prisma.order.update({
-      where: { id: orderId },
+    const changed = await this.prisma.order.updateMany({
+      where: {
+        id: orderId,
+        providerId,
+        status: requiredPrevious,
+        ...(next === OrderStatus.IN_PROGRESS
+          ? {
+              quoteStatus: QuoteStatus.APPROVED,
+              quoteVersion: order.quoteVersion,
+            }
+          : {}),
+      },
       data: { status: next },
+    });
+    if (changed.count !== 1)
+      throw new ConflictException('สถานะงานเปลี่ยนแล้ว กรุณาโหลดใหม่');
+    const updated = await this.prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
     });
     if (next === OrderStatus.EN_ROUTE) {
       void this.push.enRoute(order.customerId, order);
@@ -274,21 +343,40 @@ export class OrdersService {
       throw new BadRequestException('เสนอราคาได้เมื่อเดินทางถึงขั้นตอนหน้างาน');
     }
 
-    const proposed = await this.prisma.order.update({
-      where: { id: orderId },
+    const changed = await this.prisma.order.updateMany({
+      where: {
+        id: orderId,
+        providerId,
+        status: OrderStatus.EN_ROUTE,
+        quoteVersion: order.quoteVersion,
+        quoteStatus: { in: [QuoteStatus.NOT_REQUESTED, QuoteStatus.REJECTED] },
+      },
       data: {
         priceProposed: dto.priceProposed,
         quoteNote: dto.note,
         quoteStatus: QuoteStatus.PENDING,
+        quoteVersion: { increment: 1 },
         quoteProposedAt: new Date(),
         quoteRespondedAt: null,
       },
+    });
+    if (changed.count !== 1)
+      throw new ConflictException(
+        'มีราคาที่รอยืนยันหรือยืนยันแล้ว กรุณาโหลดใหม่',
+      );
+    const proposed = await this.prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
     });
     void this.push.quoteProposed(order.customerId, order, dto.priceProposed);
     return proposed;
   }
 
-  async respondToQuote(customerId: string, orderId: string, approved: boolean) {
+  async respondToQuote(
+    customerId: string,
+    orderId: string,
+    approved: boolean,
+    dto: RespondQuoteDto,
+  ) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
     });
@@ -304,12 +392,26 @@ export class OrdersService {
       throw new BadRequestException('ไม่มีราคาที่กำลังรอการยืนยัน');
     }
 
-    const answered = await this.prisma.order.update({
-      where: { id: orderId },
+    const changed = await this.prisma.order.updateMany({
+      where: {
+        id: orderId,
+        customerId,
+        status: OrderStatus.EN_ROUTE,
+        quoteStatus: QuoteStatus.PENDING,
+        quoteVersion: dto.quoteVersion,
+        priceProposed: dto.priceProposed,
+      },
       data: {
         quoteStatus: approved ? QuoteStatus.APPROVED : QuoteStatus.REJECTED,
         quoteRespondedAt: new Date(),
       },
+    });
+    if (changed.count !== 1)
+      throw new ConflictException(
+        'ราคาเปลี่ยนแล้ว กรุณาโหลดราคาใหม่ก่อนยืนยัน',
+      );
+    const answered = await this.prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
     });
     void this.push.quoteAnswered(order.providerId, order, approved);
     return answered;
@@ -389,26 +491,35 @@ export class OrdersService {
 
     const providerId = order.providerId;
 
-    return this.prisma.$transaction(async (tx) => {
+    return serializable(this.prisma, async (tx) => {
+      const existing = await tx.rating.findUnique({ where: { orderId } });
+      if (existing) throw new BadRequestException('ออเดอร์นี้ให้คะแนนไปแล้ว');
       const rating = await tx.rating.create({
         data: { orderId, score: dto.score, comment: dto.comment },
       });
 
-      const provider = await tx.provider.findUniqueOrThrow({
-        where: { id: providerId },
-        select: { ratingAvg: true, ratingCount: true },
+      const totals = await tx.rating.aggregate({
+        where: { order: { providerId } },
+        _avg: { score: true },
+        _count: { _all: true },
       });
-
-      const nextCount = provider.ratingCount + 1;
-      const nextAvg =
-        (provider.ratingAvg * provider.ratingCount + dto.score) / nextCount;
-
       await tx.provider.update({
         where: { id: providerId },
-        data: { ratingAvg: nextAvg, ratingCount: nextCount },
+        data: {
+          ratingAvg: totals._avg.score ?? 0,
+          ratingCount: totals._count._all,
+        },
       });
 
       return rating;
+    }).catch((error) => {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new BadRequestException('ออเดอร์นี้ให้คะแนนไปแล้ว');
+      }
+      throw error;
     });
   }
 }

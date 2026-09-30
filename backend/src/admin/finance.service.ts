@@ -249,7 +249,6 @@ export class FinanceService {
         orderBy: { completedAt: 'desc' },
       }),
       this.prisma.provider.findMany({
-        where: { deletedAt: null },
         select: {
           id: true,
           nickname: true,

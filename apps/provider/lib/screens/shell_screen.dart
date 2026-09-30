@@ -73,7 +73,9 @@ class _ProviderShellScreenState extends State<ProviderShellScreen> {
     _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
       final state = ProviderAppScope.of(context);
       if (state.isOnline) {
-        unawaited(state.api.sendProviderHeartbeat());
+        unawaited(state.api.sendProviderHeartbeat().catchError((_) {
+          // เน็ตหลุดชั่วคราว: รอบ heartbeat ถัดไปจะลองใหม่
+        }));
       }
     });
   }

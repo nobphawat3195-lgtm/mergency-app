@@ -11,6 +11,7 @@ import {
   OrderStatus,
   PaymentMethod,
   PaymentStatus,
+  Prisma,
   Role,
 } from '@prisma/client';
 
@@ -101,10 +102,12 @@ export class PaymentsService {
       );
     }
 
-    await this.prisma.payment.update({
-      where: { id: payment.id },
+    const changed = await this.prisma.payment.updateMany({
+      where: { id: payment.id, status: PaymentStatus.PENDING },
       data: { chargeId: qr.chargeId, method: PaymentMethod.PROMPTPAY },
     });
+    if (changed.count !== 1)
+      throw new BadRequestException('รายการชำระเงินเปลี่ยนแล้ว กรุณาโหลดใหม่');
 
     return {
       chargeId: qr.chargeId,
@@ -143,7 +146,7 @@ export class PaymentsService {
       throw new BadRequestException('แนบสลิปได้หลังช่างปิดงานแล้ว');
     }
     const updated = await this.prisma.payment.updateMany({
-      where: { id: payment.id, status: { not: PaymentStatus.PAID } },
+      where: { id: payment.id, status: PaymentStatus.PENDING },
       data: {
         slipUrl,
         slipSubmittedAt: new Date(),
@@ -191,21 +194,34 @@ export class PaymentsService {
       where: { id: paymentId },
     });
     if (!payment) throw new NotFoundException('ไม่พบรายการชำระเงินนี้');
-    if (payment.status === PaymentStatus.PAID) return { status: 'PAID' };
+    if (payment.status === PaymentStatus.PAID) {
+      if (payment.method !== PaymentMethod.PROMPTPAY)
+        throw new BadRequestException('รายการนี้รับเงินสดแล้ว');
+      return { status: 'PAID' };
+    }
     if (!payment.slipSubmittedAt) {
       throw new BadRequestException('ลูกค้ายังไม่ได้แนบสลิป');
     }
-    const updated = await this.prisma.payment.updateMany({
-      where: { id: payment.id, status: { not: PaymentStatus.PAID } },
-      data: {
-        status: PaymentStatus.PAID,
-        method: PaymentMethod.PROMPTPAY,
-        paidAt: new Date(),
+    const settled = await this.settlePayment(
+      payment.id,
+      PaymentMethod.PROMPTPAY,
+      {
+        slipUrl: payment.slipUrl,
+        slipSubmittedAt: payment.slipSubmittedAt,
       },
-    });
-    if (updated.count > 0) {
-      await this.wallet.creditOrderEarning(payment.orderId);
-      void this.notifyPaid(payment.orderId, payment.amount, 'PROMPTPAY');
+    );
+    if (!settled) {
+      const current = await this.prisma.payment.findUniqueOrThrow({
+        where: { id: payment.id },
+      });
+      if (
+        current.status !== PaymentStatus.PAID ||
+        current.method !== PaymentMethod.PROMPTPAY
+      ) {
+        throw new BadRequestException(
+          'สลิปหรือวิธีชำระเปลี่ยนแล้ว กรุณาโหลดใหม่',
+        );
+      }
     }
     return { status: 'PAID' };
   }
@@ -220,7 +236,12 @@ export class PaymentsService {
     });
     if (!payment) throw new NotFoundException('ไม่พบรายการชำระเงินนี้');
     const updated = await this.prisma.payment.updateMany({
-      where: { id: payment.id, status: { not: PaymentStatus.PAID } },
+      where: {
+        id: payment.id,
+        status: PaymentStatus.PENDING,
+        slipUrl: payment.slipUrl,
+        slipSubmittedAt: payment.slipSubmittedAt,
+      },
       data: {
         slipSubmittedAt: null,
         slipRejectReason: reason,
@@ -256,7 +277,6 @@ export class PaymentsService {
       );
       return 'ignored';
     }
-    if (payment.status === PaymentStatus.PAID) return 'paid';
     if (
       confirmed.currency.toLowerCase() !== 'thb' ||
       confirmed.amountReceived !== payment.amount
@@ -267,18 +287,29 @@ export class PaymentsService {
       return 'ignored';
     }
 
-    const updated = await this.prisma.payment.updateMany({
-      where: { id: payment.id, status: { not: PaymentStatus.PAID } },
-      data: {
-        status: PaymentStatus.PAID,
-        method: PaymentMethod.PROMPTPAY,
-        chargeId: confirmed.chargeId,
-        paidAt: new Date(),
-      },
-    });
-    if (updated.count > 0) {
-      await this.wallet.creditOrderEarning(payment.orderId);
-      void this.notifyPaid(payment.orderId, payment.amount, 'PROMPTPAY');
+    const settled = await this.settlePayment(
+      payment.id,
+      PaymentMethod.PROMPTPAY,
+      {},
+      confirmed.chargeId,
+    );
+    if (!settled) {
+      const current = await this.prisma.payment.findUniqueOrThrow({
+        where: { id: payment.id },
+      });
+      if (
+        current.status !== PaymentStatus.PAID ||
+        current.method !== PaymentMethod.PROMPTPAY ||
+        current.chargeId !== confirmed.chargeId
+      ) {
+        this.logger.error(
+          `ต้องตรวจเงินเข้าซ้ำ/ต่างวิธี: payment ${payment.id}, gateway ${confirmed.chargeId}`,
+        );
+        void this.adminAlert.send(
+          `ต้องตรวจรายการเงินเข้าซ้ำ/ต่างวิธี อ้างอิง ${payment.id} กรุณาตรวจ gateway และบัญชีบริษัทก่อนคืนเงิน`,
+        );
+        return 'ignored';
+      }
     }
     return 'paid';
   }
@@ -312,19 +343,67 @@ export class PaymentsService {
     if (payment.order.status !== OrderStatus.COMPLETED) {
       throw new BadRequestException('ยืนยันรับเงินได้หลังปิดงานแล้วเท่านั้น');
     }
-    if (payment.status === PaymentStatus.PAID) return;
-
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        method: PaymentMethod.CASH,
-        status: PaymentStatus.PAID,
-        paidAt: new Date(),
-      },
+    const settled = await this.settlePayment(payment.id, PaymentMethod.CASH);
+    if (!settled) {
+      const current = await this.prisma.payment.findUniqueOrThrow({
+        where: { id: payment.id },
+      });
+      if (
+        current.status !== PaymentStatus.PAID ||
+        current.method !== PaymentMethod.CASH
+      ) {
+        throw new BadRequestException(
+          'รายการนี้ชำระผ่านช่องทางอื่นหรือเปลี่ยนสถานะแล้ว',
+        );
+      }
+    }
+    // Run after commit, including retries of an already-confirmed cash payment.
+    await this.wallet.pauseIfOverDebtLimit(providerId).catch((error) => {
+      this.logger.error(
+        `ตรวจเพดานหนี้หลังรับเงินสดไม่สำเร็จ ${providerId}`,
+        error,
+      );
     });
-    // ช่างรับเงินสดเต็มจำนวนแล้ว: หักค่าธรรมเนียมจากกระเป๋า ไม่ใช่เครดิตรายได้เพิ่ม
-    await this.wallet.chargeCashCommission(orderId);
-    void this.notifyPaid(orderId, payment.amount, 'CASH');
+  }
+
+  /** Payment status and its ledger entry commit together; a losing method writes nothing. */
+  private settlePayment(
+    paymentId: string,
+    method: PaymentMethod,
+    snapshot: Prisma.PaymentWhereInput = {},
+    chargeId?: string,
+  ) {
+    return this.prisma
+      .$transaction(async (tx) => {
+        const payment = await tx.payment.findUniqueOrThrow({
+          where: { id: paymentId },
+        });
+        const changed = await tx.payment.updateMany({
+          where: { ...snapshot, id: paymentId, status: PaymentStatus.PENDING },
+          data: {
+            status: PaymentStatus.PAID,
+            method,
+            paidAt: new Date(),
+            ...(chargeId ? { chargeId } : {}),
+          },
+        });
+        if (changed.count !== 1) return false;
+        if (method === PaymentMethod.CASH) {
+          await this.wallet.chargeCashCommission(payment.orderId, tx);
+        } else {
+          await this.wallet.creditOrderEarning(payment.orderId, tx);
+        }
+        return { orderId: payment.orderId, amount: payment.amount };
+      })
+      .then((settled) => {
+        if (settled)
+          void this.notifyPaid(
+            settled.orderId,
+            settled.amount,
+            method === PaymentMethod.CASH ? 'CASH' : 'PROMPTPAY',
+          );
+        return Boolean(settled);
+      });
   }
 
   private async notifyPaid(
@@ -365,6 +444,20 @@ export class PaymentsService {
       ((actor.role === Role.CUSTOMER && order.customerId === actor.sub) ||
         (actor.role === Role.PROVIDER && order.providerId === actor.sub));
     if (!allowed) throw new NotFoundException('ไม่พบรายการชำระเงินนี้');
+    if (actor.role === Role.PROVIDER) {
+      return this.prisma.payment.findUnique({
+        where: { orderId },
+        select: {
+          id: true,
+          amount: true,
+          method: true,
+          status: true,
+          paidAt: true,
+          slipSubmittedAt: true,
+          slipRejectReason: true,
+        },
+      });
+    }
     return this.getPaymentByOrder(orderId);
   }
 }

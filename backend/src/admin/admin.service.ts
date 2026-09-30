@@ -309,10 +309,11 @@ export class AdminService {
       pendingSlips,
       pendingSettlements,
       outstandingDebt,
+      completedCount,
     ] = await Promise.all([
       this.prisma.order.count(),
       this.prisma.order.findMany({
-        where: { status: OrderStatus.COMPLETED },
+        where: { status: OrderStatus.COMPLETED, payment: { status: 'PAID' } },
         select: { priceFinal: true, commissionRate: true },
       }),
       this.prisma.provider.count({
@@ -327,6 +328,7 @@ export class AdminService {
       }),
       this.prisma.commissionSettlement.count({ where: { status: 'PENDING' } }),
       this.wallet.totalOutstandingDebt(),
+      this.prisma.order.count({ where: { status: OrderStatus.COMPLETED } }),
     ]);
 
     const commissionRevenue = completedOrders.reduce(
@@ -337,7 +339,7 @@ export class AdminService {
 
     return {
       orderCount,
-      completedCount: completedOrders.length,
+      completedCount,
       commissionRevenue,
       pendingProviders,
       pendingWithdrawals,

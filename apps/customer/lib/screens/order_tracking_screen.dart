@@ -175,13 +175,19 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   }
 
   Future<void> _respondToQuote(bool approved) async {
+    final quote = _order;
+    if (quote == null || quote.priceProposed == null) return;
     setState(() => _respondingToQuote = true);
     try {
       final api = AppStateScope.of(context).api;
       if (approved) {
-        await api.approveQuote(widget.orderId);
+        await api.approveQuote(widget.orderId,
+            quoteVersion: quote.quoteVersion,
+            priceProposed: quote.priceProposed!);
       } else {
-        await api.rejectQuote(widget.orderId);
+        await api.rejectQuote(widget.orderId,
+            quoteVersion: quote.quoteVersion,
+            priceProposed: quote.priceProposed!);
       }
       await _refresh();
       if (!mounted) return;
@@ -325,7 +331,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                 ],
                 if (order.status == OrderStatus.searching ||
                     order.status == OrderStatus.created ||
-                    order.status == OrderStatus.matched) ...[
+                    order.status == OrderStatus.matched ||
+                    order.status == OrderStatus.noMatch ||
+                    (order.status == OrderStatus.enRoute &&
+                        order.quoteStatus != QuoteStatus.approved)) ...[
                   const SizedBox(height: FixGoSpacing.sm),
                   FixGoSecondaryButton(
                     label: 'ยกเลิกการเรียกช่าง',
@@ -380,6 +389,12 @@ class _StatusCard extends StatelessWidget {
                 color: FixGoColors.accent,
               ),
             ),
+            if (order.status == OrderStatus.created &&
+                order.inspection?.appointmentAt != null) ...[
+              const Text(
+                  'บันทึกนัดตรวจแล้ว ระบบเริ่มหาช่างก่อนเวลานัดประมาณ 1 ชั่วโมง'),
+              const SizedBox(height: FixGoSpacing.sm),
+            ],
             if (order.status == OrderStatus.noMatch) ...[
               const SizedBox(height: FixGoSpacing.sm),
               const Text(
