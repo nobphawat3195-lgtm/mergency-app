@@ -31,6 +31,7 @@ describe('WalletService commission debt', () => {
     prisma = {
       walletEntry: {
         aggregate,
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
         create: jest.fn().mockResolvedValue({}),
       },
       commissionSettlement: {
@@ -93,7 +94,7 @@ describe('WalletService commission debt', () => {
   it('switches the mechanic offline when a cash job pushes the debt over the limit', async () => {
     balance = -140_000;
     await service.chargeCashCommission('o1');
-    expect(prisma.walletEntry.create).toHaveBeenCalledWith(
+    expect(prisma.walletEntry.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ amount: -140_000 }),
       }),

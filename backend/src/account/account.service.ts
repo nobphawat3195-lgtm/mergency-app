@@ -13,6 +13,7 @@ import {
 
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
+import { serializable } from '../common/transaction';
 import { UploadsService } from '../uploads/uploads.service';
 
 /** งานที่ยังไม่จบ ลบบัญชีระหว่างนี้ไม่ได้ อีกฝ่ายยังต้องติดต่อกันอยู่ */
@@ -51,38 +52,38 @@ export class AccountService {
   }
 
   private async deleteCustomer(customerId: string) {
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
-    });
-    if (!customer || customer.deletedAt) {
-      throw new NotFoundException('ไม่พบบัญชีนี้');
-    }
+    const photos = await serializable(this.prisma, async (tx) => {
+      const customer = await tx.customer.findUnique({
+        where: { id: customerId },
+      });
+      if (!customer || customer.deletedAt) {
+        throw new NotFoundException('ไม่พบบัญชีนี้');
+      }
 
-    const active = await this.prisma.order.count({
-      where: { customerId, status: { in: ACTIVE_ORDER_STATUSES } },
-    });
-    if (active > 0) {
-      throw new ConflictException(
-        'ยังมีงานที่กำลังดำเนินการ ยกเลิกหรือรอให้งานเสร็จก่อนลบบัญชี',
-      );
-    }
-    const unpaid = await this.prisma.order.count({
-      where: {
-        customerId,
-        status: OrderStatus.COMPLETED,
-        OR: [
-          { payment: null },
-          { payment: { status: { notIn: SETTLED_PAYMENT } } },
-        ],
-      },
-    });
-    if (unpaid > 0) {
-      throw new ConflictException(
-        'ยังมีงานที่ยังไม่ได้ชำระเงิน ชำระให้เรียบร้อยก่อนลบบัญชี',
-      );
-    }
+      const active = await tx.order.count({
+        where: { customerId, status: { in: ACTIVE_ORDER_STATUSES } },
+      });
+      if (active > 0) {
+        throw new ConflictException(
+          'ยังมีงานที่กำลังดำเนินการ ยกเลิกหรือรอให้งานเสร็จก่อนลบบัญชี',
+        );
+      }
+      const unpaid = await tx.order.count({
+        where: {
+          customerId,
+          status: OrderStatus.COMPLETED,
+          OR: [
+            { payment: null },
+            { payment: { status: { notIn: SETTLED_PAYMENT } } },
+          ],
+        },
+      });
+      if (unpaid > 0) {
+        throw new ConflictException(
+          'ยังมีงานที่ยังไม่ได้ชำระเงิน ชำระให้เรียบร้อยก่อนลบบัญชี',
+        );
+      }
 
-    const photos = await this.prisma.$transaction(async (tx) => {
       const orders = await tx.order.findMany({
         where: { customerId },
         select: { id: true },
@@ -142,43 +143,64 @@ export class AccountService {
   }
 
   private async deleteProvider(providerId: string) {
-    const provider = await this.prisma.provider.findUnique({
-      where: { id: providerId },
-    });
-    if (!provider || provider.deletedAt) {
-      throw new NotFoundException('ไม่พบบัญชีนี้');
-    }
+    const photoUrls = await serializable(this.prisma, async (tx) => {
+      const provider = await tx.provider.findUnique({
+        where: { id: providerId },
+      });
+      if (!provider || provider.deletedAt) {
+        throw new NotFoundException('ไม่พบบัญชีนี้');
+      }
 
-    const active = await this.prisma.order.count({
-      where: { providerId, status: { in: ACTIVE_ORDER_STATUSES } },
-    });
-    if (active > 0) {
-      throw new ConflictException(
-        'ยังมีงานที่รับไว้และยังไม่ปิด ปิดงานให้เรียบร้อยก่อนลบบัญชี',
-      );
-    }
-    const pendingWithdrawals = await this.prisma.withdrawalRequest.count({
-      where: { providerId, status: WithdrawalStatus.REQUESTED },
-    });
-    if (pendingWithdrawals > 0) {
-      throw new ConflictException(
-        'มีคำขอเบิกเงินที่รอโอนอยู่ รอให้โอนเสร็จก่อนลบบัญชี',
-      );
-    }
-    const balance = await this.wallet.getBalance(providerId);
-    if (balance > 0) {
-      throw new ConflictException(
-        'ยังมียอดเงินคงเหลือในกระเป๋า กดขอเบิกเงินให้หมดก่อนลบบัญชี',
-      );
-    }
+      const active = await tx.order.count({
+        where: { providerId, status: { in: ACTIVE_ORDER_STATUSES } },
+      });
+      if (active > 0) {
+        throw new ConflictException(
+          'ยังมีงานที่รับไว้และยังไม่ปิด ปิดงานให้เรียบร้อยก่อนลบบัญชี',
+        );
+      }
+      const pendingWithdrawals = await tx.withdrawalRequest.count({
+        where: { providerId, status: WithdrawalStatus.REQUESTED },
+      });
+      if (pendingWithdrawals > 0) {
+        throw new ConflictException(
+          'มีคำขอเบิกเงินที่รอโอนอยู่ รอให้โอนเสร็จก่อนลบบัญชี',
+        );
+      }
+      const sums = await tx.walletEntry.aggregate({
+        where: { providerId },
+        _sum: { amount: true },
+      });
+      const balance = sums._sum.amount ?? 0;
+      if (balance !== 0) {
+        throw new ConflictException(
+          'กรุณาเบิกยอดคงเหลือหรือชำระค่าบริการค้างให้ครบก่อนลบบัญชี',
+        );
+      }
 
-    const toolPhotos = await this.prisma.providerToolPhoto.findMany({
-      where: { providerId },
-      select: { url: true },
-    });
-    const photoUrls = toolPhotos.map((photo) => photo.url);
-    if (provider.photoUrl) photoUrls.push(provider.photoUrl);
-    await this.prisma.$transaction(async (tx) => {
+      const toolPhotos = await tx.providerToolPhoto.findMany({
+        where: { providerId },
+        select: { url: true },
+      });
+      const photoUrls = toolPhotos.map((photo) => photo.url);
+      if (provider.photoUrl) photoUrls.push(provider.photoUrl);
+      const unpaid = await tx.order.count({
+        where: {
+          providerId,
+          status: OrderStatus.COMPLETED,
+          OR: [
+            { payment: null },
+            { payment: { status: { notIn: SETTLED_PAYMENT } } },
+          ],
+        },
+      });
+      const settlements = await tx.commissionSettlement.count({
+        where: { providerId, status: 'PENDING' },
+      });
+      if (unpaid > 0 || settlements > 0)
+        throw new ConflictException(
+          'ยังมีรายการชำระหรือสลิปที่รอตรวจ กรุณารอให้เรียบร้อยก่อนลบบัญชี',
+        );
       await tx.providerToolPhoto.deleteMany({ where: { providerId } });
       await tx.dispatchAttempt.deleteMany({
         where: { providerId, status: 'OFFERED' },
@@ -213,6 +235,7 @@ export class AccountService {
           deletedAt: new Date(),
         },
       });
+      return photoUrls;
     });
     await this.uploads.deleteUploads(photoUrls);
   }

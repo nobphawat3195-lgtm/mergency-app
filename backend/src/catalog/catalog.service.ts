@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -19,7 +20,8 @@ export class CatalogService {
     const category = await this.prisma.serviceCategory.findUnique({
       where: { id: categoryId },
     });
-    if (!category) throw new NotFoundException('ไม่พบหมวดบริการนี้');
+    if (!category || !category.active)
+      throw new NotFoundException('ไม่พบหมวดบริการนี้');
 
     return this.prisma.subService.findMany({
       where: { categoryId, active: true },
@@ -39,14 +41,20 @@ export class CatalogService {
   async quote(
     subServiceId: string,
     vehicleTypeId: string,
+    db: Prisma.TransactionClient = this.prisma,
   ): Promise<{ price: number; subServiceId: string; vehicleTypeId: string }> {
     const [subService, vehicleType] = await Promise.all([
-      this.prisma.subService.findUnique({ where: { id: subServiceId } }),
-      this.prisma.vehicleType.findUnique({ where: { id: vehicleTypeId } }),
+      db.subService.findUnique({
+        where: { id: subServiceId },
+        include: { category: { select: { active: true } } },
+      }),
+      db.vehicleType.findUnique({ where: { id: vehicleTypeId } }),
     ]);
 
-    if (!subService) throw new NotFoundException('ไม่พบบริการย่อยนี้');
-    if (!vehicleType) throw new NotFoundException('ไม่พบประเภทรถนี้');
+    if (!subService || !subService.active || !subService.category.active)
+      throw new NotFoundException('ไม่พบบริการย่อยนี้');
+    if (!vehicleType || !vehicleType.active)
+      throw new NotFoundException('ไม่พบประเภทรถนี้');
 
     return {
       price: subService.fixedPrice

@@ -110,6 +110,9 @@ class _InspectionBookingCardState extends State<InspectionBookingCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const Text(
+                'ระบบเริ่มหาช่างก่อนเวลานัดประมาณ 1 ชั่วโมง การจองยังไม่ใช่การยืนยันว่ามีช่างรับงาน'),
+            const SizedBox(height: FixGoSpacing.sm),
             Row(
               children: [
                 Image.asset(categoryIconAsset('inspection'), height: 56),

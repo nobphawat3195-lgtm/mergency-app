@@ -78,3 +78,14 @@ export class RateOrderDto {
   @Length(1, 500)
   comment?: string;
 }
+
+/** The exact quote displayed to the customer, not whatever happens to be current. */
+export class RespondQuoteDto {
+  @IsInt()
+  @Min(0)
+  quoteVersion!: number;
+
+  @IsInt()
+  @Min(0)
+  priceProposed!: number;
+}

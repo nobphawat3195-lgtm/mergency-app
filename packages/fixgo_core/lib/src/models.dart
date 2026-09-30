@@ -255,6 +255,7 @@ class Order {
     this.priceFinal,
     this.priceProposed,
     this.quoteStatus = QuoteStatus.notRequested,
+    this.quoteVersion = 0,
     this.quoteNote,
     this.pickupAddress,
     this.note,
@@ -282,6 +283,7 @@ class Order {
   final int? priceFinal;
   final int? priceProposed;
   final QuoteStatus quoteStatus;
+  final int quoteVersion;
   final String? quoteNote;
   final double pickupLat;
   final double pickupLng;
@@ -341,6 +343,7 @@ class Order {
       priceFinal: json['priceFinal'] as int?,
       priceProposed: json['priceProposed'] as int?,
       quoteStatus: quoteStatusFromJson(json['quoteStatus'] as String?),
+      quoteVersion: json['quoteVersion'] as int? ?? 0,
       quoteNote: json['quoteNote'] as String?,
       pickupLat: (json['pickupLat'] as num).toDouble(),
       pickupLng: (json['pickupLng'] as num).toDouble(),
@@ -387,6 +390,7 @@ class JobOffer {
     this.categoryIconKey,
     this.subServiceName,
     this.pickupAddress,
+    this.appointmentAt,
     this.photoUrls = const [],
   });
 
@@ -399,12 +403,14 @@ class JobOffer {
   final String? categoryIconKey;
   final String? subServiceName;
   final String? pickupAddress;
+  final DateTime? appointmentAt;
   final List<String> photoUrls;
 
   factory JobOffer.fromJson(Map<String, dynamic> json) {
     final order = json['order'] as Map<String, dynamic>;
     final category = order['category'] as Map<String, dynamic>?;
     final subService = order['subService'] as Map<String, dynamic>?;
+    final inspection = order['inspection'] as Map<String, dynamic>?;
     final photos = (order['photos'] as List<dynamic>? ?? const [])
         .cast<Map<String, dynamic>>()
         .map((photo) => photo['url'] as String)
@@ -420,6 +426,9 @@ class JobOffer {
       categoryIconKey: category?['iconKey'] as String?,
       subServiceName: subService?['name'] as String?,
       pickupAddress: order['pickupAddress'] as String?,
+      appointmentAt: inspection?['appointmentAt'] is String
+          ? DateTime.parse(inspection!['appointmentAt'] as String).toLocal()
+          : null,
       photoUrls: photos,
     );
   }

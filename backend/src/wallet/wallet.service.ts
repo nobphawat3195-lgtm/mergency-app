@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AdminAlertService } from '../notifications/admin-alert.service';
 import { PushService } from '../notifications/push.service';
 import { UploadsService } from '../uploads/uploads.service';
+import { serializable } from '../common/transaction';
 import { formatBaht } from '../common/money';
 import { cashDebtLimit } from '../common/constants';
 import { promptPayPayload } from '../payments/promptpay-qr';
@@ -84,8 +85,19 @@ export class WalletService {
   }
 
   /** เรียกก่อนเปิดรับงานหรือกดรับงาน: ค้างค่าบริการเกินเพดานต้องโอนคืนก่อน */
-  async assertCanTakeJobs(providerId: string): Promise<void> {
-    const debt = await this.getDebtStatus(providerId);
+  async assertCanTakeJobs(
+    providerId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const debt = tx
+      ? await tx.walletEntry
+          .aggregate({ where: { providerId }, _sum: { amount: true } })
+          .then((sum) => {
+            const owed = Math.max(0, -(sum._sum.amount ?? 0));
+            const limit = cashDebtLimit();
+            return { owed, limit, blocked: owed > limit };
+          })
+      : await this.getDebtStatus(providerId);
     if (!debt.blocked) return;
     throw new ForbiddenException(
       `ค้างค่าบริการแพลตฟอร์ม ${formatBaht(debt.owed)} เกินเพดาน ${formatBaht(debt.limit)} ` +
@@ -119,7 +131,8 @@ export class WalletService {
    */
   async submitSettlement(providerId: string, slipUrl: string) {
     this.uploads.assertOwnedUploads([slipUrl], providerId, 'PAYMENT_SLIP');
-    const { settlement, nickname } = await this.prisma.$transaction(
+    const { settlement, nickname } = await serializable(
+      this.prisma,
       async (tx) => {
         const pending = await tx.commissionSettlement.findFirst({
           where: { providerId, status: SettlementStatus.PENDING },
@@ -147,7 +160,6 @@ export class WalletService {
         });
         return { settlement, nickname: provider.nickname };
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
     void this.adminAlert.settlementSubmitted(
       nickname,
@@ -255,8 +267,12 @@ export class WalletService {
    * หักคอมมิชชันตามเรตที่บันทึกไว้ในออเดอร์ แล้วเครดิตเฉพาะยอดสุทธิ
    * เรียกซ้ำด้วยออเดอร์เดิมจะไม่เครดิตซ้ำ
    */
-  async creditOrderEarning(orderId: string): Promise<void> {
-    const order = await this.prisma.order.findUnique({
+  async creditOrderEarning(
+    orderId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const db = tx ?? this.prisma;
+    const order = await db.order.findUnique({
       where: { id: orderId },
       include: { payment: true },
     });
@@ -271,27 +287,17 @@ export class WalletService {
     const net = gross - commission;
     const providerId = order.providerId;
 
-    try {
-      await this.prisma.walletEntry.create({
-        data: {
-          idempotencyKey: `order-earning:${orderId}`,
-          providerId,
-          type: WalletEntryType.ORDER_EARNING,
-          amount: net,
-          orderId,
-          memo: `รายได้งาน ${order.orderNo}`,
-        },
-      });
-    } catch (error) {
-      // webhook/payment confirmation อาจมาซ้ำหรือชนกัน ให้เครดิตเพียงครั้งเดียว
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        return;
-      }
-      throw error;
-    }
+    await db.walletEntry.createMany({
+      data: {
+        idempotencyKey: `order-earning:${orderId}`,
+        providerId,
+        type: WalletEntryType.ORDER_EARNING,
+        amount: net,
+        orderId,
+        memo: `รายได้งาน ${order.orderNo}`,
+      },
+      skipDuplicates: true,
+    });
   }
 
   /**
@@ -299,8 +305,12 @@ export class WalletService {
    * จึงบันทึกค่าธรรมเนียมที่ช่างต้องคืนบริษัทเป็นยอดติดลบ (หักจากรายได้งานพร้อมเพย์ครั้งถัดไป)
    * ห้ามเครดิตรายได้ให้ซ้ำ ไม่งั้นช่างจะเบิกเงินที่บริษัทไม่เคยได้รับ
    */
-  async chargeCashCommission(orderId: string): Promise<void> {
-    const order = await this.prisma.order.findUnique({
+  async chargeCashCommission(
+    orderId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const db = tx ?? this.prisma;
+    const order = await db.order.findUnique({
       where: { id: orderId },
     });
     if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
@@ -309,31 +319,22 @@ export class WalletService {
     }
     const gross = order.priceFinal ?? order.priceEstimated;
     const commission = Math.round(gross * order.commissionRate);
-    try {
-      await this.prisma.walletEntry.create({
-        data: {
-          idempotencyKey: `cash-commission:${orderId}`,
-          providerId: order.providerId,
-          type: WalletEntryType.COMMISSION_DUE,
-          amount: -commission,
-          orderId,
-          memo: `ค่าบริการแพลตฟอร์ม งาน ${order.orderNo} (ลูกค้าจ่ายเงินสดกับช่าง)`,
-        },
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        return;
-      }
-      throw error;
-    }
-    await this.pauseIfOverDebtLimit(order.providerId);
+    await db.walletEntry.createMany({
+      data: {
+        idempotencyKey: `cash-commission:${orderId}`,
+        providerId: order.providerId,
+        type: WalletEntryType.COMMISSION_DUE,
+        amount: -commission,
+        orderId,
+        memo: `ค่าบริการแพลตฟอร์ม งาน ${order.orderNo} (ลูกค้าจ่ายเงินสดกับช่าง)`,
+      },
+      skipDuplicates: true,
+    });
+    if (!tx) await this.pauseIfOverDebtLimit(order.providerId);
   }
 
   /** ค้างเกินเพดานหลังงานเงินสด: ปิดรับงานทันทีและแจ้งช่างให้โอนคืน */
-  private async pauseIfOverDebtLimit(providerId: string): Promise<void> {
+  async pauseIfOverDebtLimit(providerId: string): Promise<void> {
     const debt = await this.getDebtStatus(providerId);
     if (!debt.blocked) return;
     await this.prisma.provider.update({
@@ -356,58 +357,53 @@ export class WalletService {
       throw new BadRequestException('จำนวนเงินที่ขอเบิกต้องมากกว่า 0');
     }
 
-    const withdrawal = await this.prisma.$transaction(
-      async (tx) => {
-        const provider = await tx.provider.findUnique({
-          where: { id: providerId },
-        });
-        if (!provider) throw new NotFoundException('ไม่พบข้อมูลช่าง');
+    const withdrawal = await serializable(this.prisma, async (tx) => {
+      const provider = await tx.provider.findUnique({
+        where: { id: providerId },
+      });
+      if (!provider) throw new NotFoundException('ไม่พบข้อมูลช่าง');
 
-        const hasPayoutInfo =
-          Boolean(provider.promptPayId) ||
-          Boolean(provider.bankAccountNumber && provider.bankName);
-        if (!hasPayoutInfo) {
-          throw new BadRequestException(
-            'กรุณากรอกข้อมูลบัญชีรับเงินก่อนขอเบิก',
-          );
-        }
+      const hasPayoutInfo =
+        Boolean(provider.promptPayId) ||
+        Boolean(provider.bankAccountNumber && provider.bankName);
+      if (!hasPayoutInfo) {
+        throw new BadRequestException('กรุณากรอกข้อมูลบัญชีรับเงินก่อนขอเบิก');
+      }
 
-        const balanceResult = await tx.walletEntry.aggregate({
-          where: { providerId },
-          _sum: { amount: true },
-        });
-        const balance = balanceResult._sum.amount ?? 0;
+      const balanceResult = await tx.walletEntry.aggregate({
+        where: { providerId },
+        _sum: { amount: true },
+      });
+      const balance = balanceResult._sum.amount ?? 0;
 
-        if (balance < amount) {
-          throw new BadRequestException('ยอดเงินในกระเป๋าไม่เพียงพอ');
-        }
+      if (balance < amount) {
+        throw new BadRequestException('ยอดเงินในกระเป๋าไม่เพียงพอ');
+      }
 
-        const withdrawal = await tx.withdrawalRequest.create({
-          data: {
-            providerId,
-            amount,
-            status: WithdrawalStatus.REQUESTED,
-            bankName: provider.bankName,
-            bankAccountName: provider.bankAccountName,
-            bankAccountNumber: provider.bankAccountNumber,
-            promptPayId: provider.promptPayId,
-          },
-        });
+      const withdrawal = await tx.withdrawalRequest.create({
+        data: {
+          providerId,
+          amount,
+          status: WithdrawalStatus.REQUESTED,
+          bankName: provider.bankName,
+          bankAccountName: provider.bankAccountName,
+          bankAccountNumber: provider.bankAccountNumber,
+          promptPayId: provider.promptPayId,
+        },
+      });
 
-        await tx.walletEntry.create({
-          data: {
-            providerId,
-            type: WalletEntryType.WITHDRAWAL,
-            amount: -amount,
-            withdrawalId: withdrawal.id,
-            memo: 'กันยอดสำหรับคำขอเบิกเงิน',
-          },
-        });
+      await tx.walletEntry.create({
+        data: {
+          providerId,
+          type: WalletEntryType.WITHDRAWAL,
+          amount: -amount,
+          withdrawalId: withdrawal.id,
+          memo: 'กันยอดสำหรับคำขอเบิกเงิน',
+        },
+      });
 
-        return { withdrawal, nickname: provider.nickname };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+      return { withdrawal, nickname: provider.nickname };
+    });
     void this.adminAlert.withdrawalRequested(
       withdrawal.nickname,
       formatBaht(amount),
@@ -432,14 +428,19 @@ export class WalletService {
       throw new BadRequestException('คำขอนี้ถูกดำเนินการไปแล้ว');
     }
 
-    return this.prisma.withdrawalRequest.update({
-      where: { id: withdrawalId },
+    const changed = await this.prisma.withdrawalRequest.updateMany({
+      where: { id: withdrawalId, status: WithdrawalStatus.REQUESTED },
       data: {
         status: WithdrawalStatus.TRANSFERRED,
         transferredAt: new Date(),
         transferSlip: slipUrl,
         adminNote: note,
       },
+    });
+    if (changed.count !== 1)
+      throw new BadRequestException('คำขอนี้ถูกดำเนินการไปแล้ว');
+    return this.prisma.withdrawalRequest.findUniqueOrThrow({
+      where: { id: withdrawalId },
     });
   }
 
@@ -454,19 +455,26 @@ export class WalletService {
         throw new BadRequestException('คำขอนี้ถูกดำเนินการไปแล้ว');
       }
 
+      const changed = await tx.withdrawalRequest.updateMany({
+        where: { id: withdrawalId, status: WithdrawalStatus.REQUESTED },
+        data: { status: WithdrawalStatus.REJECTED, adminNote: note },
+      });
+      if (changed.count !== 1)
+        throw new BadRequestException('คำขอนี้ถูกดำเนินการไปแล้ว');
+
       await tx.walletEntry.create({
         data: {
           providerId: withdrawal.providerId,
           type: WalletEntryType.ADJUSTMENT,
+          idempotencyKey: `withdrawal-refund:${withdrawalId}`,
           amount: withdrawal.amount,
           withdrawalId: withdrawal.id,
           memo: 'คืนยอดจากคำขอเบิกที่ถูกปฏิเสธ',
         },
       });
 
-      return tx.withdrawalRequest.update({
+      return tx.withdrawalRequest.findUniqueOrThrow({
         where: { id: withdrawalId },
-        data: { status: WithdrawalStatus.REJECTED, adminNote: note },
       });
     });
   }

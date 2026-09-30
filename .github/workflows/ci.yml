@@ -25,6 +25,37 @@ jobs:
       - run: npm run build
       - run: npm run build:scripts
 
+  backend-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: fixgo_audit_test
+          POSTGRES_USER: fixgo_test
+          POSTGRES_PASSWORD: ci-test-only
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U fixgo_test -d fixgo_audit_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://fixgo_test:ci-test-only@127.0.0.1:5432/fixgo_audit_test?schema=public
+      FIXGO_TEST_DATABASE_URL: postgresql://fixgo_test:ci-test-only@127.0.0.1:5432/fixgo_audit_test?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: npm run migrate:deploy
+      - run: npm run test:integration
+
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -107,6 +138,9 @@ jobs:
       - name: Analyze provider app
         working-directory: apps/provider
         run: flutter pub get && flutter analyze
+      - name: Test provider app
+        working-directory: apps/provider
+        run: flutter test
       # เว็บแอปที่ deploy/web.Dockerfile build ขึ้นเซิร์ฟเวอร์จริง
       - name: Build customer web
         working-directory: apps/customer

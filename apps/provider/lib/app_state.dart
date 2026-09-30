@@ -67,6 +67,19 @@ class ProviderAppState extends ChangeNotifier {
     }
   }
 
+  // Rendering hint only. Authorization remains enforced by the backend.
+  bool _profileFromToken(String token) {
+    try {
+      final payload = jsonDecode(utf8.decode(
+              base64Url.decode(base64Url.normalize(token.split('.')[1]))))
+          as Map<String, dynamic>;
+      final sub = payload['sub'];
+      return sub is String && sub.isNotEmpty && !sub.startsWith('pending:');
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _loadOnlineState() async {
     try {
       final profile = await api.getProviderProfile();
@@ -130,12 +143,13 @@ class ProviderAppState extends ChangeNotifier {
       }
       if (error.statusCode == 401) {
         api.accessToken = null;
-        await _tokenStore.clear();
+        await _tokenStore.clear().catchError((_) {});
+      } else if (error.statusCode == 408 || error.statusCode >= 500) {
+        _hasProfile = _profileFromToken(token);
       }
     } catch (_) {
-      // ออฟไลน์ตอนเปิดแอป: ช่างที่มี token แล้วเคยสมัครมาก่อนแน่นอน
-      // ให้เข้าหน้าหลักได้เลย ไม่บังคับไปหน้าสมัครซ้ำ
-      _hasProfile = true;
+      // ช่างที่สมัครแล้วไม่ต้องสมัครซ้ำเมื่อเน็ตหลุด แต่ pending token ยังเข้าหน้าสมัคร
+      _hasProfile = _profileFromToken(token);
     }
   }
 

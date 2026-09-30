@@ -26,12 +26,14 @@ String _roleToJson(ApiRole role) =>
 class FixGoApiClient {
   FixGoApiClient({
     required this.baseUrl,
+    this.requestTimeout = const Duration(seconds: 25),
     http.Client? httpClient,
     http.Client Function()? streamClientFactory,
   })  : _http = httpClient ?? http.Client(),
         _streamClientFactory = streamClientFactory ?? http.Client.new;
 
   final String baseUrl;
+  final Duration requestTimeout;
   final http.Client _http;
 
   /// event stream ใช้ client แยกต่อ stream เพื่อปิด connection ได้ทันทีเมื่อเลิกฟัง
@@ -45,6 +47,24 @@ class FixGoApiClient {
       };
 
   Future<dynamic> _send(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, String>? query,
+  }) async {
+    try {
+      return await _sendOnce(method, path, body: body, query: query)
+          .timeout(requestTimeout);
+    } on TimeoutException {
+      throw ApiException(408,
+          'การเชื่อมต่อใช้เวลานาน กรุณาตรวจสถานะล่าสุดก่อนลองทำรายการใหม่');
+    } on http.ClientException {
+      throw ApiException(
+          503, 'เชื่อมต่อไม่ได้ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
+    }
+  }
+
+  Future<dynamic> _sendOnce(
     String method,
     String path, {
     Map<String, dynamic>? body,
@@ -430,11 +450,20 @@ class FixGoApiClient {
     final uploadHeaders =
         (result['headers'] as Map<String, dynamic>? ?? const {})
             .map((key, value) => MapEntry(key, value.toString()));
-    final response = await _http.put(
-      Uri.parse(uploadUrl),
-      headers: uploadHeaders,
-      body: bytes,
-    );
+    final http.Response response;
+    try {
+      response = await _http
+          .put(
+            Uri.parse(uploadUrl),
+            headers: uploadHeaders,
+            body: bytes,
+          )
+          .timeout(const Duration(seconds: 60));
+    } on TimeoutException {
+      throw ApiException(408, 'อัปโหลดใช้เวลานาน กรุณาลองแนบรูปใหม่');
+    } on http.ClientException {
+      throw ApiException(503, 'อัปโหลดไม่ได้ กรุณาตรวจอินเทอร์เน็ต');
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(
         response.statusCode,
@@ -510,12 +539,16 @@ class FixGoApiClient {
     });
   }
 
-  Future<void> approveQuote(String orderId) async {
-    await _send('POST', '/orders/$orderId/quote/approve');
+  Future<void> approveQuote(String orderId,
+      {required int quoteVersion, required int priceProposed}) async {
+    await _send('POST', '/orders/$orderId/quote/approve',
+        body: {'quoteVersion': quoteVersion, 'priceProposed': priceProposed});
   }
 
-  Future<void> rejectQuote(String orderId) async {
-    await _send('POST', '/orders/$orderId/quote/reject');
+  Future<void> rejectQuote(String orderId,
+      {required int quoteVersion, required int priceProposed}) async {
+    await _send('POST', '/orders/$orderId/quote/reject',
+        body: {'quoteVersion': quoteVersion, 'priceProposed': priceProposed});
   }
 
   Future<void> completeJob(String orderId) async {

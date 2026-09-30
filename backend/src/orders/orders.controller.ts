@@ -14,7 +14,12 @@ import { Observable } from 'rxjs';
 import { OrderStatus, Role } from '@prisma/client';
 
 import { OrdersService } from './orders.service';
-import { CreateOrderDto, ProposeQuoteDto, RateOrderDto } from './dto/order.dto';
+import {
+  CreateOrderDto,
+  ProposeQuoteDto,
+  RateOrderDto,
+  RespondQuoteDto,
+} from './dto/order.dto';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
 import { JwtPayload } from '../auth/auth.service';
 import { OrderEventsService } from '../notifications/order-events.service';
@@ -117,14 +122,22 @@ export class OrdersController {
 
   @Post(':id/quote/approve')
   @Roles(Role.CUSTOMER)
-  approveQuote(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.orders.respondToQuote(user.sub, id, true);
+  approveQuote(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: RespondQuoteDto,
+  ) {
+    return this.orders.respondToQuote(user.sub, id, true, dto);
   }
 
   @Post(':id/quote/reject')
   @Roles(Role.CUSTOMER)
-  rejectQuote(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.orders.respondToQuote(user.sub, id, false);
+  rejectQuote(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: RespondQuoteDto,
+  ) {
+    return this.orders.respondToQuote(user.sub, id, false, dto);
   }
 
   @Post(':id/complete')
