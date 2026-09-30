@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OTP_MAX_ATTEMPTS, OTP_TTL_MS } from '../common/constants';
 import { readSecret, reviewLoginCodeFor } from '../config/environment';
 import { SmsService } from '../notifications/sms.service';
+import { serializable } from '../common/transaction';
 
 const OTP_REQUEST_COOLDOWN_MS = 60_000;
 
@@ -46,39 +47,37 @@ export class AuthService {
     role: Role,
   ): Promise<{ sent: true; devCode?: string }> {
     const reviewCode = reviewLoginCodeFor(phone);
-    const latest = await this.prisma.otpCode.findFirst({
-      where: { phone, role },
-      orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
-    });
-    if (
-      !reviewCode &&
-      latest &&
-      Date.now() - latest.createdAt.getTime() < OTP_REQUEST_COOLDOWN_MS
-    ) {
-      throw new HttpException(
-        'กรุณารอ 60 วินาทีก่อนขอรหัส OTP ใหม่',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
     const code =
       reviewCode ?? randomInt(0, 1_000_000).toString().padStart(6, '0');
-
-    await this.prisma.$transaction([
-      this.prisma.otpCode.updateMany({
+    const issued = await serializable(this.prisma, async (tx) => {
+      const latest = await tx.otpCode.findFirst({
+        where: { phone, role },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      });
+      if (
+        !reviewCode &&
+        latest &&
+        Date.now() - latest.createdAt.getTime() < OTP_REQUEST_COOLDOWN_MS
+      ) {
+        throw new HttpException(
+          'กรุณารอ 60 วินาทีก่อนขอรหัส OTP ใหม่',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      await tx.otpCode.updateMany({
         where: { phone, role, consumed: false },
         data: { consumed: true },
-      }),
-      this.prisma.otpCode.create({
+      });
+      return tx.otpCode.create({
         data: {
           phone,
           role,
           codeHash: this.hashCode(phone, role, code),
           expiresAt: new Date(Date.now() + OTP_TTL_MS),
         },
-      }),
-    ]);
+      });
+    });
 
     try {
       // เบอร์ทดสอบสำหรับทีมรีวิวใช้รหัสตายตัว ไม่ส่ง SMS
@@ -86,7 +85,7 @@ export class AuthService {
     } catch (error) {
       // รหัสที่ส่งไม่สำเร็จต้องใช้ต่อไม่ได้
       await this.prisma.otpCode.updateMany({
-        where: { phone, role, consumed: false },
+        where: { id: issued.id, consumed: false },
         data: { consumed: true },
       });
       throw error;
@@ -101,7 +100,11 @@ export class AuthService {
     phone: string,
     role: Role,
     code: string,
-  ): Promise<{ accessToken: string; hasProfile: boolean; userId: string | null }> {
+  ): Promise<{
+    accessToken: string;
+    hasProfile: boolean;
+    userId: string | null;
+  }> {
     const record = await this.prisma.otpCode.findFirst({
       where: { phone, role, consumed: false, expiresAt: { gt: new Date() } },
       orderBy: { createdAt: 'desc' },
@@ -121,17 +124,29 @@ export class AuthService {
       expected.length === actual.length && timingSafeEqual(expected, actual);
 
     if (!matched) {
-      await this.prisma.otpCode.update({
-        where: { id: record.id },
+      await this.prisma.otpCode.updateMany({
+        where: {
+          id: record.id,
+          consumed: false,
+          attempts: { lt: OTP_MAX_ATTEMPTS },
+        },
         data: { attempts: { increment: 1 } },
       });
       throw new UnauthorizedException('รหัส OTP ไม่ถูกต้อง');
     }
 
-    await this.prisma.otpCode.update({
-      where: { id: record.id },
+    const claimed = await this.prisma.otpCode.updateMany({
+      where: {
+        id: record.id,
+        consumed: false,
+        attempts: { lt: OTP_MAX_ATTEMPTS },
+        expiresAt: { gt: new Date() },
+      },
       data: { consumed: true },
     });
+    if (claimed.count !== 1) {
+      throw new UnauthorizedException('OTP หมดอายุหรือถูกใช้แล้ว');
+    }
 
     return this.issueToken(phone, role);
   }
@@ -139,7 +154,11 @@ export class AuthService {
   private async issueToken(
     phone: string,
     role: Role,
-  ): Promise<{ accessToken: string; hasProfile: boolean; userId: string | null }> {
+  ): Promise<{
+    accessToken: string;
+    hasProfile: boolean;
+    userId: string | null;
+  }> {
     if (role === Role.CUSTOMER) {
       // ลูกค้าไม่ต้องกรอกโปรไฟล์ก่อนใช้งาน สร้างให้อัตโนมัติตอน verify ผ่าน
       const customer = await this.prisma.customer.upsert({

@@ -46,11 +46,11 @@ The platform has three parts: a customer app, a mechanic app ("FixGo Fixer") and
   - The API refuses to start with missing or placeholder secrets.
   - A trial mode lets the team test before SMS is paid for.
 - **CI (GitHub Actions)** runs:
-  - backend typecheck and tests (112 unit tests)
-  - Flutter analyze and tests (shared package and customer app)
+  - backend typecheck, 156 unit tests, 24 PostgreSQL integration tests and 20 HTTP smoke scenarios
+  - Flutter analyze and tests (shared package, customer and provider apps)
   - a Docker boot test
   - a web image smoke test through the real Caddyfile
-  - Android APK/AAB builds and an iOS build
+  - Android APK/AAB builds; iOS build when iOS files or dependencies change
 
 ## Architecture
 
@@ -137,7 +137,7 @@ Quality checks: `npm run typecheck && npm test` (backend), `flutter analyze && f
 - ติดตั้งขึ้นเซิร์ฟเวอร์ได้ด้วยคำสั่งเดียว
 - CI ตรวจทุก push
 
-**สถานะ:** โค้ดพร้อมใช้งานและผ่านการทดสอบทั้งหมด กำลังเตรียมเซิร์ฟเวอร์เพื่อเปิดให้บริการจริง
+**สถานะ:** การทดสอบอัตโนมัติ 200 เคสและ HTTP smoke 20 สถานการณ์ผ่าน ยังต้องทดสอบมือถือจริงและบัญชีบริการ SMS/LINE/push/payment ก่อนเปิดให้บริการ ดูผลแก้ไขและขั้นตอนปล่อยรุ่นที่ [docs/AUDIT_FIXES.md](docs/AUDIT_FIXES.md)
 
 เอกสารเพิ่มเติม:
 - [เช็กลิสต์เปิดตัว](docs/LAUNCH_CHECKLIST.md)

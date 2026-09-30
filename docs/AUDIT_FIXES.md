@@ -19,6 +19,8 @@
 | เลขงานสุ่มชนกัน | ใช้ sequence ของ PostgreSQL เลขใหม่รูปแบบ FGวันที่-เลขลำดับ | จองพร้อมกัน 5 รายการ ต้องได้เลขไม่ซ้ำ |
 | คะแนนเฉลี่ยชนกัน | รวมคะแนนจริงภายใน serializable transaction | ให้คะแนน 1 และ 5 พร้อมกัน ต้องได้เฉลี่ย 3 จำนวน 2 |
 | คำขอแอปค้าง | request timeout 25 วินาที อัปโหลด 60 วินาที แจ้งผู้ใช้ตรวจสถานะก่อนทำรายการซ้ำ | Flutter MockClient จำลอง timeout/offline และตรวจ payload ราคา |
+| OTP เดียวใช้ล็อกอินพร้อมกันหลายครั้ง | เปลี่ยน consumed ด้วย conditional update; ตรวจ expiry และจำนวนครั้งที่ใส่ผิดอีกครั้งก่อนออก token | HTTP ส่งรหัสเดียวพร้อมกัน 5 คำขอ ต้องผ่านเพียง 1 คำขอ |
+| ขอ OTP พร้อมกันข้าม cooldown และส่ง SMS ซ้ำ | ตรวจ cooldown และออก OTP ใน serializable transaction; SMS ส่งหลัง commit และยกเลิกเฉพาะรหัสที่ส่งล้มเหลว | HTTP ขอ OTP พร้อมกัน 5 คำขอ ต้องออกเพียง 1 รหัส อีก 4 ได้ 429 |
 
 ## งานนัดตรวจรถ
 
@@ -50,6 +52,8 @@ export DATABASE_URL='postgresql://fixgo_test:password@127.0.0.1:5432/fixgo_audit
 export FIXGO_TEST_DATABASE_URL="$DATABASE_URL"
 npm run migrate:deploy
 npm run test:integration
+npm run build
+npm run test:http
 ```
 
 ชุด integration ตรวจชื่อฐานข้อมูลและ host ก่อนรัน รับเฉพาะ localhost/127.0.0.1 และฐานข้อมูล `fixgo_audit_test` และล้างข้อมูลเฉพาะฐานนี้ทุกเคส ห้ามตั้งให้ชี้ฐานข้อมูลใช้งานจริง
@@ -58,9 +62,11 @@ Flutter: `flutter pub get`, `flutter analyze`, `flutter test` ใน `packages/f
 
 ผลตรวจ local: Backend unit 156 เคส, PostgreSQL integration 24 เคส, Flutter shared 13 เคส, customer 2 เคส และ provider 5 เคส ผ่านทั้งหมด รวม 200 เคส; typecheck/build backend, analyze ทั้ง 3 Flutter projects และ release web build ทั้ง 2 แอปผ่าน ใช้ Flutter 3.47.5 / Dart 3.13.4 และ PostgreSQL 16
 
-Web build ใช้ JavaScript ตามเดิม ยังไม่รองรับ Wasm เพราะ dependency secure storage รุ่นปัจจุบัน การทดสอบนี้ไม่ครอบคลุมการ build IPA/APK หรือ behavior ของ native plugins บนเครื่องจริง
+ทดสอบ HTTP เพิ่ม 20 สถานการณ์ โดยเปิด API ที่ build แล้วจริงกับ PostgreSQL และไฟล์อัปโหลด local: OTP/cooldown พร้อมกัน, แยกสิทธิ์ owner/staff/customer/provider, อนุมัติช่าง, จอง/รับงาน/เดินทาง/ราคา/ปิดงาน, QR และสลิป, เงินสด, คะแนน, เบิก/คืนยอด, นัดอนาคต, รายงานตรวจรถพร้อมภาพหลักฐาน, ชำระหนี้ค่าคอม, ระงับช่าง, ลบบัญชี และ audit log. สคริปต์รับเฉพาะฐานข้อมูลทดสอบ local ชื่อเดียวกับ integration และล้างข้อมูลก่อนรัน ใช้ SMS/push แบบ console และพร้อมเพย์จำลอง ไม่มีการโอนเงินจริง
 
-GitHub CI เพิ่ม job `backend-integration` ใช้ PostgreSQL 16 แยกจากระบบจริง
+Web build ใช้ JavaScript ตามเดิม ยังไม่รองรับ Wasm เพราะ dependency secure storage รุ่นปัจจุบัน GitHub Actions ของ commit แรกใน PR build APK/AAB ของทั้งสองแอปสำเร็จ มี artifacts ให้ติดตั้งทดสอบ แต่ยังไม่ได้ยืนยัน release signing/API URL/Firebase ของระบบจริง และยังไม่ครอบคลุม native plugins บนมือถือจริงหรือ iOS build ของการเปลี่ยนแปลงนี้
+
+GitHub CI job `backend-integration` ใช้ PostgreSQL 16 แยกจากระบบจริง และรันทั้ง integration กับ HTTP smoke ต่อกัน
 
 ## การนำขึ้นใช้งาน
 
