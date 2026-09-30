@@ -151,7 +151,7 @@ export class UploadsService {
       throw new ForbiddenException('บัญชีนี้แนบสลิปไม่ได้');
     }
 
-    const key = `${DIRECTORIES[dto.scope]}/${userId}/${randomUUID()}.${EXTENSIONS[dto.contentType]}`;
+    const key = `${DIRECTORIES[dto.scope]}/${this.ownerSegment(userId)}/${randomUUID()}.${EXTENSIONS[dto.contentType]}`;
     if (this.mode === 'local') {
       const expires = Math.floor(Date.now() / 1000) + 5 * 60;
       const signature = this.sign(key, dto.byteLength, expires);
@@ -198,7 +198,7 @@ export class UploadsService {
     scope: UploadScope,
   ): void {
     if (!urls?.length || !this.publicBaseUrl) return;
-    const prefix = `${this.publicBaseUrl}/${DIRECTORIES[scope]}/${userId}/`;
+    const prefix = `${this.publicBaseUrl}/${DIRECTORIES[scope]}/${this.ownerSegment(userId)}/`;
     for (const url of urls) {
       const file = url.startsWith(prefix) ? url.slice(prefix.length) : null;
       if (!file || !UUID_FILE.test(file)) {
@@ -249,6 +249,19 @@ export class UploadsService {
         );
       }
     }
+  }
+
+  /**
+   * โฟลเดอร์เจ้าของไฟล์ใน URL รูป
+   * ช่างที่ยังไม่ส่งใบสมัครมี sub เป็น pending:<เบอร์> หรือ pending:line:<LINE userId>
+   * รูปหน้าตรงจากช่วงนี้ไปแสดงในการ์ดช่างและลิงก์ติดตามสาธารณะ จึงต้องแปลงเป็นค่าที่เดาย้อนกลับไม่ได้
+   */
+  private ownerSegment(userId: string): string {
+    if (!userId.startsWith('pending:')) return userId;
+    const digest = createHmac('sha256', this.signingKey)
+      .update(`owner\n${userId}`)
+      .digest('base64url');
+    return `p-${digest.slice(0, 32)}`;
   }
 
   // ---------- โหมด local ----------

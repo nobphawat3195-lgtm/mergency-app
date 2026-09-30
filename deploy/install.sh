@@ -165,6 +165,21 @@ else
 fi
 
 # ---------- 5. เปิดระบบ ----------
+# อัปเกรดเครื่องที่ใช้งานอยู่: สำรองข้อมูลและเก็บ image รุ่นเดิมไว้ย้อนกลับก่อนเปลี่ยนอะไร
+if "${COMPOSE[@]}" ps --status running --services 2>/dev/null | grep -qx db; then
+  say "สำรองข้อมูลก่อนอัปเกรด"
+  bash "$ROOT/deploy/backup.sh" </dev/null || fail "สำรองข้อมูลไม่สำเร็จ หยุดอัปเกรด ระบบเดิมยังทำงานอยู่"
+  stamp=$(date -u +%Y%m%d-%H%M%S)
+  for svc in api caddy; do
+    image=$("${COMPOSE[@]}" images -q "$svc" 2>/dev/null | head -1)
+    [ -n "$image" ] && docker tag "$image" "fixgo-rollback/$svc:$stamp"
+    # เก็บรุ่นเดิมไว้ 2 รุ่นล่าสุด ไม่ให้ดิสก์เต็ม
+    docker images "fixgo-rollback/$svc" --format '{{.Tag}}' | sort -r | tail -n +3 |
+      while read -r old; do docker rmi "fixgo-rollback/$svc:$old" >/dev/null 2>&1 || true; done
+  done
+  echo "ย้อนกลับรุ่นเดิมได้ด้วย image fixgo-rollback/*:$stamp ดู docs/DEPLOY.md หัวข้ออัปเดตเวอร์ชัน"
+fi
+
 say "build และเปิดระบบ (ครั้งแรกประมาณ 5-15 นาที)"
 "${COMPOSE[@]}" up -d --build
 

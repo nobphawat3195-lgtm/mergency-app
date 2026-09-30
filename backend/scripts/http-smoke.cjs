@@ -504,6 +504,41 @@ async function main() {
       0,
     );
   });
+  await check('Mechanic photos uploaded before registration do not expose the login phone', async () => {
+    const phone = '0800000009';
+    const applicant = await login(phone, 'PROVIDER');
+    const photoUrl = await uploadImage(applicant, 'PROVIDER_TOOL');
+    const toolUrl = await uploadImage(applicant, 'PROVIDER_TOOL');
+    assert.ok(!photoUrl.includes(phone) && !toolUrl.includes(phone));
+    const registered = (
+      await request(
+        'POST',
+        '/providers/register',
+        applicant,
+        {
+          realName: 'Photo privacy',
+          nickname: 'Photo',
+          experienceYears: 3,
+          baseLat: 13.7,
+          baseLng: 100.5,
+          openMinute: 0,
+          closeMinute: 1439,
+          categoryIds: [category.id],
+          vehicleTypeIds: [vehicle.id],
+          toolPhotoUrls: [toolUrl],
+          photoUrl,
+          vehiclePlate: 'TEST 1',
+        },
+        201,
+      )
+    ).body;
+    const stored = await prisma.provider.findUniqueOrThrow({
+      where: { id: registered.provider.id },
+      include: { toolPhotos: true },
+    });
+    assert.ok(!JSON.stringify(stored.photoUrl).includes(phone));
+    assert.ok(stored.toolPhotos.every((tool) => !tool.url.includes(phone)));
+  });
   await check('Account deletion removes profile access and admin actions leave an audit trail', async () => {
     await request('DELETE', '/account', mechanic, undefined, 200);
     await request('GET', '/providers/me', mechanic, undefined, 401);

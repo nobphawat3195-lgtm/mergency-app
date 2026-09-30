@@ -33,13 +33,16 @@ describe('UploadsService.assertOwnedUploads', () => {
         'ORDER',
       ),
     ).not.toThrow();
+  });
+
+  it('does not accept a raw pending:<phone> folder', () => {
     expect(() =>
       service.assertOwnedUploads(
         [`https://cdn.fixgo.test/provider-tools/pending:0812345678/${file}`],
         'pending:0812345678',
         'PROVIDER_TOOL',
       ),
-    ).not.toThrow();
+    ).toThrow(BadRequestException);
   });
 
   it.each([
@@ -56,6 +59,55 @@ describe('UploadsService.assertOwnedUploads', () => {
   ])('rejects %s', (_label, url) => {
     expect(() => service.assertOwnedUploads([url], 'cus_1', 'ORDER')).toThrow(
       BadRequestException,
+    );
+  });
+
+  // รูปหน้าตรงของช่างที่อัปโหลดก่อนส่งใบสมัครไปแสดงในลิงก์ติดตามสาธารณะ
+  it.each([
+    ['phone login', 'pending:0812345678', '0812345678'],
+    ['LINE login', 'pending:line:U4af4980629', 'U4af4980629'],
+  ])(
+    'keeps the %s identity out of pre-registration photo URLs',
+    async (_label, sub, secret) => {
+      const presign = (owner: string) =>
+        service.createPresignedUpload(owner, 'PROVIDER', {
+          fileName: 'face.jpg',
+          contentType: 'image/jpeg',
+          byteLength: 1024,
+          scope: 'PROVIDER_TOOL',
+        });
+      const first = await presign(sub);
+      const again = await presign(sub);
+      const other = await presign('pending:0899999999');
+
+      expect(first.publicUrl).not.toContain(secret);
+      expect(decodeURIComponent(first.uploadUrl)).not.toContain(secret);
+      const folder = (url: string) => url.split('/').slice(-2, -1)[0];
+      expect(folder(first.publicUrl)).toBe(folder(again.publicUrl));
+      expect(folder(first.publicUrl)).not.toBe(folder(other.publicUrl));
+
+      expect(() =>
+        service.assertOwnedUploads([first.publicUrl], sub, 'PROVIDER_TOOL'),
+      ).not.toThrow();
+      expect(() =>
+        service.assertOwnedUploads(
+          [first.publicUrl],
+          'pending:0899999999',
+          'PROVIDER_TOOL',
+        ),
+      ).toThrow(BadRequestException);
+    },
+  );
+
+  it('keeps registered account folders unchanged', async () => {
+    const upload = await service.createPresignedUpload('cus_1', 'CUSTOMER', {
+      fileName: 'car.jpg',
+      contentType: 'image/jpeg',
+      byteLength: 1024,
+      scope: 'ORDER',
+    });
+    expect(upload.publicUrl).toMatch(
+      /^https:\/\/cdn\.fixgo\.test\/orders\/cus_1\//,
     );
   });
 
