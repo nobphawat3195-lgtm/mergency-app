@@ -28,7 +28,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   String? _photoUrl;
   bool _uploadingPhoto = false;
+  // กดส่งโดยยังไม่มีรูปหน้าตรง: ไฮไลต์วงกลมรูปโปรไฟล์และเลื่อนขึ้นไปให้เห็น
+  bool _photoMissing = false;
+  final _photoPickerKey = GlobalKey();
 
+  // ค่าเริ่มต้นรับงาน 24 ชั่วโมง (งานฉุกเฉิน) เลือกช่วงอื่นได้ด้วยปุ่มเดียว
+  _HoursPreset _hoursPreset = _HoursPreset.allDay;
   TimeOfDay _openTime = const TimeOfDay(hour: 8, minute: 0);
   TimeOfDay _closeTime = const TimeOfDay(hour: 20, minute: 0);
 
@@ -37,6 +42,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // ไปเงียบๆ งานจะถูกส่งไปหาช่างคนนี้ทั้งที่อยู่ไกลจริง
   double? _baseLat;
   double? _baseLng;
+  String? _pinAddress;
+  double? _pinAccuracy;
   bool _locatingPin = false;
   String? _pinError;
 
@@ -74,6 +81,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   int _toMinutes(TimeOfDay time) => time.hour * 60 + time.minute;
 
+  int get _openMinute => switch (_hoursPreset) {
+        _HoursPreset.allDay => 0,
+        _HoursPreset.day => 8 * 60,
+        _HoursPreset.night => 18 * 60,
+        _HoursPreset.custom => _toMinutes(_openTime),
+      };
+
+  // 23:59 = นาทีสุดท้ายของวัน ระบบส่งงานนับรวมนาทีปิดด้วย จึงครบ 24 ชม.
+  int get _closeMinute => switch (_hoursPreset) {
+        _HoursPreset.allDay => 23 * 60 + 59,
+        _HoursPreset.day => 20 * 60,
+        _HoursPreset.night => 6 * 60,
+        _HoursPreset.custom => _toMinutes(_closeTime),
+      };
+
   String _contentTypeFor(XFile file) {
     final mimeType = file.mimeType;
     if (mimeType == 'image/png' ||
@@ -103,7 +125,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
             contentType: _contentTypeFor(file),
             scope: 'PROVIDER_TOOL',
           );
-      if (mounted) setState(() => _photoUrl = url);
+      if (mounted) {
+        setState(() {
+          _photoUrl = url;
+          _photoMissing = false;
+        });
+      }
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
@@ -158,6 +185,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() {
         _baseLat = result.latitude;
         _baseLng = result.longitude;
+        _pinAddress = result.address;
+        _pinAccuracy = result.accuracyMeters;
       });
     } on LocationException catch (error) {
       if (!mounted) return;
@@ -171,6 +200,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final picked = await showTimePicker(
       context: context,
       initialTime: isOpen ? _openTime : _closeTime,
+      // พิมพ์ตัวเลขตรงๆ แบบ 24 ชม. ง่ายกว่าหมุนหน้าปัดบนมือถือ
+      initialEntryMode: TimePickerEntryMode.input,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
     );
     if (picked == null) return;
     setState(() {
@@ -186,7 +221,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     if (_photoUrl == null) {
-      setState(() => _error = 'กรุณาใส่รูปโปรไฟล์หน้าตรง');
+      setState(() {
+        _photoMissing = true;
+        _error =
+            'กรุณาใส่รูปหน้าตรงที่วงกลมด้านบนสุด (รูปเครื่องมือใช้แทนไม่ได้)';
+      });
+      final pickerContext = _photoPickerKey.currentContext;
+      if (pickerContext != null) {
+        Scrollable.ensureVisible(
+          pickerContext,
+          duration: const Duration(milliseconds: 300),
+        );
+      }
       return;
     }
     if (_categoryIds.isEmpty) {
@@ -195,10 +241,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
     if (_vehicleTypeIds.isEmpty) {
       setState(() => _error = 'กรุณาเลือกประเภทรถที่รับอย่างน้อย 1 รายการ');
-      return;
-    }
-    if (_toolPhotoUrls.isEmpty) {
-      setState(() => _error = 'กรุณาแนบรูปเครื่องมือช่างเพื่อยืนยันตัวตน');
       return;
     }
     final baseLat = _baseLat;
@@ -225,8 +267,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           'facebookPage': _facebookController.text.trim(),
         'baseLat': baseLat,
         'baseLng': baseLng,
-        'openMinute': _toMinutes(_openTime),
-        'closeMinute': _toMinutes(_closeTime),
+        'openMinute': _openMinute,
+        'closeMinute': _closeMinute,
         'categoryIds': _categoryIds.toList(),
         'vehicleTypeIds': _vehicleTypeIds.toList(),
         'toolPhotoUrls': _toolPhotoUrls,
@@ -265,8 +307,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
             const SizedBox(height: FixGoSpacing.lg),
             _ProfilePhotoPicker(
+              key: _photoPickerKey,
               photoUrl: _photoUrl,
               uploading: _uploadingPhoto,
+              missing: _photoMissing,
               onPick: _pickProfilePhoto,
             ),
             const SizedBox(height: FixGoSpacing.lg),
@@ -356,51 +400,51 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
             const SizedBox(height: FixGoSpacing.lg),
             const _SectionTitle('ตำแหน่งร้าน / พื้นที่รับงาน'),
-            Card(
-              child: ListTile(
-                leading: Icon(
-                  Icons.location_on_outlined,
-                  color: _pinError != null ? FixGoColors.error : null,
-                ),
-                title: Text(
-                  _baseLat != null && _baseLng != null
-                      ? '${_baseLat!.toStringAsFixed(4)}, ${_baseLng!.toStringAsFixed(4)}'
-                      : (_pinError ?? 'ยังไม่ได้ปักหมุด'),
-                ),
-                subtitle: const Text('ใช้คำนวณว่างานอยู่ใกล้คุณแค่ไหน'),
-                trailing: TextButton(
-                  onPressed: _locatingPin ? null : _pinCurrentLocation,
-                  child: _locatingPin
-                      ? const SizedBox(
-                          height: 16,
-                          width: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('ปักหมุด'),
-                ),
-              ),
+            _PinCard(
+              lat: _baseLat,
+              lng: _baseLng,
+              address: _pinAddress,
+              accuracyMeters: _pinAccuracy,
+              error: _pinError,
+              locating: _locatingPin,
+              onPin: _pinCurrentLocation,
             ),
             const SizedBox(height: FixGoSpacing.lg),
-            const _SectionTitle('วันและเวลาเปิด-ปิด'),
-            Row(
+            const _SectionTitle('เวลารับงาน'),
+            Wrap(
+              spacing: FixGoSpacing.sm,
+              runSpacing: FixGoSpacing.sm,
               children: [
-                Expanded(
-                  child: _TimeField(
-                    label: 'เปิด',
-                    time: _openTime,
-                    onTap: () => _pickTime(isOpen: true),
+                for (final preset in _HoursPreset.values)
+                  ChoiceChip(
+                    label: Text(preset.label),
+                    selected: _hoursPreset == preset,
+                    onSelected: (_) => setState(() => _hoursPreset = preset),
                   ),
-                ),
-                const SizedBox(width: FixGoSpacing.sm),
-                Expanded(
-                  child: _TimeField(
-                    label: 'ปิด',
-                    time: _closeTime,
-                    onTap: () => _pickTime(isOpen: false),
-                  ),
-                ),
               ],
             ),
+            if (_hoursPreset == _HoursPreset.custom) ...[
+              const SizedBox(height: FixGoSpacing.sm),
+              Row(
+                children: [
+                  Expanded(
+                    child: _TimeField(
+                      label: 'เปิด',
+                      time: _openTime,
+                      onTap: () => _pickTime(isOpen: true),
+                    ),
+                  ),
+                  const SizedBox(width: FixGoSpacing.sm),
+                  Expanded(
+                    child: _TimeField(
+                      label: 'ปิด',
+                      time: _closeTime,
+                      onTap: () => _pickTime(isOpen: false),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: FixGoSpacing.lg),
             const _SectionTitle('งานบริการที่รับทำ (เลือกได้หลายข้อ)'),
             FutureBuilder<List<ServiceCategory>>(
@@ -454,7 +498,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               },
             ),
             const SizedBox(height: FixGoSpacing.lg),
-            const _SectionTitle('รูปเครื่องมือช่าง'),
+            const _SectionTitle('รูปเครื่องมือช่าง (ไม่บังคับ)'),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(FixGoSpacing.md),
@@ -483,7 +527,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ],
                     ),
-                    const Text('ใช้ยืนยันว่าเป็นช่างจริงและมีอุปกรณ์พร้อม'),
+                    const Text(
+                      'ถ่ายเฉพาะเครื่องมือหรือรถที่ใช้ออกงาน เช่น แม่แรง '
+                      'สายพ่วงแบต ชุดประแจ ช่วยให้ทีมงานอนุมัติได้เร็วขึ้น',
+                    ),
+                    const SizedBox(height: FixGoSpacing.xs),
+                    Text(
+                      'รูปหน้าของคุณให้ใส่ที่วงกลมด้านบนสุด',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                     if (_toolPhotoUrls.isNotEmpty) ...[
                       const SizedBox(height: FixGoSpacing.sm),
                       Wrap(
@@ -600,13 +652,16 @@ class _TimeField extends StatelessWidget {
 /// รูปโปรไฟล์หน้าตรง: ทีมงานใช้ตรวจตัวตน และลูกค้าเห็นในการ์ดช่างตอนช่างรับงาน
 class _ProfilePhotoPicker extends StatelessWidget {
   const _ProfilePhotoPicker({
+    super.key,
     required this.photoUrl,
     required this.uploading,
+    required this.missing,
     required this.onPick,
   });
 
   final String? photoUrl;
   final bool uploading;
+  final bool missing;
   final VoidCallback onPick;
 
   @override
@@ -617,14 +672,23 @@ class _ProfilePhotoPicker extends StatelessWidget {
           onTap: uploading ? null : onPick,
           child: Stack(
             children: [
-              CircleAvatar(
-                radius: 52,
-                backgroundColor: FixGoColors.accentSoft,
-                backgroundImage:
-                    photoUrl == null ? null : NetworkImage(photoUrl!),
-                child: photoUrl == null
-                    ? Image.asset(technicianIconAsset, height: 64)
-                    : null,
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: missing ? FixGoColors.error : Colors.transparent,
+                    width: 3,
+                  ),
+                ),
+                child: CircleAvatar(
+                  radius: 52,
+                  backgroundColor: FixGoColors.accentSoft,
+                  backgroundImage:
+                      photoUrl == null ? null : NetworkImage(photoUrl!),
+                  child: photoUrl == null
+                      ? Image.asset(technicianIconAsset, height: 64)
+                      : null,
+                ),
               ),
               Positioned(
                 right: 0,
@@ -654,7 +718,10 @@ class _ProfilePhotoPicker extends StatelessWidget {
         const SizedBox(height: FixGoSpacing.sm),
         Text(
           photoUrl == null ? 'แตะเพื่อใส่รูปหน้าตรง (บังคับ)' : 'เปลี่ยนรูป',
-          style: const TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: missing ? FixGoColors.error : null,
+          ),
         ),
         Text(
           'เห็นหน้าชัด ไม่ใส่แว่นดำ ลูกค้าจะเห็นรูปนี้ตอนคุณรับงาน',
@@ -777,6 +844,122 @@ class _ChoiceTile extends StatelessWidget {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _HoursPreset {
+  allDay('24 ชั่วโมง'),
+  day('กลางวัน 08:00-20:00'),
+  night('กลางคืน 18:00-06:00'),
+  custom('กำหนดเอง');
+
+  const _HoursPreset(this.label);
+
+  final String label;
+}
+
+/// ปักหมุดจาก GPS แล้วแสดงที่อยู่ ความแม่นยำ และลิงก์เปิดแผนที่ ให้ช่างเช็กเองได้ว่าตรงไหม
+class _PinCard extends StatelessWidget {
+  const _PinCard({
+    required this.lat,
+    required this.lng,
+    required this.address,
+    required this.accuracyMeters,
+    required this.error,
+    required this.locating,
+    required this.onPin,
+  });
+
+  final double? lat;
+  final double? lng;
+  final String? address;
+  final double? accuracyMeters;
+  final String? error;
+  final bool locating;
+  final VoidCallback onPin;
+
+  // เกินรัศมีนี้ GPS ยังไม่นิ่ง (มักเป็นตำแหน่งจากเสาสัญญาณ/Wi-Fi) ควรกดใหม่
+  static const _roughAccuracyMeters = 200.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final pinned = lat != null && lng != null;
+    final accuracy = accuracyMeters;
+    final rough = accuracy != null && accuracy > _roughAccuracyMeters;
+    final small = Theme.of(context).textTheme.bodySmall;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(FixGoSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  pinned ? Icons.location_on : Icons.location_off_outlined,
+                  color: error != null
+                      ? FixGoColors.error
+                      : pinned
+                          ? FixGoColors.accent
+                          : null,
+                ),
+                const SizedBox(width: FixGoSpacing.sm),
+                Expanded(
+                  child: Text(
+                    pinned
+                        ? (address ?? 'ปักหมุดแล้ว')
+                        : (error ?? 'ยังไม่ได้ปักหมุด'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: FixGoSpacing.xs),
+            if (pinned && accuracy != null)
+              Text(
+                rough
+                    ? 'คลาดเคลื่อนได้ประมาณ ${accuracy.round()} เมตร ออกไปที่โล่งแล้วกดปักใหม่จะแม่นขึ้น'
+                    : 'แม่นยำประมาณ ${accuracy.round()} เมตร',
+                style: small?.copyWith(
+                  color: rough ? FixGoColors.error : null,
+                ),
+              )
+            else
+              Text(
+                'ยืนอยู่ที่ร้านหรือจุดที่ออกรับงานบ่อย แล้วกดปุ่มด้านล่าง ใช้คำนวณว่างานอยู่ใกล้คุณแค่ไหน',
+                style: small,
+              ),
+            const SizedBox(height: FixGoSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: locating ? null : onPin,
+                    icon: locating
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.my_location),
+                    label: Text(pinned ? 'ปักใหม่' : 'ใช้ตำแหน่งปัจจุบัน'),
+                  ),
+                ),
+                if (pinned) ...[
+                  const SizedBox(width: FixGoSpacing.sm),
+                  OutlinedButton.icon(
+                    onPressed: () => LocationService.openInMaps(lat!, lng!),
+                    icon: const Icon(Icons.map_outlined),
+                    label: const Text('ดูบนแผนที่'),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ),
       ),
     );
