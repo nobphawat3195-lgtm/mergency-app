@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 
 class LocationException implements Exception {
   const LocationException(this.message);
@@ -20,6 +21,7 @@ class LocationResult {
     required this.latitude,
     required this.longitude,
     this.address,
+    this.accuracyMeters,
   });
 
   final double latitude;
@@ -28,10 +30,23 @@ class LocationResult {
   /// ที่อยู่แบบอ่านง่าย ได้จาก reverse geocoding — เป็น null ได้ถ้าแปลงไม่สำเร็จ
   /// (เช่น ไม่มีเน็ต) ไม่ควรทำให้ทั้ง flow ล้มเหลวเพราะจุดนี้อย่างเดียว
   final String? address;
+
+  /// รัศมีความคลาดเคลื่อนที่เครื่องรายงาน (เมตร) null = ไม่ทราบ
+  final double? accuracyMeters;
 }
 
 /// ขอตำแหน่ง GPS ปัจจุบันของเครื่อง ใช้ร่วมกันทั้งแอปลูกค้าและแอปช่าง
 class LocationService {
+  /// เปิดพิกัดใน Google Maps ให้ผู้ใช้เช็กเองว่าหมุดตรงจุดไหม
+  static Future<bool> openInMaps(double latitude, double longitude) =>
+      launchUrl(
+        Uri.https('www.google.com', '/maps/search/', {
+          'api': '1',
+          'query': '$latitude,$longitude',
+        }),
+        mode: LaunchMode.externalApplication,
+      );
+
   /// ขอสิทธิ์ + อ่านพิกัดปัจจุบัน แล้วพยายามแปลงเป็นที่อยู่ (ไม่บังคับสำเร็จ)
   ///
   /// โยน [LocationException] ที่มีข้อความภาษาไทยพร้อมอธิบายให้ผู้ใช้เห็นตรงๆ
@@ -86,6 +101,7 @@ class LocationService {
       latitude: position.latitude,
       longitude: position.longitude,
       address: address,
+      accuracyMeters: position.accuracy > 0 ? position.accuracy : null,
     );
   }
 

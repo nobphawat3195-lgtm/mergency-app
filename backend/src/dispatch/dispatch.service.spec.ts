@@ -17,4 +17,10 @@ describe('dispatch time helpers', () => {
     expect(isWithinWorkingHours(20 * 60, 6 * 60, 3 * 60)).toBe(true);
     expect(isWithinWorkingHours(20 * 60, 6 * 60, 12 * 60)).toBe(false);
   });
+
+  it('treats the 24-hour preset (00:00-23:59) as always open', () => {
+    for (const minute of [0, 6 * 60, 12 * 60, 23 * 60 + 59]) {
+      expect(isWithinWorkingHours(0, 23 * 60 + 59, minute)).toBe(true);
+    }
+  });
 });

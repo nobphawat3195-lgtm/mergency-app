@@ -69,9 +69,8 @@ export class RegisterProviderDto {
   @IsString({ each: true })
   vehicleTypeIds!: string[];
 
-  /** รูปเครื่องมือช่าง ใช้ยืนยันว่าเป็นช่างจริง */
+  /** รูปเครื่องมือช่าง ไม่บังคับ ช่วยให้ทีมงานอนุมัติได้เร็วขึ้น */
   @IsArray()
-  @ArrayNotEmpty()
   @ArrayMaxSize(6)
   @IsString({ each: true })
   toolPhotoUrls!: string[];
