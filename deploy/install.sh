@@ -253,7 +253,7 @@ if [ "${SMS_PROVIDER:-}" = "none" ]; then
   cat <<EOF
 
   โหมดทดลอง (ยังไม่ส่ง SMS): เข้าสู่ระบบด้วยเบอร์โทรได้เฉพาะเบอร์ $REVIEW_LOGIN_PHONES (LINE ใช้ได้ทุกคน)
-  รหัส OTP ของทุกเบอร์นี้คือ $REVIEW_LOGIN_CODE (ดูอีกครั้งได้ใน deploy/.env.production)
+  ดูรหัส OTP ของเบอร์เหล่านี้: sudo grep REVIEW_LOGIN_CODE deploy/.env.production (ไม่แสดงตรงนี้ กันหลุดตอนแคปหน้าจอ)
   เมื่อพร้อมเปิดให้ทุกคน: ใส่ค่า ThaiBulkSMS ใน deploy/.env.production เปลี่ยน SMS_PROVIDER=thaibulksms
   ลบ REVIEW_LOGIN_PHONES แล้วรัน sudo bash deploy/install.sh อีกครั้ง
 EOF
