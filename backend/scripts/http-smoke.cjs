@@ -230,6 +230,13 @@ async function main() {
     owner = (await request('POST', '/admin/login', undefined, { phone: '0800000004', password }, 201)).body.accessToken;
     staff = (await request('POST', '/admin/login', undefined, { phone: '0800000005', password }, 201)).body.accessToken;
   });
+  await check('Customer reads own account; other roles cannot', async () => {
+    const me = (await request('GET', '/account', customer, undefined, 200)).body;
+    assert.equal(me.phone, '0800000001');
+    assert.equal(me.viaLine, false);
+    await request('GET', '/account', mechanic, undefined, 403);
+    await request('GET', '/account', undefined, undefined, 401);
+  });
   await check('Concurrent reuse of one OTP permits only one login', async () => {
     const phone = '0800000006';
     const otp = (await request('POST', '/auth/otp/request', undefined, { phone, role: 'CUSTOMER' }, 201)).body;
