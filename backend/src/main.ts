@@ -17,6 +17,8 @@ async function bootstrap() {
     }),
   );
 
+  // ไม่บอกผู้ไม่หวังดีว่าหลังบ้านใช้ Express
+  app.getHttpAdapter().getInstance().disable('x-powered-by');
   app.setGlobalPrefix('api');
   // docker stop ส่ง SIGTERM: ปิด connection DB ให้เรียบร้อยก่อนออก
   app.enableShutdownHooks();
