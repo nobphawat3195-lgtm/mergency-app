@@ -17,11 +17,6 @@ class _ShellScreenState extends State<ShellScreen> {
   late final List<Widget> _pages = const [
     HomeScreen(),
     OrdersScreen(),
-    _ComingSoonTab(
-      icon: Icons.chat_bubble_outline,
-      title: 'ผู้ช่วย AI',
-      subtitle: 'ถาม-ตอบปัญหารถ เร็วๆ นี้',
-    ),
     _ProfileTab(),
   ];
 
@@ -48,44 +43,10 @@ class _ShellScreenState extends State<ShellScreen> {
               label: 'รายการ',
             ),
             NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline),
-              selectedIcon: Icon(Icons.chat_bubble),
-              label: 'แชท AI',
-            ),
-            NavigationDestination(
               icon: Icon(Icons.person_outline),
               selectedIcon: Icon(Icons.person),
               label: 'โปรไฟล์',
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ComingSoonTab extends StatelessWidget {
-  const _ComingSoonTab({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 64, color: FixGoColors.textSecondary),
-            const SizedBox(height: FixGoSpacing.md),
-            Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       ),
@@ -103,6 +64,8 @@ class _ProfileTab extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(FixGoSpacing.md),
         children: [
+          const _AccountHeader(),
+          const Divider(),
           AccountSettingsTiles(
             api: AppStateScope.of(context).api,
             onDeleted: AppStateScope.of(context).signOut,
@@ -115,6 +78,56 @@ class _ProfileTab extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// บอกว่าเข้าบัญชีไหนอยู่ (ชื่อหรือเบอร์ และเข้าด้วย LINE หรือเบอร์โทร)
+class _AccountHeader extends StatefulWidget {
+  const _AccountHeader();
+
+  @override
+  State<_AccountHeader> createState() => _AccountHeaderState();
+}
+
+class _AccountHeaderState extends State<_AccountHeader> {
+  Future<({String? name, String? phone, bool viaLine})>? _account;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _account ??= AppStateScope.of(context).api.getMyAccount();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<({String? name, String? phone, bool viaLine})>(
+      future: _account,
+      builder: (context, snapshot) {
+        final account = snapshot.data;
+        final String subtitle;
+        if (snapshot.hasError) {
+          subtitle = 'โหลดข้อมูลบัญชีไม่สำเร็จ';
+        } else if (account == null) {
+          subtitle = 'กำลังโหลด...';
+        } else {
+          subtitle = account.viaLine
+              ? 'เข้าสู่ระบบด้วย LINE'
+              : 'เข้าสู่ระบบด้วยเบอร์โทร';
+        }
+        return ListTile(
+          leading: const CircleAvatar(
+            backgroundColor: FixGoColors.accentSoft,
+            foregroundColor: FixGoColors.accent,
+            child: Icon(Icons.person),
+          ),
+          title: Text(
+            account?.name ?? account?.phone ?? 'บัญชีของฉัน',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text(subtitle),
+        );
+      },
     );
   }
 }

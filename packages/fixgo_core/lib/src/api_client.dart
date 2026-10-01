@@ -212,6 +212,16 @@ class FixGoApiClient {
     );
   }
 
+  /// ชื่อและเบอร์ของลูกค้าที่ล็อกอินอยู่ และเข้าด้วย LINE หรือไม่
+  Future<({String? name, String? phone, bool viaLine})> getMyAccount() async {
+    final result = await _send('GET', '/account') as Map<String, dynamic>;
+    return (
+      name: result['name'] as String?,
+      phone: result['phone'] as String?,
+      viaLine: result['viaLine'] as bool? ?? false,
+    );
+  }
+
   /// ลบบัญชีของผู้ที่ล็อกอินอยู่ (ลูกค้าหรือช่าง) กู้คืนไม่ได้
   Future<void> deleteAccount() async {
     await _send('DELETE', '/account');

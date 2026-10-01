@@ -44,6 +44,25 @@ export class AccountService {
     private readonly uploads: UploadsService,
   ) {}
 
+  async customerProfile(customerId: string): Promise<{
+    name: string | null;
+    phone: string | null;
+    viaLine: boolean;
+  }> {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { name: true, phone: true, lineUserId: true, deletedAt: true },
+    });
+    if (!customer || customer.deletedAt) {
+      throw new NotFoundException('ไม่พบบัญชีนี้');
+    }
+    return {
+      name: customer.name,
+      phone: customer.phone,
+      viaLine: customer.lineUserId !== null,
+    };
+  }
+
   async deleteAccount(userId: string, role: Role): Promise<{ deleted: true }> {
     if (role === Role.CUSTOMER) await this.deleteCustomer(userId);
     else if (role === Role.PROVIDER) await this.deleteProvider(userId);
