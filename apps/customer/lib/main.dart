@@ -92,6 +92,10 @@ class _FixGoCustomerAppState extends State<FixGoCustomerApp> {
         scaffoldMessengerKey: _messengerKey,
         debugShowCheckedModeBanner: false,
         theme: buildFixGoTheme(),
+        // ภาษาไทยทั้งแอป: ปฏิทิน ตัวเลือกเวลา และข้อความของระบบ
+        locale: fixGoLocale,
+        supportedLocales: fixGoSupportedLocales,
+        localizationsDelegates: fixGoLocalizationsDelegates,
         home: AnimatedBuilder(
           animation: _appState,
           builder: (context, _) {

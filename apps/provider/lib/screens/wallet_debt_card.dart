@@ -1,7 +1,6 @@
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 /// ค่าบริการแพลตฟอร์มที่ค้างจากงานเงินสด พร้อมปุ่มโอนชำระด้วยพร้อมเพย์
 /// ค้างเกินเพดานแล้วเปิดรับงานไม่ได้จนกว่าทีมงานยืนยันยอดโอนคืน
@@ -128,8 +127,13 @@ class _SettlementDialog extends StatefulWidget {
 }
 
 class _SettlementDialogState extends State<_SettlementDialog> {
-  late final Future<({int amount, String qrPayload, String? payeeName})> _qr =
-      widget.api.getSettlementQr();
+  late final Future<
+      ({
+        int amount,
+        String qrPayload,
+        String? payeeName,
+        String? promptPayId,
+      })> _qr = widget.api.getSettlementQr();
   bool _uploading = false;
   String? _error;
 
@@ -195,18 +199,10 @@ class _SettlementDialogState extends State<_SettlementDialog> {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                QrImageView(
-                  data: qr.qrPayload,
-                  size: 200,
-                  backgroundColor: Colors.white,
-                ),
-                const SizedBox(height: FixGoSpacing.sm),
-                Text(
-                  formatSatang(qr.amount),
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                  ),
+                PromptPayQrPanel(
+                  qrPayload: qr.qrPayload,
+                  amount: qr.amount,
+                  promptPayId: qr.promptPayId,
                 ),
                 if (qr.payeeName != null)
                   Text(

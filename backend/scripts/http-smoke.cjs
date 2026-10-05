@@ -359,6 +359,7 @@ async function main() {
   await check('Manual QR and submitted slip are visible only to allowed actors', async () => {
     const qr = (await request('POST', `/payments/orders/${secondOrder.id}/promptpay`, customer, undefined, 201)).body;
     assert.match(qr.qrPayload, /^000201/);
+    assert.equal(qr.promptPayId, '0800000099');
     await request('POST', `/payments/orders/${secondOrder.id}/slip`, stranger, { slipUrl: slip }, 400);
     const otherSlip = await uploadImage(stranger, 'PAYMENT_SLIP');
     await request('POST', `/payments/orders/${secondOrder.id}/slip`, stranger, { slipUrl: otherSlip }, 404);

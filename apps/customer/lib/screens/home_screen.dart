@@ -5,6 +5,7 @@ import '../app_state.dart';
 import '../symptoms.dart';
 import 'booking/booking_flow.dart';
 import 'inspection_detail_screen.dart';
+import 'location_choice.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -48,6 +49,16 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       if (mounted) setState(() => _locationLoading = false);
     }
+  }
+
+  /// ชิปตำแหน่งด้านบน: เลือก GPS หรือปักหมุดเอง (GPS ใช้ไม่ได้หรือเรียกให้คนอื่น)
+  Future<void> _chooseLocation() async {
+    final picked = await chooseCustomerLocation(context, current: _location);
+    if (picked == null || !mounted) return;
+    setState(() {
+      _location = picked;
+      _locationError = null;
+    });
   }
 
   void _startBooking({ServiceCategory? category}) {
@@ -165,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             location: _location,
                             loading: _locationLoading,
                             error: _locationError,
-                            onTap: _fetchLocation,
+                            onTap: _locationLoading ? null : _chooseLocation,
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(
@@ -338,11 +349,11 @@ class _HomeHeader extends StatelessWidget {
   final LocationResult? location;
   final bool loading;
   final String? error;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   String get _label {
     if (loading) return 'กำลังหาตำแหน่ง...';
-    if (error != null) return 'แตะเพื่อเปิดตำแหน่ง';
+    if (error != null) return 'ปักหมุดบนแผนที่เอง';
     if (location == null) return 'แตะเพื่อหาตำแหน่ง';
     return location!.address ??
         '${location!.latitude.toStringAsFixed(4)}, ${location!.longitude.toStringAsFixed(4)}';

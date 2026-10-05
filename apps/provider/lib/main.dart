@@ -44,6 +44,10 @@ class _FixGoProviderAppState extends State<FixGoProviderApp> {
         title: 'FixGo Fixer',
         debugShowCheckedModeBanner: false,
         theme: buildFixGoTheme(),
+        // ภาษาไทยทั้งแอป: ปฏิทิน ตัวเลือกเวลา และข้อความของระบบ
+        locale: fixGoLocale,
+        supportedLocales: fixGoSupportedLocales,
+        localizationsDelegates: fixGoLocalizationsDelegates,
         home: AnimatedBuilder(
           animation: _appState,
           builder: (context, _) {

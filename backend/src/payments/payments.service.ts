@@ -39,6 +39,8 @@ export interface PromptPayCharge {
   requiresSlip: boolean;
   /** ชื่อบัญชีปลายทางให้ลูกค้าเทียบกับหน้าจอแอปธนาคารก่อนกดโอน */
   payeeName: string | null;
+  /** เลขพร้อมเพย์ปลายทาง (โหมดโอนเข้าบัญชีบริษัท) ให้คัดลอกไปโอนเองได้ */
+  promptPayId: string | null;
 }
 
 @Injectable()
@@ -120,6 +122,10 @@ export class PaymentsService {
       payeeName:
         this.gateway instanceof ManualPromptPayGateway
           ? this.gateway.payeeName
+          : null,
+      promptPayId:
+        this.gateway instanceof ManualPromptPayGateway
+          ? this.gateway.promptPayId
           : null,
     };
   }
