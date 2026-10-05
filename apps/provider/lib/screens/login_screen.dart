@@ -20,7 +20,7 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
   bool _loading = false;
   String? _error;
 
-  /// ปุ่ม LINE แสดงเฉพาะบนเว็บ และเมื่อเซิร์ฟเวอร์ตั้งค่า LINE Login ของแอปช่างแล้ว
+  /// ปุ่ม LINE แสดงทั้งเว็บและแอปมือถือ เมื่อเซิร์ฟเวอร์ตั้งค่า LINE Login ของแอปช่างแล้ว
   Future<bool>? _lineEnabled;
 
   @override
@@ -28,20 +28,18 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
     super.didChangeDependencies();
     if (_lineEnabled != null) return;
     final appState = ProviderAppScope.of(context);
-    _lineEnabled = kIsWeb
-        ? appState.api
-            .isLineLoginEnabled(role: ApiRole.provider)
-            .catchError((_) => false)
-        : Future.value(false);
+    _lineEnabled = appState.api
+        .isLineLoginEnabled(role: ApiRole.provider)
+        .catchError((_) => false);
     if (appState.lineLoginFailed) {
       appState.lineLoginFailed = false;
       // มักเกิดบน iPhone เมื่อเปิดลิงก์ในเบราว์เซอร์ของแอป LINE แล้วเด้งไปอีกเบราว์เซอร์
-      _error = 'เข้าสู่ระบบด้วย LINE ไม่สำเร็จ ลองใหม่อีกครั้ง '
-          'หรือเปิดลิงก์นี้ใน Safari/Chrome';
+      _error = lineLoginFailedMessage;
     }
   }
 
   Future<void> _loginWithLine() async {
+    if (!kIsWeb) return _loginWithLineNative();
     final uri =
         ProviderAppScope.of(context).api.lineLoginStartUriFor(ApiRole.provider);
     setState(() => _loading = true);
@@ -50,6 +48,37 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
         _loading = false;
         _error = 'เปิดหน้า LINE ไม่สำเร็จ';
       });
+    }
+  }
+
+  /// iOS/Android: เปิดหน้า LINE ในหน้าต่างของระบบ แล้วรับตั๋วกลับทาง fixgofixer://auth/line
+  Future<void> _loginWithLineNative() async {
+    final appState = ProviderAppScope.of(context);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final result = await runNativeLineLogin(
+      startUri: appState.api.nativeLineLoginStartUriFor(ApiRole.provider),
+      callbackScheme: 'fixgofixer',
+    );
+    if (!mounted) return;
+    try {
+      switch (result) {
+        case NativeLineTicket(:final ticket):
+          final session =
+              await appState.api.exchangeLineTicketSession(ticket);
+          appState.signIn(session.accessToken, hasProfile: session.hasProfile);
+          return;
+        case NativeLineCancelled():
+          break;
+        case NativeLineFailed():
+          setState(() => _error = lineLoginFailedMessage);
+      }
+    } on ApiException catch (_) {
+      if (mounted) setState(() => _error = lineLoginFailedMessage);
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 

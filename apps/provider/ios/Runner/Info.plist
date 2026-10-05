@@ -55,6 +55,18 @@
 			</array>
 		</dict>
 	</dict>
+	<!-- LINE Login ในแอป: ASWebAuthenticationSession พากลับ fixgofixer://auth/line (flutter_web_auth_2) -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.fixgo.fixgo_provider.line</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fixgofixer</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

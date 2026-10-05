@@ -1,7 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
-import { LineLoginService } from './line-login.service';
+import { LineLoginService, parseLineClient } from './line-login.service';
 
 const NOW = Date.parse('2026-09-28T10:00:00Z');
 
@@ -283,6 +283,82 @@ describe('LineLoginService', () => {
       ),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  describe('native apps (client=native)', () => {
+    it('returns the customer ticket to the fixgo:// scheme', async () => {
+      const { url } = service.start('customer', NOW, 'native');
+      lineResponds();
+      const redirect = await service.callback(
+        { code: 'c', state: stateFrom(url) },
+        undefined,
+        NOW,
+      );
+      expect(redirect.startsWith('fixgo://auth/line?line_ticket=')).toBe(true);
+      const ticket = new URL(redirect).searchParams.get('line_ticket')!;
+      const session = await service.exchange(ticket, NOW + 1_000);
+      expect(jwt.verify(session.accessToken)).toMatchObject({
+        role: 'CUSTOMER',
+      });
+    });
+
+    it('returns the mechanic ticket to the fixgofixer:// scheme', async () => {
+      const { url } = service.start('provider', NOW, 'native');
+      lineResponds('Uprovider');
+      const redirect = await service.callback(
+        { code: 'c', state: stateFrom(url) },
+        undefined,
+        NOW,
+      );
+      expect(
+        redirect.startsWith('fixgofixer://auth/line?line_ticket='),
+      ).toBe(true);
+    });
+
+    it('sends native failures back to the right app scheme', () => {
+      const customer = service.start('customer', NOW, 'native');
+      const provider = service.start('provider', NOW, 'native');
+      const target = service.failureTarget(stateFrom(provider.url), undefined);
+      expect(target).toEqual({ app: 'provider', client: 'native' });
+      expect(service.failureRedirect(target.app, target.client)).toBe(
+        'fixgofixer://auth/line?line_error=1',
+      );
+      const c = service.failureTarget(undefined, customer.cookie);
+      expect(service.failureRedirect(c.app, c.client)).toBe(
+        'fixgo://auth/line?line_error=1',
+      );
+    });
+
+    it('treats an unknown client as web', async () => {
+      expect(parseLineClient('https://evil.example')).toBe('web');
+      expect(parseLineClient(undefined)).toBe('web');
+      const { url } = service.start(
+        'customer',
+        NOW,
+        parseLineClient('evil://steal'),
+      );
+      lineResponds();
+      const redirect = await service.callback(
+        { code: 'c', state: stateFrom(url) },
+        undefined,
+        NOW,
+      );
+      expect(redirect.startsWith('https://fixgo.example/?line_ticket=')).toBe(
+        true,
+      );
+    });
+
+    it('cannot switch a web login to a native scheme by editing the state', async () => {
+      const { url } = service.start('customer', NOW, 'web');
+      const switched = stateFrom(url).replace('.web.', '.native.');
+      await expect(
+        service.callback({ code: 'c', state: switched }, undefined, NOW),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(service.failureTarget(switched, undefined)).toEqual({
+        app: 'customer',
+        client: 'web',
+      });
+    });
   });
 
   it('accepts each state only once', async () => {

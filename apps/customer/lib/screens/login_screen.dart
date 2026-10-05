@@ -20,7 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   String? _error;
 
-  /// ปุ่ม LINE แสดงเฉพาะบนเว็บ และเมื่อเซิร์ฟเวอร์ตั้งค่า LINE Login แล้ว
+  /// ปุ่ม LINE แสดงทั้งเว็บและแอปมือถือ เมื่อเซิร์ฟเวอร์ตั้งค่า LINE Login แล้ว
   Future<bool>? _lineEnabled;
 
   @override
@@ -28,18 +28,16 @@ class _LoginScreenState extends State<LoginScreen> {
     super.didChangeDependencies();
     if (_lineEnabled != null) return;
     final appState = AppStateScope.of(context);
-    _lineEnabled = kIsWeb
-        ? appState.api.isLineLoginEnabled().catchError((_) => false)
-        : Future.value(false);
+    _lineEnabled = appState.api.isLineLoginEnabled().catchError((_) => false);
     if (appState.lineLoginFailed) {
       appState.lineLoginFailed = false;
       // มักเกิดบน iPhone เมื่อเปิดลิงก์ในเบราว์เซอร์ของแอป LINE แล้วเด้งไปอีกเบราว์เซอร์
-      _error = 'เข้าสู่ระบบด้วย LINE ไม่สำเร็จ ลองใหม่อีกครั้ง '
-          'หรือเปิดลิงก์นี้ใน Safari/Chrome';
+      _error = lineLoginFailedMessage;
     }
   }
 
   Future<void> _loginWithLine() async {
+    if (!kIsWeb) return _loginWithLineNative();
     final uri = AppStateScope.of(context).api.lineLoginStartUri;
     setState(() => _loading = true);
     if (!await openLineLoginPage(uri) && mounted) {
@@ -47,6 +45,35 @@ class _LoginScreenState extends State<LoginScreen> {
         _loading = false;
         _error = 'เปิดหน้า LINE ไม่สำเร็จ';
       });
+    }
+  }
+
+  /// iOS/Android: เปิดหน้า LINE ในหน้าต่างของระบบ แล้วรับตั๋วกลับทาง fixgo://auth/line
+  Future<void> _loginWithLineNative() async {
+    final appState = AppStateScope.of(context);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final result = await runNativeLineLogin(
+      startUri: appState.api.nativeLineLoginStartUriFor(ApiRole.customer),
+      callbackScheme: 'fixgo',
+    );
+    if (!mounted) return;
+    try {
+      switch (result) {
+        case NativeLineTicket(:final ticket):
+          appState.signIn(await appState.api.exchangeLineTicket(ticket));
+          return;
+        case NativeLineCancelled():
+          break;
+        case NativeLineFailed():
+          setState(() => _error = lineLoginFailedMessage);
+      }
+    } on ApiException catch (_) {
+      if (mounted) setState(() => _error = lineLoginFailedMessage);
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
