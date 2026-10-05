@@ -122,6 +122,7 @@ export class WalletService {
       amount: debt.owed,
       qrPayload: promptPayPayload(promptPayId, debt.owed),
       payeeName,
+      promptPayId,
     };
   }
 

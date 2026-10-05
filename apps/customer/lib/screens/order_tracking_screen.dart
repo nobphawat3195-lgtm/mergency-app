@@ -4,7 +4,6 @@ import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import '../app_state.dart';
 import 'inspection_report_screen.dart';
@@ -45,7 +44,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         .listen((_) => unawaited(_refresh()));
     _connectLive();
     // ตัวสำรองเมื่อ stream หลุดหรืออยู่บนเว็บ: ทุก 5 วินาที, ถ้า stream ติดอยู่ ทุก 30 วินาที
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      // งานจบแล้ว (ยกเลิก หรือจ่ายและให้คะแนนแล้ว) ไม่ต้องดึงสถานะอีก
+      if (_finished) {
+        timer.cancel();
+        unawaited(_liveSub?.cancel());
+        return;
+      }
       _pollTick++;
       if (_live && _pollTick % 6 != 0) return;
       unawaited(_refresh());
@@ -157,6 +162,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           expiresAt: charge.expiresAt,
           requiresSlip: charge.requiresSlip,
           payeeName: charge.payeeName,
+          promptPayId: charge.promptPayId,
           slipAlreadySubmitted: _order?.awaitingSlipReview ?? false,
         ),
       );
@@ -929,6 +935,7 @@ class _PromptPayDialog extends StatefulWidget {
     required this.expiresAt,
     this.requiresSlip = false,
     this.payeeName,
+    this.promptPayId,
     this.slipAlreadySubmitted = false,
   });
 
@@ -941,6 +948,9 @@ class _PromptPayDialog extends StatefulWidget {
   /// โอนเข้าบัญชีบริษัท: ต้องแนบสลิปให้ทีมงานตรวจ
   final bool requiresSlip;
   final String? payeeName;
+
+  /// เลขพร้อมเพย์ปลายทาง ให้คัดลอกไปโอนในแอปธนาคารเองได้
+  final String? promptPayId;
   final bool slipAlreadySubmitted;
 
   @override
@@ -1026,15 +1036,10 @@ class _PromptPayDialogState extends State<_PromptPayDialog> {
           children: [
             const _PaymentPendingBanner(compact: true),
             const SizedBox(height: FixGoSpacing.md),
-            QrImageView(
-              data: widget.qrPayload,
-              size: 200,
-              backgroundColor: Colors.white,
-            ),
-            const SizedBox(height: FixGoSpacing.md),
-            Text(
-              formatSatang(widget.amount),
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
+            PromptPayQrPanel(
+              qrPayload: widget.qrPayload,
+              amount: widget.amount,
+              promptPayId: widget.promptPayId,
             ),
             if (widget.payeeName != null) ...[
               const SizedBox(height: 4),

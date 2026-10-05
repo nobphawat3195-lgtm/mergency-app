@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show Locale;
 
@@ -37,6 +38,12 @@ class LocationResult {
 
 /// ขอตำแหน่ง GPS ปัจจุบันของเครื่อง ใช้ร่วมกันทั้งแอปลูกค้าและแอปช่าง
 class LocationService {
+  /// ข้อความเมื่อหาพิกัดไม่ได้ในเวลาที่กำหนด ให้ผู้ใช้ปักหมุดเองแทน
+  static const timeoutMessage = 'หาตำแหน่งไม่สำเร็จ ลองใหม่หรือปักหมุดบนแผนที่';
+
+  /// Nominatim ห้ามรอนาน ปุ่มต้องไม่หมุนค้าง
+  static const _geocodeTimeout = Duration(seconds: 8);
+
   /// เปิดพิกัดใน Google Maps ให้ผู้ใช้เช็กเองว่าหมุดตรงจุดไหม
   static Future<bool> openInMaps(double latitude, double longitude) =>
       launchUrl(
@@ -73,29 +80,9 @@ class LocationService {
       );
     }
 
-    final position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-      ),
-    );
-
-    String? address;
-    try {
-      if (kIsWeb) {
-        // เบราว์เซอร์ไม่มี geocoder ของเครื่อง (ปลั๊กอิน geocoding ไม่รองรับเว็บ)
-        address =
-            await _reverseGeocodeWeb(position.latitude, position.longitude);
-      } else {
-        final placemarks = await Geocoding(locale: const Locale('th', 'TH'))
-            .placemarkFromCoordinates(position.latitude, position.longitude);
-        if (placemarks.isNotEmpty) {
-          address = _formatPlacemark(placemarks.first);
-        }
-      }
-    } catch (_) {
-      // reverse geocoding ล้มเหลวได้ (เช่น ไม่มีเน็ต) ไม่ต้องทำให้ทั้งฟังก์ชันพัง
-      // แค่ไม่มีชื่อที่อยู่ให้แสดง ยังใช้พิกัดได้ปกติ
-    }
+    final position = await _readPosition();
+    final address =
+        await reverseGeocode(position.latitude, position.longitude);
 
     return LocationResult(
       latitude: position.latitude,
@@ -103,6 +90,91 @@ class LocationService {
       address: address,
       accuracyMeters: position.accuracy > 0 ? position.accuracy : null,
     );
+  }
+
+  /// อ่านพิกัด: ละเอียดสูงภายใน 20 วินาที ไม่ได้ลองแบบปานกลางอีก 10 วินาที
+  /// ยังไม่ได้ให้โยน [LocationException] ห้ามให้ปุ่มหมุนค้าง
+  static Future<Position> _readPosition() async {
+    const attempts = [
+      (LocationAccuracy.high, Duration(seconds: 20)),
+      (LocationAccuracy.medium, Duration(seconds: 10)),
+    ];
+    for (final (accuracy, limit) in attempts) {
+      try {
+        return await Geolocator.getCurrentPosition(
+          locationSettings: LocationSettings(
+            accuracy: accuracy,
+            timeLimit: limit,
+          ),
+        ).timeout(limit + const Duration(seconds: 2));
+      } on TimeoutException {
+        continue;
+      } on LocationServiceDisabledException {
+        throw const LocationException(
+          'กรุณาเปิดบริการตำแหน่ง (Location Services) ในเครื่องก่อนใช้งาน',
+        );
+      } on PermissionDeniedException {
+        throw const LocationException('คุณไม่ได้อนุญาตให้เข้าถึงตำแหน่ง');
+      } catch (_) {
+        // เบราว์เซอร์บางตัวโยน error ทั่วไปเมื่อหาตำแหน่งไม่ได้ ลองรอบถัดไป
+        continue;
+      }
+    }
+    throw const LocationException(timeoutMessage);
+  }
+
+  /// แปลงพิกัดเป็นที่อยู่แบบอ่านง่าย ไม่สำเร็จคืน null (ไม่ทำให้ flow พัง)
+  static Future<String?> reverseGeocode(
+    double latitude,
+    double longitude,
+  ) async {
+    try {
+      if (kIsWeb) {
+        // เบราว์เซอร์ไม่มี geocoder ของเครื่อง (ปลั๊กอิน geocoding ไม่รองรับเว็บ)
+        return await _reverseGeocodeWeb(latitude, longitude);
+      }
+      final placemarks = await Geocoding(locale: const Locale('th', 'TH'))
+          .placemarkFromCoordinates(latitude, longitude)
+          .timeout(_geocodeTimeout);
+      return placemarks.isEmpty ? null : _formatPlacemark(placemarks.first);
+    } catch (_) {
+      // reverse geocoding ล้มเหลวได้ (เช่น ไม่มีเน็ต) แค่ไม่มีชื่อที่อยู่ให้แสดง
+      return null;
+    }
+  }
+
+  /// ค้นหาที่อยู่/สถานที่ในประเทศไทยด้วย Nominatim สำหรับหน้าปักหมุด
+  /// เรียกเมื่อผู้ใช้กดค้นหาเท่านั้น (นโยบาย Nominatim ห้ามยิงทุกตัวอักษร)
+  static Future<List<LocationResult>> searchAddress(String query) async {
+    final text = query.trim();
+    if (text.isEmpty) return const [];
+    final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+      'format': 'jsonv2',
+      'q': text,
+      'countrycodes': 'th',
+      'addressdetails': '1',
+      'limit': '6',
+      'accept-language': 'th',
+    });
+    try {
+      final response = await http.get(uri).timeout(_geocodeTimeout);
+      if (response.statusCode != 200) return const [];
+      final json = jsonDecode(utf8.decode(response.bodyBytes));
+      if (json is! List) return const [];
+      return [
+        for (final item in json.whereType<Map<String, dynamic>>())
+          if (double.tryParse('${item['lat']}') != null &&
+              double.tryParse('${item['lon']}') != null)
+            LocationResult(
+              latitude: double.parse('${item['lat']}'),
+              longitude: double.parse('${item['lon']}'),
+              address: formatNominatimAddress(item['address']) ??
+                  item['display_name'] as String?,
+            ),
+      ];
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// เว็บ: แปลงพิกัดเป็นที่อยู่ด้วย OpenStreetMap Nominatim (ฟรี ส่งไปเฉพาะพิกัด)
@@ -118,7 +190,7 @@ class LocationService {
       'zoom': '18',
       'accept-language': 'th',
     });
-    final response = await http.get(uri).timeout(const Duration(seconds: 6));
+    final response = await http.get(uri).timeout(_geocodeTimeout);
     if (response.statusCode != 200) return null;
     final json = jsonDecode(utf8.decode(response.bodyBytes));
     if (json is! Map<String, dynamic>) return null;

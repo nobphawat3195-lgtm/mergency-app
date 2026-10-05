@@ -66,7 +66,8 @@ export class ManualPromptPayGateway implements PaymentGateway {
   readonly name = 'promptpay_manual' as const;
 
   constructor(
-    private readonly promptPayId: string,
+    /** เบอร์/เลขพร้อมเพย์ปลายทาง แสดงให้ลูกค้าคัดลอกไปโอนเองได้ */
+    readonly promptPayId: string,
     readonly payeeName: string,
   ) {
     normalizePromptPayId(promptPayId);

@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_state.dart';
+import '../location_choice.dart';
 import '../order_tracking_screen.dart';
 import 'inspection_booking_card.dart';
 
@@ -148,6 +149,16 @@ class _BookingFlowState extends State<BookingFlow> {
     }
   }
 
+  /// แตะจุดนัดหมาย/ตำแหน่งรถเพื่อเปลี่ยนได้เสมอ (เผื่อเรียกช่างให้คนอื่น)
+  Future<void> _changeLocation() async {
+    final picked = await chooseCustomerLocation(
+      context,
+      current: _pickupLocation,
+      title: _isInspection ? 'ตำแหน่งรถที่จะตรวจ' : 'ปักหมุดจุดนัดหมาย',
+    );
+    if (picked != null && mounted) setState(() => _pickupLocation = picked);
+  }
+
   Future<void> _submit() async {
     final category = _category;
     final subService = _subService;
@@ -165,7 +176,23 @@ class _BookingFlowState extends State<BookingFlow> {
       // ยังไม่มีตำแหน่ง (เช่น หน้า Home ขอสิทธิ์ไม่สำเร็จตอนนั้น) ลองขอใหม่อีกครั้ง
       // ก่อนสร้างออเดอร์จริง — ห้ามส่งพิกัดปลอม/ค่าเริ่มต้นไปเด็ดขาด เพราะระบบ dispatch
       // ใช้พิกัดนี้คำนวณระยะทางหาช่างใกล้สุด ถ้าใช้ค่าปลอมช่างจะถูกส่งไปผิดที่จริง
-      _pickupLocation ??= await LocationService.getCurrentLocation();
+      if (_pickupLocation == null) {
+        try {
+          _pickupLocation = await LocationService.getCurrentLocation();
+        } on LocationException catch (error) {
+          // GPS ใช้ไม่ได้: ให้ปักหมุดเองต่อทันที ไม่ทิ้งให้ลูกค้าติดอยู่หน้านี้
+          if (!mounted) return;
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(error.message)));
+          final picked = await pickCustomerLocationOnMap(
+            context,
+            title:
+                _isInspection ? 'ตำแหน่งรถที่จะตรวจ' : 'ปักหมุดจุดนัดหมาย',
+          );
+          if (picked == null || !mounted) return;
+          setState(() => _pickupLocation = picked);
+        }
+      }
       if (!mounted) return;
 
       final location = _pickupLocation!;
@@ -182,10 +209,12 @@ class _BookingFlowState extends State<BookingFlow> {
         inspection: _isInspection ? _inspection : null,
       );
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
+      // ปิดฟอร์มจอง (และหน้ารายละเอียดก่อนหน้า) ออกจาก stack: ย้อนกลับจากหน้าติดตามงานต้องถึงหน้าแรก
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute<void>(
           builder: (_) => OrderTrackingScreen(orderId: order.id),
         ),
+        (route) => route.isFirst,
       );
     } on LocationException catch (error) {
       if (!mounted) return;
@@ -258,6 +287,8 @@ class _BookingFlowState extends State<BookingFlow> {
           submitting: _submitting,
           onConfirm: _submit,
           pickupLocation: _pickupLocation,
+          pickupLabel: _isInspection ? 'ตำแหน่งรถที่จะตรวจ' : 'จุดนัดหมาย',
+          onChangeLocation: _changeLocation,
           initialNote: _note,
           onNoteChanged: (value) => _note = value,
           photoUrls: _photoUrls,
@@ -548,6 +579,8 @@ class _ConfirmStep extends StatefulWidget {
     required this.submitting,
     required this.onConfirm,
     required this.pickupLocation,
+    required this.pickupLabel,
+    required this.onChangeLocation,
     required this.initialNote,
     required this.onNoteChanged,
     required this.photoUrls,
@@ -565,6 +598,10 @@ class _ConfirmStep extends StatefulWidget {
   final bool submitting;
   final VoidCallback onConfirm;
   final LocationResult? pickupLocation;
+
+  /// งานตรวจรถคือ "ตำแหน่งรถที่จะตรวจ" งานอื่นคือ "จุดนัดหมาย"
+  final String pickupLabel;
+  final VoidCallback onChangeLocation;
   final String initialNote;
   final ValueChanged<String> onNoteChanged;
   final List<String> photoUrls;
@@ -644,13 +681,36 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                         value: widget.vehicleType.name,
                       ),
                       const Divider(),
-                      _SummaryRow(
-                        label: 'จุดนัดหมาย',
-                        value: widget.pickupLocation?.address ??
-                            (widget.pickupLocation != null
-                                ? '${widget.pickupLocation!.latitude.toStringAsFixed(5)}, ${widget.pickupLocation!.longitude.toStringAsFixed(5)}'
-                                : 'จะขอตำแหน่งอีกครั้งตอนยืนยัน'),
+                      InkWell(
+                        onTap: widget.submitting
+                            ? null
+                            : widget.onChangeLocation,
+                        child: _SummaryRow(
+                          label: widget.pickupLabel,
+                          value: widget.pickupLocation?.address ??
+                              (widget.pickupLocation != null
+                                  ? '${widget.pickupLocation!.latitude.toStringAsFixed(5)}, ${widget.pickupLocation!.longitude.toStringAsFixed(5)}'
+                                  : 'ยังไม่มีตำแหน่ง แตะเพื่อปักหมุด'),
+                          trailing: const Text(
+                            'เปลี่ยน',
+                            style: TextStyle(
+                              color: FixGoColors.accent,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                       ),
+                      if (widget.pickupLocation == null) ...[
+                        const SizedBox(height: FixGoSpacing.xs),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 44),
+                          ),
+                          onPressed: widget.onChangeLocation,
+                          icon: const Icon(Icons.push_pin_outlined),
+                          label: const Text('ปักหมุดบนแผนที่เอง'),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -765,7 +825,7 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                       FixGoSecondaryButton(
                         label: widget.pickupLocation == null
                             ? 'จะตรวจตำแหน่งเมื่อยืนยัน'
-                            : 'เปิดตรวจสอบจุดนัดหมายใน Google Maps',
+                            : 'ดูจุดนัดหมายบนแผนที่',
                         onPressed: widget.pickupLocation == null
                             ? null
                             : _openPickupInMaps,
@@ -841,10 +901,11 @@ class _ConfirmStepState extends State<_ConfirmStep> {
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.label, required this.value});
+  const _SummaryRow({required this.label, required this.value, this.trailing});
 
   final String label;
   final String value;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -863,6 +924,10 @@ class _SummaryRow extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
+          if (trailing != null) ...[
+            const SizedBox(width: FixGoSpacing.sm),
+            trailing!,
+          ],
         ],
       ),
     );

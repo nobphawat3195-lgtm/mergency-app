@@ -71,7 +71,8 @@ class _InspectionBookingCardState extends State<InspectionBookingCard> {
       helpText: 'เลือกวันนัดตรวจรถ',
     );
     if (date == null || !mounted) return;
-    final time = await showTimePicker(
+    // 24 ชั่วโมง เริ่มที่ :00 หรือ :30 คนไทยนัดเวลาแบบนี้
+    final time = await showFixGoTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(initial),
       helpText: 'เลือกเวลานัด',
@@ -228,8 +229,8 @@ class _InspectionBookingCardState extends State<InspectionBookingCard> {
             ),
             const SizedBox(height: FixGoSpacing.sm),
             Text(
-              'ตำแหน่งนัดตรวจใช้ตำแหน่ง GPS ปัจจุบันของคุณ ถ้ารถอยู่ที่อื่น '
-              'ให้ระบุที่อยู่ของรถในช่องหมายเหตุด้านล่าง',
+              'ช่างจะไปที่ "ตำแหน่งรถที่จะตรวจ" ด้านล่าง เริ่มต้นเป็นตำแหน่ง GPS ของคุณ '
+              'ถ้ารถอยู่ที่อื่น (เช่น เต็นท์รถหรือบ้านผู้ขาย) แตะเพื่อปักหมุดที่ตั้งรถ',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

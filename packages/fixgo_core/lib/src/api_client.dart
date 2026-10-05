@@ -598,14 +598,20 @@ class FixGoApiClient {
   }
 
   /// QR พร้อมเพย์ของบริษัท ล็อกยอดเท่ากับค่าบริการที่ค้างทั้งหมด
-  Future<({int amount, String qrPayload, String? payeeName})>
-      getSettlementQr() async {
+  Future<
+      ({
+        int amount,
+        String qrPayload,
+        String? payeeName,
+        String? promptPayId,
+      })> getSettlementQr() async {
     final result =
         await _send('GET', '/wallet/settlement-qr') as Map<String, dynamic>;
     return (
       amount: result['amount'] as int,
       qrPayload: result['qrPayload'] as String,
       payeeName: result['payeeName'] as String?,
+      promptPayId: result['promptPayId'] as String?,
     );
   }
 
@@ -625,6 +631,7 @@ class FixGoApiClient {
         DateTime? expiresAt,
         bool requiresSlip,
         String? payeeName,
+        String? promptPayId,
       })> createPromptPayCharge(String orderId) async {
     final result = await _send(
       'POST',
@@ -638,6 +645,7 @@ class FixGoApiClient {
       expiresAt: expires == null ? null : DateTime.parse(expires).toLocal(),
       requiresSlip: result['requiresSlip'] as bool? ?? false,
       payeeName: result['payeeName'] as String?,
+      promptPayId: result['promptPayId'] as String?,
     );
   }
 

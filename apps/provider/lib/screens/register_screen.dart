@@ -174,6 +174,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  Future<void> _pinOnMap() async {
+    final current = _baseLat == null || _baseLng == null
+        ? null
+        : LocationResult(
+            latitude: _baseLat!,
+            longitude: _baseLng!,
+            address: _pinAddress,
+          );
+    final picked = await pickLocationOnMap(
+      context,
+      initial: current,
+      title: 'ปักหมุดร้าน / จุดรับงาน',
+      userAgentPackageName: 'com.fixgo.fixgo_provider',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _baseLat = picked.latitude;
+      _baseLng = picked.longitude;
+      _pinAddress = picked.address;
+      // ปักเองบนแผนที่ไม่มีค่าความคลาดเคลื่อนของ GPS
+      _pinAccuracy = null;
+      _pinError = null;
+    });
+  }
+
   Future<void> _pinCurrentLocation() async {
     setState(() {
       _locatingPin = true;
@@ -408,6 +433,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               error: _pinError,
               locating: _locatingPin,
               onPin: _pinCurrentLocation,
+              onPinOnMap: _pinOnMap,
             ),
             const SizedBox(height: FixGoSpacing.lg),
             const _SectionTitle('เวลารับงาน'),
@@ -871,6 +897,7 @@ class _PinCard extends StatelessWidget {
     required this.error,
     required this.locating,
     required this.onPin,
+    required this.onPinOnMap,
   });
 
   final double? lat;
@@ -880,6 +907,9 @@ class _PinCard extends StatelessWidget {
   final String? error;
   final bool locating;
   final VoidCallback onPin;
+
+  /// GPS ใช้ไม่ได้หรือไม่ได้ยืนอยู่ที่ร้าน: เลื่อนแผนที่ปักหมุดเอง
+  final VoidCallback onPinOnMap;
 
   // เกินรัศมีนี้ GPS ยังไม่นิ่ง (มักเป็นตำแหน่งจากเสาสัญญาณ/Wi-Fi) ควรกดใหม่
   static const _roughAccuracyMeters = 200.0;
@@ -934,6 +964,7 @@ class _PinCard extends StatelessWidget {
                 style: small,
               ),
             const SizedBox(height: FixGoSpacing.sm),
+            // ธีมกำหนดความกว้างขั้นต่ำเป็น infinity ปุ่มในแถวต้องอยู่ใน Expanded ทุกปุ่ม
             Row(
               children: [
                 Expanded(
@@ -949,19 +980,22 @@ class _PinCard extends StatelessWidget {
                     label: Text(pinned ? 'ปักใหม่' : 'ใช้ตำแหน่งปัจจุบัน'),
                   ),
                 ),
-                if (pinned) ...[
-                  const SizedBox(width: FixGoSpacing.sm),
-                  // ธีมกำหนดความกว้างขั้นต่ำเป็น infinity ต้องห่อ Expanded ไม่งั้นปุ่มหายในแถว
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => LocationService.openInMaps(lat!, lng!),
-                      icon: const Icon(Icons.map_outlined),
-                      label: const Text('ดูบนแผนที่'),
-                    ),
+                const SizedBox(width: FixGoSpacing.sm),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: locating ? null : onPinOnMap,
+                    icon: const Icon(Icons.push_pin_outlined),
+                    label: const Text('ปักหมุดบนแผนที่'),
                   ),
-                ],
+                ),
               ],
             ),
+            if (pinned)
+              TextButton.icon(
+                onPressed: () => LocationService.openInMaps(lat!, lng!),
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('ดูบนแผนที่'),
+              ),
           ],
         ),
       ),
