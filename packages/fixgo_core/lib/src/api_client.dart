@@ -190,6 +190,13 @@ class FixGoApiClient {
   Uri lineLoginStartUriFor(ApiRole role) =>
       Uri.parse('$baseUrl/api/auth/line/start${_lineAppQuery(role)}');
 
+  /// แอปมือถือ: เปิดใน ASWebAuthenticationSession / Custom Tabs แล้ว backend พากลับ
+  /// fixgo://auth/line หรือ fixgofixer://auth/line พร้อม ?line_ticket=
+  Uri nativeLineLoginStartUriFor(ApiRole role) => Uri.parse(
+        '$baseUrl/api/auth/line/start'
+        '?app=${role == ApiRole.provider ? 'provider' : 'customer'}&client=native',
+      );
+
   String _lineAppQuery(ApiRole role) =>
       role == ApiRole.provider ? '?app=provider' : '';
 

@@ -35,6 +35,22 @@ export function parseLineApp(value: unknown): LineApp {
   return value === 'provider' ? 'provider' : 'customer';
 }
 
+/** เริ่มจากเว็บ หรือจากแอปมือถือ (iOS/Android) ค่าอื่นถือเป็นเว็บ */
+export type LineClient = 'web' | 'native';
+
+export function parseLineClient(value: unknown): LineClient {
+  return value === 'native' ? 'native' : 'web';
+}
+
+/**
+ * ที่อยู่กลับเข้าแอปมือถือ (custom scheme) อนุญาตเฉพาะ 2 ค่านี้
+ * ไม่รับ redirect URL จาก query เด็ดขาด กันการพาตั๋วไปให้แอปอื่น
+ */
+const NATIVE_RETURN_URLS: Record<LineApp, string> = {
+  customer: 'fixgo://auth/line',
+  provider: 'fixgofixer://auth/line',
+};
+
 interface LineConfig {
   channelId: string;
   channelSecret: string;
@@ -116,13 +132,18 @@ export class LineLoginService {
 
   /**
    * คืน URL หน้า LINE และค่าคุกกี้ state ที่ต้องตั้งก่อน redirect
-   * state ที่ส่งให้ LINE กับคุกกี้เป็นค่าเดียวกัน: callback จึงรู้ว่าเริ่มจากแอปไหนแม้คุกกี้หาย
+   * state ที่ส่งให้ LINE กับคุกกี้เป็นค่าเดียวกัน: callback จึงรู้ว่าเริ่มจากแอปไหน
+   * (และจากเว็บหรือแอปมือถือ) แม้คุกกี้หาย
    */
-  start(app: LineApp = 'customer', now: number = Date.now()) {
+  start(
+    app: LineApp = 'customer',
+    now: number = Date.now(),
+    client: LineClient = 'web',
+  ) {
     const config = this.requireConfig(app);
     const random = randomBytes(16).toString('base64url');
     const nonce = randomBytes(16).toString('base64url');
-    const body = `${random}.${nonce}.${now + STATE_TTL_MS}.${app}`;
+    const body = `${random}.${nonce}.${now + STATE_TTL_MS}.${app}.${client}`;
     const state = `${body}.${this.sign(body, 'line-state')}`;
     const cookie = state;
     const url = new URL(AUTHORIZE_URL);
@@ -137,38 +158,71 @@ export class LineLoginService {
     return { url: url.toString(), cookie, maxAgeSeconds: STATE_TTL_MS / 1000 };
   }
 
-  /** แยก state ที่ลงลายเซ็นไว้ คืน null ถ้ารูปแบบหรือลายเซ็นไม่ถูก (ไม่ตรวจอายุ) */
+  /**
+   * แยก state ที่ลงลายเซ็นไว้ (random.nonce.expires.app.client.hmac)
+   * คืน null ถ้ารูปแบบหรือลายเซ็นไม่ถูก (ไม่ตรวจอายุ)
+   */
   private parseState(value: string | undefined) {
     const parts = value?.split('.') ?? [];
-    if (parts.length !== 5) return null;
-    const [random, nonce, expires, appValue, signature] = parts;
+    if (parts.length !== 6) return null;
+    const [random, nonce, expires, appValue, clientValue, signature] = parts;
     if (
       !this.verifySigned(
-        `${random}.${nonce}.${expires}.${appValue}`,
+        `${random}.${nonce}.${expires}.${appValue}.${clientValue}`,
         signature,
         'line-state',
       )
     ) {
       return null;
     }
-    return { nonce, expires: Number(expires), app: parseLineApp(appValue) };
+    return {
+      nonce,
+      expires: Number(expires),
+      app: parseLineApp(appValue),
+      client: parseLineClient(clientValue),
+    };
   }
 
   /**
-   * แอปที่จะพากลับเมื่อล็อกอินไม่สำเร็จ: เชื่อเฉพาะ state/คุกกี้ที่ลายเซ็นถูก
+   * ที่จะพากลับเมื่อล็อกอินไม่สำเร็จ: เชื่อเฉพาะ state/คุกกี้ที่ลายเซ็นถูก
    * อ่านไม่ได้ทั้งคู่จึงพากลับเว็บลูกค้า
    */
-  failureApp(state: string | undefined, cookie: string | undefined): LineApp {
-    return (
-      this.parseState(state)?.app ?? this.parseState(cookie)?.app ?? 'customer'
-    );
+  failureTarget(
+    state: string | undefined,
+    cookie: string | undefined,
+  ): { app: LineApp; client: LineClient } {
+    const parsed = this.parseState(state) ?? this.parseState(cookie);
+    return parsed
+      ? { app: parsed.app, client: parsed.client }
+      : { app: 'customer', client: 'web' };
   }
 
-  /** หน้าเว็บที่จะพาผู้ใช้กลับไปเมื่อเกิดข้อผิดพลาด */
-  failureRedirect(app: LineApp = 'customer'): string {
+  /** แอปที่จะพากลับเมื่อล็อกอินไม่สำเร็จ */
+  failureApp(state: string | undefined, cookie: string | undefined): LineApp {
+    return this.failureTarget(state, cookie).app;
+  }
+
+  /** หน้าเว็บหรือแอปมือถือที่จะพาผู้ใช้กลับไปเมื่อเกิดข้อผิดพลาด */
+  failureRedirect(
+    app: LineApp = 'customer',
+    client: LineClient = 'web',
+  ): string {
+    if (client === 'native') return `${NATIVE_RETURN_URLS[app]}?line_error=1`;
     const webUrl =
       (app === 'provider' ? publicFixerUrl() : publicWebUrl()) ?? '/';
     return `${webUrl}/?line_error=1`;
+  }
+
+  /** ที่อยู่รับตั๋ว: เว็บของแอปนั้น หรือ custom scheme ของแอปมือถือ (allow-list) */
+  private ticketRedirect(
+    app: LineApp,
+    client: LineClient,
+    webUrl: string,
+    ticket: string,
+  ): string {
+    const base =
+      client === 'native' ? NATIVE_RETURN_URLS[app] : `${webUrl}/`;
+    return `${base}?line_ticket=${encodeURIComponent(ticket)}`;
   }
 
   /** ตรวจ state, แลก code, ตรวจ id_token แล้วคืน URL เว็บพร้อมตั๋วแลกโทเคน */
@@ -194,7 +248,7 @@ export class LineLoginService {
       throw new UnauthorizedException('state นี้ถูกใช้ไปแล้ว');
     }
     this.usedStates.set(query.state, parsed.expires);
-    const { app, nonce } = parsed;
+    const { app, nonce, client } = parsed;
     const config = this.requireConfig(app);
 
     const tokenResponse = await fetch(TOKEN_URL, {
@@ -240,7 +294,7 @@ export class LineLoginService {
     if (app === 'provider') {
       // ช่างยังไม่สร้างบัญชีตรงนี้ ต้องส่งใบสมัครก่อน ตั๋วจึงพา LINE userId ไปแทน
       const ticket = this.issueTicket('provider', profile.sub, now);
-      return `${config.webUrl}/?line_ticket=${encodeURIComponent(ticket)}`;
+      return this.ticketRedirect(app, client, config.webUrl, ticket);
     }
 
     const customer = await this.prisma.customer.upsert({
@@ -253,7 +307,7 @@ export class LineLoginService {
     }
 
     const ticket = this.issueTicket('customer', customer.id, now);
-    return `${config.webUrl}/?line_ticket=${encodeURIComponent(ticket)}`;
+    return this.ticketRedirect(app, client, config.webUrl, ticket);
   }
 
   /** subject = id ลูกค้า หรือ LINE userId ของช่าง (ไม่มีจุดทั้งคู่) */

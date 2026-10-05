@@ -16,6 +16,7 @@ import {
   LINE_STATE_COOKIE,
   LineLoginService,
   parseLineApp,
+  parseLineClient,
 } from './line-login.service';
 
 class ExchangeLineTicketDto {
@@ -44,9 +45,18 @@ export class LineLoginController {
     return { enabled: this.line.isEnabled(parseLineApp(app)) };
   }
 
+  /** ?client=native จากแอปมือถือ: callback จะพากลับ fixgo:// หรือ fixgofixer:// */
   @Get('start')
-  start(@Query('app') app: string | undefined, @Res() res: Response) {
-    const { url, cookie, maxAgeSeconds } = this.line.start(parseLineApp(app));
+  start(
+    @Query('app') app: string | undefined,
+    @Query('client') client: string | undefined,
+    @Res() res: Response,
+  ) {
+    const { url, cookie, maxAgeSeconds } = this.line.start(
+      parseLineApp(app),
+      Date.now(),
+      parseLineClient(client),
+    );
     res.cookie(LINE_STATE_COOKIE, cookie, {
       httpOnly: true,
       secure: isProduction(),
@@ -69,14 +79,14 @@ export class LineLoginController {
       const target = await this.line.callback(query, cookie);
       res.redirect(302, target);
     } catch (error) {
-      const app = this.line.failureApp(query.state, cookie);
+      const { app, client } = this.line.failureTarget(query.state, cookie);
       // บอกแค่เหตุผล ห้าม log code/token/state/secret
       const reason = error instanceof Error ? error.message : String(error);
       this.logger.warn(
-        `LINE login failed (app=${app}, cookie=${cookie ? 'yes' : 'no'}` +
+        `LINE login failed (app=${app}, client=${client}, cookie=${cookie ? 'yes' : 'no'}` +
           `${query.error ? `, line_error=${query.error.slice(0, 40)}` : ''}): ${reason}`,
       );
-      res.redirect(302, this.line.failureRedirect(app));
+      res.redirect(302, this.line.failureRedirect(app, client));
     }
   }
 
