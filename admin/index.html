@@ -44,6 +44,16 @@
     display: grid; place-items: center; color: #fff;
   }
   header h1 { margin: 0; font-size: 20px; font-weight: 800; }
+  header #whoami { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  /* มือถือ (~375px): โลโก้ ชื่อผู้ใช้ และปุ่มออกจากระบบอยู่บรรทัดเดียว ไม่ตัดคำ */
+  @media (max-width: 600px) {
+    header { padding: 10px 12px; gap: 8px; }
+    header .sub { display: none; }
+    header h1 { font-size: 18px; }
+    header .logo { width: 32px; height: 32px; flex: none; }
+    header #logout { padding: 8px 12px; flex: none; }
+    main { padding: 12px; }
+  }
   header .sub {
     font-size: 13px; color: var(--text-secondary);
     background: var(--surface); padding: 4px 10px; border-radius: 999px;
@@ -81,6 +91,8 @@
     cursor: pointer;
   }
   button:hover { background: var(--accent-active); }
+  button:disabled { opacity: 0.55; cursor: progress; }
+  button { white-space: nowrap; }
   button.ghost {
     background: transparent;
     color: var(--navy);
@@ -370,6 +382,33 @@ function ownerActions(html) {
   return isOwner() ? html : '<span class="muted">รอเจ้าของยืนยัน</span>';
 }
 
+// แถวรายการเงินล่าสุด ค้นจาก id ตอนกดปุ่ม ไม่ต้องฝังชื่อ/ยอดลงใน onclick
+const moneyRows = { slip: new Map(), settlement: new Map(), withdrawal: new Map() };
+const moneyInFlight = new Set();
+
+/**
+ * ปุ่มที่เปลี่ยนสถานะเงิน: ยืนยันก่อนเสมอ (ระบุยอดและชื่อ) แล้วล็อกทุกปุ่มในแถวระหว่างรอ
+ * กันกดซ้ำ/กดผิดปุ่มขณะเน็ตช้า
+ */
+async function runMoneyAction(button, key, message, action) {
+  if (moneyInFlight.has(key) || !confirm(message)) return;
+  moneyInFlight.add(key);
+  const buttons = [...(button?.closest('td')?.querySelectorAll('button') ?? [])];
+  const label = button?.textContent;
+  buttons.forEach((node) => { node.disabled = true; });
+  if (button) button.textContent = 'กำลังบันทึก...';
+  try {
+    await action();
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    moneyInFlight.delete(key);
+    buttons.forEach((node) => { node.disabled = false; });
+    if (button) button.textContent = label;
+  }
+  await refreshAll();
+}
+
 async function showDashboard() {
   try {
     me = await api('/admin/me');
@@ -507,6 +546,7 @@ async function loadNoMatch() {
 
 async function loadSlips() {
   const slips = await api('/admin/payments/slips');
+  moneyRows.slip = new Map(slips.map((payment) => [payment.id, payment]));
   el('slips-card').classList.toggle('alert', slips.length > 0);
   el('slips-body').innerHTML = slips.length === 0
     ? '<tr><td colspan="7">ไม่มีสลิปรอตรวจ</td></tr>'
@@ -519,37 +559,42 @@ async function loadSlips() {
         <td>${escapeHtml(payment.order.provider?.nickname || '-')}</td>
         <td>${escapeHtml(new Date(payment.slipSubmittedAt).toLocaleString('th-TH'))}</td>
         <td>
-          ${ownerActions(`<button onclick="confirmSlip('${payment.id}','${escapeHtml(formatSatang(payment.amount))}')">ยอดเข้าแล้ว</button>
-          <button class="danger" onclick="rejectSlip('${payment.id}')">ไม่ผ่าน</button>`)}
+          ${ownerActions(`<button onclick="confirmSlip(this,'${payment.id}')">ยอดเข้าแล้ว</button>
+          <button class="danger" onclick="rejectSlip(this,'${payment.id}')">ไม่ผ่าน</button>`)}
         </td>
       </tr>`).join('');
 }
 
-async function confirmSlip(id, amountText) {
-  if (!confirm(`ยืนยันว่ายอด ${amountText} เข้าบัญชีแล้ว? ระบบจะบันทึกชำระแล้วและเครดิตรายได้ให้ช่างทันที`)) return;
-  try {
-    await api('/admin/payments/' + id + '/confirm', { method: 'POST' });
-  } catch (error) {
-    alert(error.message);
-  }
-  await refreshAll();
+async function confirmSlip(button, id) {
+  const payment = moneyRows.slip.get(id);
+  if (!payment) return;
+  await runMoneyAction(
+    button,
+    'slip:' + id,
+    `ยืนยันว่าได้รับเงิน ${formatSatang(payment.amount)} จากงาน ${payment.order.orderNo} แล้ว?\n`
+      + 'ระบบจะบันทึกว่าชำระแล้วและเครดิตรายได้ให้ช่างทันที',
+    () => api('/admin/payments/' + id + '/confirm', { method: 'POST' }),
+  );
 }
 
-async function rejectSlip(id) {
+async function rejectSlip(button, id) {
+  const payment = moneyRows.slip.get(id);
+  if (!payment) return;
   const reason = prompt(
     'เหตุผลที่สลิปไม่ผ่าน (ส่งถึงลูกค้า)',
     'ยังไม่พบยอดเงินเข้าบัญชี หรือยอดในสลิปไม่ตรงกับยอดที่ต้องชำระ',
   );
   if (!reason) return;
-  try {
-    await api('/admin/payments/' + id + '/reject', {
+  await runMoneyAction(
+    button,
+    'slip:' + id,
+    `ปฏิเสธสลิป ${formatSatang(payment.amount)} ของงาน ${payment.order.orderNo}?\n`
+      + 'ลูกค้าจะต้องแนบสลิปใหม่',
+    () => api('/admin/payments/' + id + '/reject', {
       method: 'POST',
       body: JSON.stringify({ reason }),
-    });
-  } catch (error) {
-    alert(error.message);
-  }
-  await refreshAll();
+    }),
+  );
 }
 
 // ---------- การเงิน ----------
@@ -685,6 +730,7 @@ function exportOrdersCsv() {
 
 async function loadSettlements() {
   const rows = await api('/admin/settlements');
+  moneyRows.settlement = new Map(rows.map((row) => [row.id, row]));
   el('settlements-card').classList.toggle('alert', rows.length > 0);
   el('settlements-body').innerHTML = rows.length === 0
     ? '<tr><td colspan="5">ไม่มีสลิปรอตรวจ</td></tr>'
@@ -695,37 +741,45 @@ async function loadSettlements() {
         <td><strong>${escapeHtml(formatSatang(row.amount))}</strong></td>
         <td>${escapeHtml(new Date(row.createdAt).toLocaleString('th-TH'))}</td>
         <td>
-          ${ownerActions(`<button onclick="confirmSettlement('${row.id}','${escapeHtml(formatSatang(row.amount))}')">ยอดเข้าแล้ว</button>
-          <button class="danger" onclick="rejectSettlement('${row.id}')">ไม่ผ่าน</button>`)}
+          ${ownerActions(`<button onclick="confirmSettlement(this,'${row.id}')">ยอดเข้าแล้ว</button>
+          <button class="danger" onclick="rejectSettlement(this,'${row.id}')">ไม่ผ่าน</button>`)}
         </td>
       </tr>`).join('');
 }
 
-async function confirmSettlement(id, amountText) {
-  if (!confirm(`ยืนยันว่ายอด ${amountText} เข้าบัญชีแล้ว? ระบบจะลงยอดคืนในกระเป๋าช่าง และช่างเปิดรับงานต่อได้`)) return;
-  try {
-    await api('/admin/settlements/' + id + '/confirm', { method: 'POST' });
-  } catch (error) {
-    alert(error.message);
-  }
-  await refreshAll();
+function mechanicLabel(provider) {
+  return provider ? `${provider.realName} (${provider.nickname})` : 'ช่าง';
 }
 
-async function rejectSettlement(id) {
+async function confirmSettlement(button, id) {
+  const row = moneyRows.settlement.get(id);
+  if (!row) return;
+  await runMoneyAction(
+    button,
+    'settlement:' + id,
+    `ยืนยันว่าได้รับค่าคอม ${formatSatang(row.amount)} จาก ${mechanicLabel(row.provider)} แล้ว?\n`
+      + 'ระบบจะลงยอดคืนในกระเป๋าช่าง และช่างเปิดรับงานต่อได้',
+    () => api('/admin/settlements/' + id + '/confirm', { method: 'POST' }),
+  );
+}
+
+async function rejectSettlement(button, id) {
+  const row = moneyRows.settlement.get(id);
+  if (!row) return;
   const reason = prompt(
     'เหตุผลที่สลิปไม่ผ่าน (ส่งถึงช่าง)',
     'ยังไม่พบยอดเงินเข้าบัญชี หรือยอดในสลิปไม่ตรงกับยอดค้าง',
   );
   if (!reason) return;
-  try {
-    await api('/admin/settlements/' + id + '/reject', {
+  await runMoneyAction(
+    button,
+    'settlement:' + id,
+    `ปฏิเสธสลิปค่าคอม ${formatSatang(row.amount)} ของ ${mechanicLabel(row.provider)}?`,
+    () => api('/admin/settlements/' + id + '/reject', {
       method: 'POST',
       body: JSON.stringify({ reason }),
-    });
-  } catch (error) {
-    alert(error.message);
-  }
-  await refreshAll();
+    }),
+  );
 }
 
 async function redispatch(id) {
@@ -833,6 +887,7 @@ async function setProviderStatus(id, status) {
 
 async function loadWithdrawals() {
   const withdrawals = await api('/admin/withdrawals?status=REQUESTED');
+  moneyRows.withdrawal = new Map(withdrawals.map((row) => [row.id, row]));
   el('withdrawals-body').innerHTML = withdrawals.length === 0
     ? '<tr><td colspan="5">ไม่มีคำขอเบิกเงิน</td></tr>'
     : withdrawals.map((withdrawal) => `
@@ -842,20 +897,33 @@ async function loadWithdrawals() {
         <td>${escapeHtml(withdrawal.promptPayId ? 'พร้อมเพย์ ' + withdrawal.promptPayId : (withdrawal.bankName || '') + ' ' + (withdrawal.bankAccountNumber || ''))}<br><small>${escapeHtml(withdrawal.bankAccountName || '')}</small></td>
         <td>${escapeHtml(new Date(withdrawal.requestedAt).toLocaleString('th-TH'))}</td>
         <td>
-          ${ownerActions(`<button onclick="resolveWithdrawal('${withdrawal.id}','transferred')">โอนแล้ว</button>
-          <button class="danger" onclick="resolveWithdrawal('${withdrawal.id}','reject')">ปฏิเสธ</button>`)}
+          ${ownerActions(`<button onclick="resolveWithdrawal(this,'${withdrawal.id}','transferred')">โอนแล้ว</button>
+          <button class="danger" onclick="resolveWithdrawal(this,'${withdrawal.id}','reject')">ปฏิเสธ</button>`)}
         </td>
       </tr>`).join('');
 }
 
-async function resolveWithdrawal(id, action) {
-  const note = prompt(action === 'reject' ? 'เหตุผลที่ปฏิเสธ' : 'หมายเหตุ (ไม่บังคับ)') || undefined;
-  if (action === 'reject' && note === undefined) return;
-  await api('/admin/withdrawals/' + id + '/' + action, {
-    method: 'POST',
-    body: JSON.stringify({ note }),
-  });
-  await Promise.all([loadWithdrawals(), loadSummary()]);
+async function resolveWithdrawal(button, id, action) {
+  const row = moneyRows.withdrawal.get(id);
+  if (!row) return;
+  const note = prompt(action === 'reject' ? 'เหตุผลที่ปฏิเสธ' : 'หมายเหตุ (ไม่บังคับ)');
+  // กดยกเลิกที่ช่องหมายเหตุ = ไม่ทำรายการ / ปฏิเสธต้องมีเหตุผล
+  if (note === null || (action === 'reject' && !note.trim())) return;
+  const account = row.promptPayId
+    ? 'พร้อมเพย์ ' + row.promptPayId
+    : `${row.bankName || ''} ${row.bankAccountNumber || ''}`.trim();
+  const message = action === 'reject'
+    ? `ปฏิเสธคำขอเบิก ${formatSatang(row.amount)} ของ ${mechanicLabel(row.provider)}?\nยอดจะคืนเข้ากระเป๋าช่าง`
+    : `ยืนยันว่าโอน ${formatSatang(row.amount)} ให้ ${mechanicLabel(row.provider)} (${account}) แล้ว?`;
+  await runMoneyAction(
+    button,
+    'withdrawal:' + id,
+    message,
+    () => api('/admin/withdrawals/' + id + '/' + action, {
+      method: 'POST',
+      body: JSON.stringify({ note: note.trim() || undefined }),
+    }),
+  );
 }
 
 async function loadOrders() {
