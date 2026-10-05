@@ -44,10 +44,13 @@ interface LineConfig {
 
 /**
  * ล็อกอินด้วย LINE (OAuth 2.1 + OpenID Connect) สำหรับเว็บลูกค้าและเว็บแอปช่าง
- * ใช้ LINE Login channel และ Callback URL เดียวกันทั้งสองแอป แยกด้วยค่า app ในคุกกี้ state
+ * ใช้ LINE Login channel และ Callback URL เดียวกันทั้งสองแอป แยกด้วยค่า app ใน state
  *
- * 1. /start สร้าง state + nonce เก็บในคุกกี้ที่ลงลายเซ็นไว้ แล้วพาไปหน้า LINE
- * 2. LINE พากลับมา /callback พร้อม code ตรวจ state กับคุกกี้ (กัน CSRF)
+ * 1. /start สร้าง state ที่ลงลายเซ็นไว้ (random.nonce.expires.app.hmac) ส่งให้ LINE
+ *    และเก็บค่าเดียวกันในคุกกี้ แล้วพาไปหน้า LINE
+ * 2. LINE พากลับมา /callback พร้อม code ตรวจลายเซ็นและอายุของ state
+ *    ถ้ามีคุกกี้ต้องตรงกับ state (กัน CSRF) ถ้าคุกกี้หาย (iPhone เปิดล็อกอินในเบราว์เซอร์ของ
+ *    แอป LINE แล้วกลับมาอีกเบราว์เซอร์) ยังล็อกอินต่อได้ด้วย state ที่ลายเซ็นถูกและยังไม่เคยใช้
  *    แลก code เป็น id_token แล้วให้ LINE ตรวจ id_token + nonce ให้
  * 3. พากลับเว็บพร้อม "ตั๋ว" อายุ 60 วินาที ใช้ได้ครั้งเดียว เว็บเอาตั๋วมาแลก accessToken
  *    (ไม่ใส่ accessToken ใน URL ตรงๆ เพราะ URL ไปอยู่ในประวัติเบราว์เซอร์และ log)
@@ -61,6 +64,8 @@ export class LineLoginService {
   private readonly logger = new Logger(LineLoginService.name);
   /** ตั๋วที่ใช้ไปแล้ว (เก็บจนหมดอายุ) กันการใช้ซ้ำ */
   private readonly usedTickets = new Map<string, number>();
+  /** state ที่ใช้ไปแล้ว (เก็บจนหมดอายุ) callback ซ้ำด้วย state เดิมไม่ผ่าน */
+  private readonly usedStates = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -109,13 +114,17 @@ export class LineLoginService {
     );
   }
 
-  /** คืน URL หน้า LINE และค่าคุกกี้ state ที่ต้องตั้งก่อน redirect */
+  /**
+   * คืน URL หน้า LINE และค่าคุกกี้ state ที่ต้องตั้งก่อน redirect
+   * state ที่ส่งให้ LINE กับคุกกี้เป็นค่าเดียวกัน: callback จึงรู้ว่าเริ่มจากแอปไหนแม้คุกกี้หาย
+   */
   start(app: LineApp = 'customer', now: number = Date.now()) {
     const config = this.requireConfig(app);
-    const state = randomBytes(16).toString('base64url');
+    const random = randomBytes(16).toString('base64url');
     const nonce = randomBytes(16).toString('base64url');
-    const body = `${state}.${nonce}.${now + STATE_TTL_MS}.${app}`;
-    const cookie = `${body}.${this.sign(body, 'line-state')}`;
+    const body = `${random}.${nonce}.${now + STATE_TTL_MS}.${app}`;
+    const state = `${body}.${this.sign(body, 'line-state')}`;
+    const cookie = state;
     const url = new URL(AUTHORIZE_URL);
     url.search = new URLSearchParams({
       response_type: 'code',
@@ -128,9 +137,31 @@ export class LineLoginService {
     return { url: url.toString(), cookie, maxAgeSeconds: STATE_TTL_MS / 1000 };
   }
 
-  /** แอปที่เริ่มล็อกอิน อ่านจากคุกกี้ (ยังไม่ตรวจลายเซ็น ใช้เลือกหน้าที่จะพากลับเท่านั้น) */
-  appFromCookie(cookie: string | undefined): LineApp {
-    return parseLineApp(cookie?.split('.')[3]);
+  /** แยก state ที่ลงลายเซ็นไว้ คืน null ถ้ารูปแบบหรือลายเซ็นไม่ถูก (ไม่ตรวจอายุ) */
+  private parseState(value: string | undefined) {
+    const parts = value?.split('.') ?? [];
+    if (parts.length !== 5) return null;
+    const [random, nonce, expires, appValue, signature] = parts;
+    if (
+      !this.verifySigned(
+        `${random}.${nonce}.${expires}.${appValue}`,
+        signature,
+        'line-state',
+      )
+    ) {
+      return null;
+    }
+    return { nonce, expires: Number(expires), app: parseLineApp(appValue) };
+  }
+
+  /**
+   * แอปที่จะพากลับเมื่อล็อกอินไม่สำเร็จ: เชื่อเฉพาะ state/คุกกี้ที่ลายเซ็นถูก
+   * อ่านไม่ได้ทั้งคู่จึงพากลับเว็บลูกค้า
+   */
+  failureApp(state: string | undefined, cookie: string | undefined): LineApp {
+    return (
+      this.parseState(state)?.app ?? this.parseState(cookie)?.app ?? 'customer'
+    );
   }
 
   /** หน้าเว็บที่จะพาผู้ใช้กลับไปเมื่อเกิดข้อผิดพลาด */
@@ -149,21 +180,21 @@ export class LineLoginService {
     if (query.error || !query.code || !query.state) {
       throw new UnauthorizedException('ผู้ใช้ยกเลิกหรือ LINE ส่งข้อมูลไม่ครบ');
     }
-    const parts = cookie?.split('.') ?? [];
-    if (parts.length !== 5) throw new UnauthorizedException('ไม่พบ state');
-    const [state, nonce, expires, appValue, signature] = parts;
-    if (
-      !this.verifySigned(
-        `${state}.${nonce}.${expires}.${appValue}`,
-        signature,
-        'line-state',
-      ) ||
-      state !== query.state ||
-      Number(expires) < now
-    ) {
-      throw new UnauthorizedException('state ไม่ตรงหรือหมดอายุ');
+    const parsed = this.parseState(query.state);
+    if (!parsed) throw new UnauthorizedException('state ลายเซ็นไม่ถูก');
+    if (parsed.expires < now) throw new UnauthorizedException('state หมดอายุ');
+    // มีคุกกี้ (เบราว์เซอร์เดิม) ต้องตรงกัน กันการยัด state ของคนอื่นมา
+    if (cookie !== undefined && cookie !== query.state) {
+      throw new UnauthorizedException('state ไม่ตรงกับคุกกี้');
     }
-    const app = parseLineApp(appValue);
+    for (const [used, expiry] of this.usedStates) {
+      if (expiry < now) this.usedStates.delete(used);
+    }
+    if (this.usedStates.has(query.state)) {
+      throw new UnauthorizedException('state นี้ถูกใช้ไปแล้ว');
+    }
+    this.usedStates.set(query.state, parsed.expires);
+    const { app, nonce } = parsed;
     const config = this.requireConfig(app);
 
     const tokenResponse = await fetch(TOKEN_URL, {

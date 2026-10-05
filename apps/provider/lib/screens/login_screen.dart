@@ -35,7 +35,9 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
         : Future.value(false);
     if (appState.lineLoginFailed) {
       appState.lineLoginFailed = false;
-      _error = 'เข้าสู่ระบบด้วย LINE ไม่สำเร็จ กรุณาลองใหม่';
+      // มักเกิดบน iPhone เมื่อเปิดลิงก์ในเบราว์เซอร์ของแอป LINE แล้วเด้งไปอีกเบราว์เซอร์
+      _error = 'เข้าสู่ระบบด้วย LINE ไม่สำเร็จ ลองใหม่อีกครั้ง '
+          'หรือเปิดลิงก์นี้ใน Safari/Chrome';
     }
   }
 
