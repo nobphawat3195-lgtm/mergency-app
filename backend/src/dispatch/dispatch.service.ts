@@ -19,6 +19,7 @@ import {
 } from '../common/constants';
 import { serializable } from '../common/transaction';
 import { WalletService } from '../wallet/wallet.service';
+import { mechanicDisplayName } from '../common/mechanic-name';
 
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
   OrderStatus.MATCHED,
@@ -333,7 +334,7 @@ export class DispatchService {
     void this.push.matched(
       attempt.order.customerId,
       attempt.order,
-      provider?.nickname ? `ช่าง${provider.nickname}` : 'ช่าง',
+      mechanicDisplayName(provider?.nickname),
     );
   }
 

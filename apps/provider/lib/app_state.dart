@@ -104,6 +104,12 @@ class ProviderAppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// เพิ่มขึ้นทุกครั้งที่งานของช่างเปลี่ยนจากหน้าอื่น (เช่น กดรับงานในหน้าแรก)
+  /// หน้างานของฉันฟังค่านี้แล้วโหลดใหม่ทันที โดยไม่ต้อง rebuild ทั้งแอป
+  final ValueNotifier<int> jobsRevision = ValueNotifier<int>(0);
+
+  void notifyJobsChanged() => jobsRevision.value++;
+
   void setOnline(bool value) {
     _isOnline = value;
     notifyListeners();
@@ -155,6 +161,7 @@ class ProviderAppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    jobsRevision.dispose();
     api.dispose();
     super.dispose();
   }

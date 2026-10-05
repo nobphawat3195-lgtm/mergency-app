@@ -209,10 +209,11 @@ export class OrdersService {
     });
   }
 
-  listForProvider(providerId: string) {
-    return this.prisma.order.findMany({
+  async listForProvider(providerId: string) {
+    const orders = await this.prisma.order.findMany({
       where: { providerId },
       include: {
+        customer: { select: { name: true, phone: true } },
         category: true,
         subService: true,
         photos: true,
@@ -231,6 +232,13 @@ export class OrdersService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    // เบอร์ลูกค้าให้ช่างโทรได้เฉพาะระหว่างงานยังไม่จบ งานจบแล้วไม่ต้องติดต่อกันอีก
+    return orders.map(({ customer, ...order }) =>
+      order.status === OrderStatus.COMPLETED ||
+      order.status === OrderStatus.CANCELLED
+        ? order
+        : { ...order, customer },
+    );
   }
 
   async cancelByCustomer(customerId: string, orderId: string) {

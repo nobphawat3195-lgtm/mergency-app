@@ -36,7 +36,7 @@ class ProviderTrustCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'ช่าง${provider.nickname}',
+                        provider.displayName,
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,

@@ -496,17 +496,23 @@ class FixGoApiClient {
     });
   }
 
+  /// บันทึกข้อมูลรับเงินทั้งชุด ช่องที่ว่างส่งเป็น null (ลบค่าเดิม) ไม่ส่งสตริงว่าง
   Future<void> updatePayoutInfo({
     String? bankName,
     String? bankAccountName,
     String? bankAccountNumber,
     String? promptPayId,
   }) async {
+    String? orNull(String? value) {
+      final trimmed = value?.trim();
+      return trimmed == null || trimmed.isEmpty ? null : trimmed;
+    }
+
     await _send('PATCH', '/providers/me/payout-info', body: {
-      if (bankName != null) 'bankName': bankName,
-      if (bankAccountName != null) 'bankAccountName': bankAccountName,
-      if (bankAccountNumber != null) 'bankAccountNumber': bankAccountNumber,
-      if (promptPayId != null) 'promptPayId': promptPayId,
+      'bankName': orNull(bankName),
+      'bankAccountName': orNull(bankAccountName),
+      'bankAccountNumber': orNull(bankAccountNumber),
+      'promptPayId': orNull(promptPayId),
     });
   }
 
