@@ -221,10 +221,80 @@ describe('LineLoginService', () => {
     });
 
     it('sends failed mechanic logins back to the mechanic web app', () => {
-      const { cookie } = service.start('provider', NOW);
-      expect(service.failureRedirect(service.appFromCookie(cookie))).toBe(
-        'https://fixer.fixgo.example/?line_error=1',
-      );
+      const { url, cookie } = service.start('provider', NOW);
+      expect(
+        service.failureRedirect(service.failureApp(stateFrom(url), cookie)),
+      ).toBe('https://fixer.fixgo.example/?line_error=1');
+      // คุกกี้หายก็ยังรู้จาก state ว่าเริ่มจากแอปช่าง
+      expect(service.failureApp(stateFrom(url), undefined)).toBe('provider');
     });
+
+    it('finishes a mechanic login without the cookie when the signed state is valid', async () => {
+      // iPhone: เริ่มในเบราว์เซอร์ของแอป LINE แล้วกลับมา callback ใน Safari คุกกี้จึงหาย
+      const { url } = service.start('provider', NOW);
+      lineResponds('Uprovider');
+      const redirect = await service.callback(
+        { code: 'c', state: stateFrom(url) },
+        undefined,
+        NOW + 5_000,
+      );
+      expect(
+        redirect.startsWith('https://fixer.fixgo.example/?line_ticket='),
+      ).toBe(true);
+      // nonce มาจาก state ที่ลงลายเซ็นไว้ ไม่ต้องพึ่งคุกกี้
+      const verifyBody = fetchMock.mock.calls[1][1].body as URLSearchParams;
+      expect(verifyBody.get('nonce')).toBe(
+        new URL(url).searchParams.get('nonce'),
+      );
+      expect(prisma.customer.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects a forged state without the cookie and still returns to the right app', async () => {
+      const { url } = service.start('provider', NOW);
+      const forged = stateFrom(url).replace(/\.[^.]+$/, '.AAAA');
+      await expect(
+        service.callback({ code: 'c', state: forged }, undefined, NOW),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(fetchMock).not.toHaveBeenCalled();
+      // ลายเซ็นไม่ถูก อ่านแอปไม่ได้: กลับเว็บลูกค้า
+      expect(service.failureApp(forged, undefined)).toBe('customer');
+      // state ปลอมแต่คุกกี้ของแอปช่างลายเซ็นถูก: กลับเว็บช่าง
+      const { cookie } = service.start('provider', NOW);
+      expect(service.failureApp(forged, cookie)).toBe('provider');
+    });
+
+    it('rejects a state with the app switched even without the cookie', async () => {
+      const { url } = service.start('customer', NOW);
+      const switched = stateFrom(url).replace('.customer.', '.provider.');
+      await expect(
+        service.callback({ code: 'c', state: switched }, undefined, NOW),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(service.failureApp(switched, undefined)).toBe('customer');
+    });
+  });
+
+  it('rejects an expired state without the cookie', async () => {
+    const { url } = service.start('customer', NOW);
+    await expect(
+      service.callback(
+        { code: 'c', state: stateFrom(url) },
+        undefined,
+        NOW + 11 * 60_000,
+      ),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts each state only once', async () => {
+    const { url } = service.start('customer', NOW);
+    lineResponds();
+    await service.callback(
+      { code: 'c', state: stateFrom(url) },
+      undefined,
+      NOW,
+    );
+    await expect(
+      service.callback({ code: 'c', state: stateFrom(url) }, undefined, NOW),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Query, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Logger,
+  Post,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { IsString, MaxLength } from 'class-validator';
 
@@ -25,6 +34,8 @@ function readCookie(request: Request, name: string): string | undefined {
 
 @Controller('auth/line')
 export class LineLoginController {
+  private readonly logger = new Logger(LineLoginController.name);
+
   constructor(private readonly line: LineLoginService) {}
 
   /** เว็บถามก่อนว่าจะแสดงปุ่ม "เข้าสู่ระบบด้วย LINE" ไหม (?app=provider สำหรับแอปช่าง) */
@@ -57,11 +68,15 @@ export class LineLoginController {
     try {
       const target = await this.line.callback(query, cookie);
       res.redirect(302, target);
-    } catch {
-      res.redirect(
-        302,
-        this.line.failureRedirect(this.line.appFromCookie(cookie)),
+    } catch (error) {
+      const app = this.line.failureApp(query.state, cookie);
+      // บอกแค่เหตุผล ห้าม log code/token/state/secret
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `LINE login failed (app=${app}, cookie=${cookie ? 'yes' : 'no'}` +
+          `${query.error ? `, line_error=${query.error.slice(0, 40)}` : ''}): ${reason}`,
       );
+      res.redirect(302, this.line.failureRedirect(app));
     }
   }
 
