@@ -179,6 +179,19 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
             loading: _loading,
             onPressed: _otpSent ? _verifyOtp : _requestOtp,
           ),
+          if (_otpSent) ...[
+            const SizedBox(height: FixGoSpacing.sm),
+            TextButton(
+              onPressed: _loading
+                  ? null
+                  : () => setState(() {
+                        _otpSent = false;
+                        _error = null;
+                        _codeController.clear();
+                      }),
+              child: const Text('เปลี่ยนเบอร์โทร'),
+            ),
+          ],
           const SizedBox(height: FixGoSpacing.md),
           LegalConsentText(api: ProviderAppScope.of(context).api),
         ],

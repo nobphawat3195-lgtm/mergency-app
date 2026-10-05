@@ -219,6 +219,13 @@ class ProviderSummary {
 
   bool get hasLivePosition => currentLat != null && currentLng != null;
 
+  /// ชื่อที่ลูกค้าเห็น: เติม "ช่าง" นำหน้า ยกเว้นชื่อเล่นที่ขึ้นต้นด้วย "ช่าง" อยู่แล้ว
+  String get displayName {
+    final name = nickname.trim();
+    if (name.isEmpty) return 'ช่าง';
+    return name.startsWith('ช่าง') ? name : 'ช่าง$name';
+  }
+
   factory ProviderSummary.fromJson(Map<String, dynamic> json) {
     return ProviderSummary(
       id: json['id'] as String,
@@ -274,6 +281,8 @@ class Order {
     this.cancelReason,
     this.paymentSlipSubmittedAt,
     this.paymentSlipRejectReason,
+    this.customerName,
+    this.customerPhone,
   });
 
   final String id;
@@ -317,6 +326,10 @@ class Order {
   /// ทีมงานตรวจแล้วสลิปไม่ผ่าน ลูกค้าต้องแนบใหม่
   final String? paymentSlipRejectReason;
 
+  /// ชื่อและเบอร์ลูกค้า ส่งมาให้ช่างเฉพาะงานที่ยังไม่จบ (งานจบแล้วเป็น null)
+  final String? customerName;
+  final String? customerPhone;
+
   bool get awaitingSlipReview => !isPaid && paymentSlipSubmittedAt != null;
 
   bool get isInspection => categorySlug == 'used-car-inspection';
@@ -330,6 +343,7 @@ class Order {
     final provider = json['provider'] as Map<String, dynamic>?;
     final payment = json['payment'] as Map<String, dynamic>?;
     final rating = json['rating'] as Map<String, dynamic>?;
+    final customer = json['customer'] as Map<String, dynamic>?;
     final photos = (json['photos'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map((photo) => photo['url'] as String)
@@ -374,6 +388,8 @@ class Order {
           ? DateTime.parse(payment!['slipSubmittedAt'] as String).toLocal()
           : null,
       paymentSlipRejectReason: payment?['slipRejectReason'] as String?,
+      customerName: customer?['name'] as String?,
+      customerPhone: customer?['phone'] as String?,
     );
   }
 }
@@ -486,6 +502,7 @@ class WalletEntry {
     required this.createdAt,
     this.memo,
     this.orderId,
+    this.withdrawalStatus,
   });
 
   final String id;
@@ -499,6 +516,9 @@ class WalletEntry {
   final String? memo;
   final String? orderId;
 
+  /// สถานะคำขอเบิก (REQUESTED / TRANSFERRED / REJECTED) เฉพาะรายการเบิกเงิน
+  final String? withdrawalStatus;
+
   factory WalletEntry.fromJson(Map<String, dynamic> json) {
     return WalletEntry(
       id: json['id'] as String,
@@ -507,6 +527,8 @@ class WalletEntry {
       createdAt: DateTime.parse(json['createdAt'] as String),
       memo: json['memo'] as String?,
       orderId: json['orderId'] as String?,
+      withdrawalStatus:
+          (json['withdrawal'] as Map<String, dynamic>?)?['status'] as String?,
     );
   }
 }

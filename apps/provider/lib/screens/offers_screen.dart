@@ -201,6 +201,7 @@ class _OffersScreenState extends State<OffersScreen> {
     try {
       await ProviderAppScope.of(context).api.acceptOffer(offer.orderId);
       if (!mounted) return;
+      ProviderAppScope.of(context).notifyJobsChanged();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('รับงานแล้ว ดูรายละเอียดในแท็บงานของฉัน')),
       );
