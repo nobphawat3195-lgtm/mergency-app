@@ -257,6 +257,8 @@ export class WalletService {
   listEntries(providerId: string) {
     return this.prisma.walletEntry.findMany({
       where: { providerId },
+      // รายการเบิกเงินแสดงสถานะว่าแอดมินโอนแล้วหรือยัง
+      include: { withdrawal: { select: { status: true } } },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });

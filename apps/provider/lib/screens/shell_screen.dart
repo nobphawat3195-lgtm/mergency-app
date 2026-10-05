@@ -7,6 +7,7 @@ import '../app_state.dart';
 import 'public_profile_screen.dart';
 import 'jobs_screen.dart';
 import 'offers_screen.dart';
+import 'payout_info_form.dart';
 import 'wallet_screen.dart';
 
 class ProviderShellScreen extends StatefulWidget {
@@ -21,12 +22,6 @@ class _ProviderShellScreenState extends State<ProviderShellScreen> {
   Timer? _heartbeatTimer;
   StreamSubscription<PushEvent>? _pushOpened;
   StreamSubscription<PushEvent>? _pushReceived;
-  late final List<Widget> _pages = [
-    OffersScreen(onOpenTab: (tab) => setState(() => _index = tab)),
-    const JobsScreen(),
-    const WalletScreen(),
-    const _ProviderProfileTab(),
-  ];
 
   @override
   void initState() {
@@ -91,7 +86,16 @@ class _ProviderShellScreenState extends State<ProviderShellScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _index, children: _pages),
+      // แท็บงาน/กระเป๋าเงินรู้ว่าตัวเองถูกเปิดอยู่ เพื่อโหลดใหม่ตอนเปิดและ poll ระหว่างเปิด
+      body: IndexedStack(
+        index: _index,
+        children: [
+          OffersScreen(onOpenTab: (tab) => setState(() => _index = tab)),
+          JobsScreen(active: _index == 1),
+          WalletScreen(active: _index == 2),
+          const _ProviderProfileTab(),
+        ],
+      ),
       bottomNavigationBar: DecoratedBox(
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: FixGoColors.hairline)),
@@ -156,79 +160,10 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
   }
 
   Future<void> _editPayoutInfo(Map<String, dynamic> profile) async {
-    final bankNameController =
-        TextEditingController(text: profile['bankName'] as String? ?? '');
-    final accountNameController = TextEditingController(
-        text: profile['bankAccountName'] as String? ?? '');
-    final accountNumberController = TextEditingController(
-      text: profile['bankAccountNumber'] as String? ?? '',
-    );
-    final promptPayController =
-        TextEditingController(text: profile['promptPayId'] as String? ?? '');
-
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('ข้อมูลรับเงิน'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: bankNameController,
-                decoration: const InputDecoration(labelText: 'ธนาคาร'),
-              ),
-              const SizedBox(height: FixGoSpacing.sm),
-              TextField(
-                controller: accountNameController,
-                decoration: const InputDecoration(labelText: 'ชื่อบัญชี'),
-              ),
-              const SizedBox(height: FixGoSpacing.sm),
-              TextField(
-                controller: accountNumberController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'เลขบัญชี'),
-              ),
-              const SizedBox(height: FixGoSpacing.sm),
-              TextField(
-                controller: promptPayController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'พร้อมเพย์'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('บันทึก'),
-          ),
-        ],
-      ),
-    );
-
-    if (saved != true || !mounted) return;
-
-    try {
-      await ProviderAppScope.of(context).api.updatePayoutInfo(
-            bankName: bankNameController.text.trim(),
-            bankAccountName: accountNameController.text.trim(),
-            bankAccountNumber: accountNumberController.text.trim(),
-            promptPayId: promptPayController.text.trim(),
-          );
-      if (!mounted) return;
-      setState(() {
-        _future = ProviderAppScope.of(context).api.getProviderProfile();
-      });
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
-    }
+    final api = ProviderAppScope.of(context).api;
+    final saved = await showPayoutInfoForm(context, api: api, profile: profile);
+    if (!saved || !mounted) return;
+    setState(() => _future = api.getProviderProfile());
   }
 
   @override
@@ -274,8 +209,7 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
                   leading: const Icon(Icons.account_balance_outlined),
                   title: const Text('ข้อมูลรับเงิน'),
                   subtitle: Text(
-                    profile['promptPayId'] != null ||
-                            profile['bankAccountNumber'] != null
+                    hasPayoutInfo(profile)
                         ? 'บันทึกแล้ว'
                         : 'ยังไม่ได้กรอก — ต้องกรอกก่อนกดเบิกเงิน',
                   ),

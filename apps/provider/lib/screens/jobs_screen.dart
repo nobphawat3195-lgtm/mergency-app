@@ -2,43 +2,93 @@ import 'dart:async';
 
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app_state.dart';
 import 'inspection_form_screen.dart';
 
 /// งานที่ช่างรับไว้แล้ว พร้อมปุ่มอัปเดตสถานะทีละขั้น
+///
+/// เว็บไม่มี push จึง poll ทุก 10 วินาทีระหว่างแท็บนี้เปิดอยู่ และโหลดใหม่ทันทีเมื่อเปิดแท็บ
+/// หรือเมื่อหน้าอื่นแจ้งว่างานเปลี่ยน ([ProviderAppState.jobsRevision])
 class JobsScreen extends StatefulWidget {
-  const JobsScreen({super.key});
+  const JobsScreen({super.key, this.active = true});
+
+  /// แท็บนี้กำลังแสดงอยู่หรือไม่ (IndexedStack เก็บทุกแท็บไว้พร้อมกัน)
+  final bool active;
 
   @override
   State<JobsScreen> createState() => _JobsScreenState();
 }
 
 class _JobsScreenState extends State<JobsScreen> {
-  Future<List<Order>>? _future;
+  static const _pollInterval = Duration(seconds: 10);
+
+  List<Order>? _orders;
+  String? _error;
+  Timer? _poll;
   StreamSubscription<PushEvent>? _pushSub;
+  ValueNotifier<int>? _jobsRevision;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _future ??= ProviderAppScope.of(context).api.listAssignedOrders();
+    final revision = ProviderAppScope.of(context).jobsRevision;
+    if (_jobsRevision != revision) {
+      _jobsRevision?.removeListener(_reloadQuietly);
+      _jobsRevision = revision..addListener(_reloadQuietly);
+    }
+    if (_orders == null && _error == null) unawaited(_reload());
     final push = PushNotifications.instance;
     _pushSub ??= push.onAny.where((event) => event.type != 'OFFER').listen((_) {
       if (mounted) unawaited(_reload());
     });
+    _syncPolling();
+  }
+
+  @override
+  void didUpdateWidget(JobsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) unawaited(_reload());
+    _syncPolling();
+  }
+
+  void _syncPolling() {
+    if (widget.active) {
+      _poll ??= Timer.periodic(_pollInterval, (_) => _reloadQuietly());
+    } else {
+      _poll?.cancel();
+      _poll = null;
+    }
   }
 
   @override
   void dispose() {
+    _poll?.cancel();
+    _jobsRevision?.removeListener(_reloadQuietly);
     _pushSub?.cancel();
     super.dispose();
   }
 
+  void _reloadQuietly() {
+    if (mounted) unawaited(_reload());
+  }
+
+  /// โหลดเงียบๆ เก็บรายการเดิมไว้ระหว่างรอ ไม่ให้จอกระพริบทุกรอบ poll
   Future<void> _reload() async {
-    setState(() {
-      _future = ProviderAppScope.of(context).api.listAssignedOrders();
-    });
-    await _future;
+    try {
+      final orders =
+          await ProviderAppScope.of(context).api.listAssignedOrders();
+      if (!mounted) return;
+      setState(() {
+        _orders = orders;
+        _error = null;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      // มีรายการเดิมอยู่แล้วก็แสดงต่อไป รอบถัดไปจะลองใหม่เอง
+      if (_orders == null) setState(() => _error = error.message);
+    }
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -183,6 +233,12 @@ class _JobsScreenState extends State<JobsScreen> {
     if (mounted) await _reload();
   }
 
+  /// งานที่ช่างต้องเดินทาง/ติดต่อลูกค้าอยู่
+  static bool _isActive(Order order) =>
+      order.status == OrderStatus.matched ||
+      order.status == OrderStatus.enRoute ||
+      order.status == OrderStatus.inProgress;
+
   Widget _buildAction(Order order) {
     if (order.status == OrderStatus.matched) {
       return FixGoButton(
@@ -296,13 +352,27 @@ class _JobsScreenState extends State<JobsScreen> {
       appBar: AppBar(title: const Text('งานของฉัน')),
       body: RefreshIndicator(
         onRefresh: _reload,
-        child: FutureBuilder<List<Order>>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
+        child: Builder(
+          builder: (context) {
+            final orders = _orders;
+            if (orders == null && _error != null) {
+              return ListView(
+                padding: const EdgeInsets.all(FixGoSpacing.lg),
+                children: [
+                  const SizedBox(height: 80),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: FixGoColors.error),
+                  ),
+                  const SizedBox(height: FixGoSpacing.md),
+                  FixGoSecondaryButton(label: 'ลองใหม่', onPressed: _reload),
+                ],
+              );
+            }
+            if (orders == null) {
               return const Center(child: CircularProgressIndicator());
             }
-            final orders = snapshot.data ?? const <Order>[];
             if (orders.isEmpty) {
               return ListView(
                 children: [
@@ -370,8 +440,18 @@ class _JobsScreenState extends State<JobsScreen> {
                           const SizedBox(height: FixGoSpacing.xs),
                           Text(
                             order.pickupAddress!,
-                            style: Theme.of(context).textTheme.bodySmall,
+                            style: _isActive(order)
+                                ? const TextStyle(fontWeight: FontWeight.w600)
+                                : Theme.of(context).textTheme.bodySmall,
                           ),
+                        ],
+                        if (_isActive(order)) ...[
+                          const SizedBox(height: FixGoSpacing.sm),
+                          _ContactActions(order: order),
+                        ],
+                        if (_isActive(order) && order.photoUrls.isNotEmpty) ...[
+                          const SizedBox(height: FixGoSpacing.sm),
+                          _ProblemPhotos(urls: order.photoUrls),
                         ],
                         if (order.isInspection && order.inspection != null) ...[
                           const SizedBox(height: FixGoSpacing.sm),
@@ -379,7 +459,7 @@ class _JobsScreenState extends State<JobsScreen> {
                         ],
                         if (order.note != null && order.note!.isNotEmpty) ...[
                           const SizedBox(height: FixGoSpacing.sm),
-                          Text('หมายเหตุ: ${order.note!}'),
+                          Text('หมายเหตุลูกค้า: ${order.note!}'),
                         ],
                         if (order.quoteStatus == QuoteStatus.rejected) ...[
                           const SizedBox(height: FixGoSpacing.sm),
@@ -440,6 +520,139 @@ class _InspectionInfo extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// ปุ่มนำทางไปจุดนัดหมายและโทรหาลูกค้า (เบอร์มาจาก backend เฉพาะงานที่ยังไม่จบ)
+class _ContactActions extends StatelessWidget {
+  const _ContactActions({required this.order});
+
+  final Order order;
+
+  Future<void> _navigate(BuildContext context) async {
+    final opened = await LocationService.openInMaps(
+      order.pickupLat,
+      order.pickupLng,
+    );
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('เปิดแผนที่ไม่ได้')));
+    }
+  }
+
+  Future<void> _call(BuildContext context, String phone) async {
+    final opened = await launchUrl(Uri(scheme: 'tel', path: phone));
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('โทรไม่ได้ เบอร์ลูกค้า $phone')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final phone = order.customerPhone;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (order.customerName != null && order.customerName!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: FixGoSpacing.xs),
+            child: Text(
+              'ลูกค้า: ${order.customerName}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+                onPressed: () => _navigate(context),
+                icon: const Icon(Icons.navigation_outlined),
+                label: const Text('นำทาง'),
+              ),
+            ),
+            if (phone != null && phone.isNotEmpty) ...[
+              const SizedBox(width: FixGoSpacing.sm),
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                  ),
+                  onPressed: () => _call(context, phone),
+                  icon: const Icon(Icons.call_outlined),
+                  label: const Text('โทรหาลูกค้า'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// รูปอาการรถที่ลูกค้าแนบตอนเรียกช่าง แตะเพื่อดูเต็มจอ
+class _ProblemPhotos extends StatelessWidget {
+  const _ProblemPhotos({required this.urls});
+
+  final List<String> urls;
+
+  void _open(BuildContext context, String url) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(FixGoSpacing.md),
+        child: InteractiveViewer(
+          child: Image.network(
+            url,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Padding(
+              padding: EdgeInsets.all(FixGoSpacing.lg),
+              child: Text('โหลดรูปไม่ได้'),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('รูปอาการรถ', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: FixGoSpacing.xs),
+        SizedBox(
+          height: 72,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: urls.length,
+            separatorBuilder: (_, __) => const SizedBox(width: FixGoSpacing.xs),
+            itemBuilder: (context, index) => GestureDetector(
+              onTap: () => _open(context, urls[index]),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(FixGoRadius.sm),
+                child: Image.network(
+                  urls[index],
+                  width: 72,
+                  height: 72,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 72,
+                    height: 72,
+                    color: FixGoColors.accentSoft,
+                    child: const Icon(Icons.broken_image_outlined),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

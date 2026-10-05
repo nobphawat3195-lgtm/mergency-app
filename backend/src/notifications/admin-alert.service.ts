@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+import { mechanicDisplayName } from '../common/mechanic-name';
+
 type FetchLike = (
   url: string,
   init: { method: string; headers: Record<string, string>; body: string },
@@ -135,7 +137,7 @@ export class AdminAlertService {
 
   settlementSubmitted(nickname: string, amountText: string) {
     return this.send(
-      `🧾 ช่าง ${nickname} โอนค่าบริการค้าง ${amountText} ตรวจยอดเข้าบัญชีแล้วกดยืนยันในหน้าแอดมิน`,
+      `🧾 ${mechanicDisplayName(nickname)} โอนค่าบริการค้าง ${amountText} ตรวจยอดเข้าบัญชีแล้วกดยืนยันในหน้าแอดมิน`,
     );
   }
 

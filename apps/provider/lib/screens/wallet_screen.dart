@@ -2,11 +2,15 @@ import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import 'payout_info_form.dart';
 import 'wallet_debt_card.dart';
 
 /// กระเป๋าเงินช่าง — ยอดคงเหลือหลังหักค่าบริการแพลตฟอร์มแล้ว กดขอเบิกได้ตลอดเวลา
 class WalletScreen extends StatefulWidget {
-  const WalletScreen({super.key});
+  const WalletScreen({super.key, this.active = true});
+
+  /// แท็บนี้กำลังแสดงอยู่หรือไม่ เปิดแท็บเมื่อไหร่โหลดยอดล่าสุดทันที
+  final bool active;
 
   @override
   State<WalletScreen> createState() => _WalletScreenState();
@@ -25,6 +29,12 @@ class _WalletScreenState extends State<WalletScreen> {
     if (_balance == null && _loading) {
       _reload();
     }
+  }
+
+  @override
+  void didUpdateWidget(WalletScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) _reload();
   }
 
   Future<void> _reload() async {
@@ -63,6 +73,27 @@ class _WalletScreenState extends State<WalletScreen> {
       );
       return;
     }
+
+    // ยังไม่มีบัญชีรับเงิน: เปิดฟอร์มให้กรอกก่อน แล้วค่อยขอเบิกต่อ
+    final api = ProviderAppScope.of(context).api;
+    try {
+      final profile = await api.getProviderProfile();
+      if (!mounted) return;
+      if (!hasPayoutInfo(profile)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('กรอกข้อมูลรับเงินก่อนขอเบิก')),
+        );
+        final saved =
+            await showPayoutInfoForm(context, api: api, profile: profile);
+        if (!saved || !mounted) return;
+      }
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
+    if (!mounted) return;
 
     final controller = TextEditingController(
       text: (balance / 100).toStringAsFixed(0),
@@ -124,6 +155,19 @@ class _WalletScreenState extends State<WalletScreen> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message)));
     }
+  }
+
+  /// รายการเบิกเงินบอกสถานะตามที่แอดมินทำ ไม่ใช่แค่ "กันยอด"
+  String _entryTitle(WalletEntry entry) {
+    if (entry.type == 'WITHDRAWAL') {
+      return switch (entry.withdrawalStatus) {
+        'TRANSFERRED' => 'เบิกเงิน · โอนแล้ว',
+        'REJECTED' => 'เบิกเงิน · ไม่อนุมัติ',
+        'REQUESTED' => 'เบิกเงิน · รอโอน',
+        _ => entry.memo ?? 'เบิกเงิน',
+      };
+    }
+    return entry.memo ?? entry.type;
   }
 
   @override
@@ -195,12 +239,14 @@ class _WalletScreenState extends State<WalletScreen> {
                     Text(_error!,
                         style: const TextStyle(color: FixGoColors.error)),
                   ],
-                  const SizedBox(height: FixGoSpacing.md),
-                  FixGoButton(
-                    label: 'ขอเบิกเงิน',
-                    icon: Icons.account_balance_wallet_outlined,
-                    onPressed: _withdraw,
-                  ),
+                  if ((_balance ?? 0) > 0) ...[
+                    const SizedBox(height: FixGoSpacing.md),
+                    FixGoButton(
+                      label: 'ขอเบิกเงิน',
+                      icon: Icons.account_balance_wallet_outlined,
+                      onPressed: _withdraw,
+                    ),
+                  ],
                   const SizedBox(height: FixGoSpacing.lg),
                   const Text(
                     'รายการล่าสุด',
@@ -217,7 +263,7 @@ class _WalletScreenState extends State<WalletScreen> {
                       Card(
                         margin: const EdgeInsets.only(bottom: FixGoSpacing.sm),
                         child: ListTile(
-                          title: Text(entry.memo ?? entry.type),
+                          title: Text(_entryTitle(entry)),
                           subtitle: Text(
                             '${entry.createdAt.day}/${entry.createdAt.month}/${entry.createdAt.year}',
                           ),

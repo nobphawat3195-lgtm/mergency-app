@@ -265,14 +265,42 @@ export class ProvidersService {
     providerId: string,
     dto: UpdatePayoutInfoDto,
   ): Promise<Provider> {
+    const current = await this.prisma.provider.findUnique({
+      where: { id: providerId },
+      select: {
+        bankName: true,
+        bankAccountName: true,
+        bankAccountNumber: true,
+        promptPayId: true,
+      },
+    });
+    if (!current) throw new NotFoundException('ไม่พบข้อมูลช่าง');
+    // ช่องที่ไม่ได้ส่งมาคงค่าเดิม (undefined) ส่วน null คือให้ลบ
+    const next = {
+      bankName:
+        dto.bankName === undefined ? current.bankName : dto.bankName,
+      bankAccountName:
+        dto.bankAccountName === undefined
+          ? current.bankAccountName
+          : dto.bankAccountName,
+      bankAccountNumber:
+        dto.bankAccountNumber === undefined
+          ? current.bankAccountNumber
+          : dto.bankAccountNumber,
+      promptPayId:
+        dto.promptPayId === undefined ? current.promptPayId : dto.promptPayId,
+    };
+    const hasBank = Boolean(
+      next.bankName && next.bankAccountName && next.bankAccountNumber,
+    );
+    if (!hasBank && !next.promptPayId) {
+      throw new BadRequestException(
+        'กรอกบัญชีธนาคารให้ครบ (ธนาคาร ชื่อบัญชี เลขบัญชี) หรือกรอกพร้อมเพย์ อย่างใดอย่างหนึ่ง',
+      );
+    }
     return this.prisma.provider.update({
       where: { id: providerId },
-      data: {
-        bankName: dto.bankName,
-        bankAccountName: dto.bankAccountName,
-        bankAccountNumber: dto.bankAccountNumber,
-        promptPayId: dto.promptPayId,
-      },
+      data: next,
     });
   }
 }

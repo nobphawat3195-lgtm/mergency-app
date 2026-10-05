@@ -353,6 +353,34 @@ async function main() {
     await request('PATCH', `/orders/${secondOrder.id}/start`, mechanic, undefined, 200);
     await request('POST', `/orders/${secondOrder.id}/complete`, mechanic, undefined, 201);
   });
+  await check('Assigned mechanic sees customer phone only while the job is open', async () => {
+    const open = (await request('POST', '/orders', customer, booking, 201)).body;
+    await request('POST', `/dispatch/offers/${open.id}/accept`, mechanic, undefined, 201);
+    const assigned = (await request('GET', '/orders/assigned', mechanic, undefined, 200)).body;
+    assert.equal(assigned.find((item) => item.id === open.id).customer.phone, '0800000001');
+    const done = assigned.find((item) => item.id === secondOrder.id);
+    assert.equal(done.status, 'COMPLETED');
+    assert.equal(done.customer, undefined);
+    await request('POST', `/orders/${open.id}/cancel`, customer, undefined, 201);
+    const after = (await request('GET', '/orders/assigned', mechanic, undefined, 200)).body;
+    assert.equal(after.find((item) => item.id === open.id).customer, undefined);
+  });
+  await check('Payout info turns blanks into null and needs a bank account or PromptPay', async () => {
+    const saved = (
+      await request('PATCH', '/providers/me/payout-info', mechanic, { promptPayId: '' }, 200)
+    ).body;
+    assert.equal(saved.promptPayId, null);
+    assert.equal(saved.bankAccountNumber, '1234567890');
+    const rejected = await request(
+      'PATCH',
+      '/providers/me/payout-info',
+      mechanic,
+      { bankName: '', bankAccountName: null, bankAccountNumber: '', promptPayId: '' },
+      400,
+    );
+    assert.match(JSON.stringify(rejected.body), /พร้อมเพย์/);
+    assert.equal((await prisma.provider.findUnique({ where: { id: provider.id } })).bankName, 'Test bank');
+  });
   await check('Signed image upload is write-once with correct content headers', async () => {
     slip = await uploadImage(customer, 'PAYMENT_SLIP');
   });
@@ -381,6 +409,8 @@ async function main() {
     await request('POST', `/admin/withdrawals/${second.id}/transferred`, owner, {}, 201);
     await request('POST', `/admin/withdrawals/${second.id}/transferred`, owner, {}, 400);
     assert.equal((await request('GET', '/wallet/balance', mechanic, undefined, 200)).body.balance, 2000);
+    const entries = (await request('GET', '/wallet/entries', mechanic, undefined, 200)).body;
+    assert.equal(entries.find((entry) => entry.withdrawalId === second.id).withdrawal.status, 'TRANSFERRED');
     await request('GET', '/admin/finance', owner, undefined, 200);
   });
   await check('Scheduled inspection stays unassigned and rejects invalid dates', async () => {

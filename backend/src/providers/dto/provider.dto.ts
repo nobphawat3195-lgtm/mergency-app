@@ -15,6 +15,8 @@ import {
   Min,
 } from 'class-validator';
 
+import { Transform } from 'class-transformer';
+
 import { THAI_PHONE } from '../../auth/dto/auth.dto';
 
 /** แบบฟอร์มลงทะเบียนช่าง — ฟิลด์ตรงกับฟอร์มจริงที่ใช้คัดกรองช่าง */
@@ -112,27 +114,42 @@ export class SetOnlineDto {
   isOnline!: boolean;
 }
 
-/** ข้อมูลรับเงิน กรอกหลังได้รับอนุมัติ ก่อนกดเบิกครั้งแรก */
+/** ช่องที่เว้นว่างหรือมีแต่ช่องว่างถือว่าลบค่านั้น (null) */
+const blankToNull = ({ value }: { value: unknown }) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+};
+
+/**
+ * ข้อมูลรับเงิน กรอกหลังได้รับอนุมัติ ก่อนกดเบิกครั้งแรก
+ * ช่องที่ไม่ส่งมาคงค่าเดิม ช่องที่ส่ง null หรือค่าว่างคือลบ
+ * หลังบันทึกต้องมีบัญชีธนาคารครบ (ธนาคาร+ชื่อบัญชี+เลขบัญชี) หรือพร้อมเพย์ อย่างใดอย่างหนึ่ง
+ */
 export class UpdatePayoutInfoDto {
   @IsOptional()
-  @IsString()
-  @Length(1, 80)
-  bankName?: string;
+  @Transform(blankToNull)
+  @IsString({ message: 'ชื่อธนาคารไม่ถูกต้อง' })
+  @MaxLength(80, { message: 'ชื่อธนาคารยาวเกิน 80 ตัวอักษร' })
+  bankName?: string | null;
 
   @IsOptional()
-  @IsString()
-  @Length(1, 120)
-  bankAccountName?: string;
+  @Transform(blankToNull)
+  @IsString({ message: 'ชื่อบัญชีไม่ถูกต้อง' })
+  @MaxLength(120, { message: 'ชื่อบัญชียาวเกิน 120 ตัวอักษร' })
+  bankAccountName?: string | null;
 
   @IsOptional()
-  @IsString()
-  @Length(1, 30)
-  bankAccountNumber?: string;
+  @Transform(blankToNull)
+  @IsString({ message: 'เลขบัญชีไม่ถูกต้อง' })
+  @MaxLength(30, { message: 'เลขบัญชียาวเกิน 30 ตัวอักษร' })
+  bankAccountNumber?: string | null;
 
   @IsOptional()
-  @IsString()
-  @Length(1, 30)
-  promptPayId?: string;
+  @Transform(blankToNull)
+  @IsString({ message: 'เลขพร้อมเพย์ไม่ถูกต้อง' })
+  @MaxLength(30, { message: 'เลขพร้อมเพย์ยาวเกิน 30 ตัวอักษร' })
+  promptPayId?: string | null;
 }
 
 /**

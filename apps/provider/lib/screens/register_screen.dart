@@ -951,10 +951,13 @@ class _PinCard extends StatelessWidget {
                 ),
                 if (pinned) ...[
                   const SizedBox(width: FixGoSpacing.sm),
-                  OutlinedButton.icon(
-                    onPressed: () => LocationService.openInMaps(lat!, lng!),
-                    icon: const Icon(Icons.map_outlined),
-                    label: const Text('ดูบนแผนที่'),
+                  // ธีมกำหนดความกว้างขั้นต่ำเป็น infinity ต้องห่อ Expanded ไม่งั้นปุ่มหายในแถว
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => LocationService.openInMaps(lat!, lng!),
+                      icon: const Icon(Icons.map_outlined),
+                      label: const Text('ดูบนแผนที่'),
+                    ),
                   ),
                 ],
               ],
