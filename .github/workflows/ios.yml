@@ -40,4 +40,12 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Build iOS (no codesign)
-        run: flutter build ios --release --no-codesign --dart-define=API_BASE_URL=${{ vars.API_BASE_URL || 'https://api.example.com' }}
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://api.example.com' }}
+        run: |
+          # ตัดช่องว่าง/ขึ้นบรรทัดใหม่หัวท้ายที่ติดมาตอนวางค่า และส่งผ่าน env ไม่แทรกค่าลงสคริปต์ตรงๆ
+          url="${API_BASE_URL//$'\r'/}"
+          url="${url//$'\n'/}"
+          url="${url#"${url%%[![:space:]]*}"}"
+          url="${url%"${url##*[![:space:]]}"}"
+          flutter build ios --release --no-codesign "--dart-define=API_BASE_URL=$url"
