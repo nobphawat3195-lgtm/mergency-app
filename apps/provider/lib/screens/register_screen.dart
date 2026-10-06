@@ -272,10 +272,51 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       if (widget.resubmit && mounted) Navigator.of(context).pop(true);
     } on ApiException catch (error) {
+      if (error.statusCode == 409 && !widget.resubmit && mounted) {
+        await _handleAlreadyRegistered(error.message);
+        return;
+      }
       setState(() => _error = error.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  /// บัญชี LINE นี้สมัครไว้แล้วจากเบราว์เซอร์อื่น: เข้าบัญชีนั้นเลยถ้าได้ ไม่งั้นพาไปล็อกอินใหม่
+  Future<void> _handleAlreadyRegistered(String message) async {
+    final appState = ProviderAppScope.of(context);
+    if (await appState.refreshPendingLineSession()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('บัญชีนี้สมัครไว้แล้ว เข้าสู่บัญชีเดิมให้แล้ว')),
+      );
+      return;
+    }
+    appState.loginNotice = message;
+    appState.signOut();
+  }
+
+  Future<void> _switchAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('ออกจากระบบ?'),
+        content: const Text(
+          'ข้อมูลที่กรอกไว้ในหน้านี้จะหายไป ถ้าเคยสมัครด้วยบัญชีอื่นแล้วให้เข้าสู่ระบบด้วยบัญชีนั้น',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('ยกเลิก'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('ออกจากระบบ'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) ProviderAppScope.of(context).signOut();
   }
 
   @override
@@ -289,6 +330,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
         child: ListView(
           padding: const EdgeInsets.all(FixGoSpacing.md),
           children: [
+            // เคยสมัครด้วยบัญชีอื่น หรือเบราว์เซอร์นี้จำบัญชีเก่าไว้ ให้ออกไปเข้าใหม่ได้
+            if (!widget.resubmit)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _submitting ? null : _switchAccount,
+                  icon: const Icon(Icons.logout, size: 18),
+                  label: const Text('ออกจากระบบ / ใช้บัญชีอื่น'),
+                ),
+              ),
             Text(
               'กรอกข้อมูลเพื่อให้ทีมงานส่งงานได้ตรงตามประเภทของช่าง',
               style: Theme.of(context).textTheme.bodySmall,

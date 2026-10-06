@@ -36,6 +36,11 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
       // มักเกิดบน iPhone เมื่อเปิดลิงก์ในเบราว์เซอร์ของแอป LINE แล้วเด้งไปอีกเบราว์เซอร์
       _error = lineLoginFailedMessage;
     }
+    final notice = appState.loginNotice;
+    if (notice != null) {
+      appState.loginNotice = null;
+      _error = notice;
+    }
   }
 
   Future<void> _loginWithLine() async {

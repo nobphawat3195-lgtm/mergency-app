@@ -12,7 +12,7 @@ class _EmptyCatalogApi extends FixGoApiClient {
   Future<List<VehicleType>> listVehicleTypes() async => [];
 }
 
-Future<void> _pumpRegister(WidgetTester tester) async {
+Future<ProviderAppState> _pumpRegister(WidgetTester tester) async {
   // จอสูงพอให้ทั้งฟอร์มอยู่ในหน้าเดียว (ListView สร้างเฉพาะส่วนที่เห็น)
   tester.view.physicalSize = const Size(800, 6000);
   tester.view.devicePixelRatio = 1;
@@ -27,6 +27,7 @@ Future<void> _pumpRegister(WidgetTester tester) async {
   );
   // แคตตาล็อกว่างจะแสดงวงหมุนค้าง จึงใช้ pump แทน pumpAndSettle
   await tester.pump(const Duration(milliseconds: 100));
+  return state;
 }
 
 void main() {
@@ -89,5 +90,19 @@ void main() {
     expect(find.text('ยังไม่ได้ปักหมุด'), findsOneWidget);
     expect(find.text('ใช้ตำแหน่งปัจจุบัน'), findsOneWidget);
     expect(find.text('ดูบนแผนที่'), findsNothing);
+  });
+
+  testWidgets('ออกจากระบบจากหน้าสมัครเพื่อใช้บัญชีอื่นได้', (tester) async {
+    final state = await _pumpRegister(tester);
+    state.api.accessToken = 'header.payload.signature';
+
+    await tester.tap(find.text('ออกจากระบบ / ใช้บัญชีอื่น'));
+    await tester.pump(const Duration(milliseconds: 300));
+    // ยืนยันก่อน เพราะข้อมูลที่กรอกไว้จะหาย
+    expect(find.text('ออกจากระบบ?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'ออกจากระบบ'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(state.isSignedIn, false);
   });
 }
