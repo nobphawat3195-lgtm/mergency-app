@@ -155,6 +155,48 @@ export class AdminService {
     });
   }
 
+  /**
+   * ข้อเสนอแนะจากลูกค้าหลังให้ดาว: นับตามตัวเลือก + ความเห็นล่าสุด 100 รายการ
+   * (นับจากทุกคำตอบ ไม่ใช่เฉพาะ 100 รายการล่าสุด)
+   */
+  async customerFeedback() {
+    const [total, grouped, recent] = await Promise.all([
+      this.prisma.serviceSuggestion.count(),
+      this.prisma.$queryRaw<{ choice: string; count: bigint }[]>`
+        SELECT unnest("choices") AS choice, COUNT(*) AS count
+        FROM "ServiceSuggestion"
+        GROUP BY choice`,
+      this.prisma.serviceSuggestion.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          choices: true,
+          otherText: true,
+          createdAt: true,
+          order: {
+            select: {
+              orderNo: true,
+              rating: { select: { score: true } },
+              subService: { select: { name: true } },
+            },
+          },
+        },
+      }),
+    ]);
+    return {
+      total,
+      counts: Object.fromEntries(
+        grouped.map((row) => [row.choice, Number(row.count)]),
+      ),
+      recent: recent.map(({ order, ...row }) => ({
+        ...row,
+        orderNo: order.orderNo,
+        score: order.rating?.score ?? null,
+        serviceName: order.subService.name,
+      })),
+    };
+  }
+
   listProviders(status?: ProviderStatus) {
     return this.prisma.provider.findMany({
       where: status ? { status } : undefined,

@@ -283,6 +283,8 @@ class Order {
     this.paymentSlipRejectReason,
     this.customerName,
     this.customerPhone,
+    this.suggestionChoices,
+    this.suggestionText,
   });
 
   final String id;
@@ -329,6 +331,12 @@ class Order {
   /// ชื่อและเบอร์ลูกค้า ส่งมาให้ช่างเฉพาะงานที่ยังไม่จบ (งานจบแล้วเป็น null)
   final String? customerName;
   final String? customerPhone;
+
+  /// คำตอบ "อยากให้ FixGo เพิ่มบริการหรือปรับอะไร" (null = ยังไม่ตอบ) ส่งมาเฉพาะแอปลูกค้า
+  final List<String>? suggestionChoices;
+  final String? suggestionText;
+
+  bool get suggestionSent => suggestionChoices != null;
 
   bool get awaitingSlipReview => !isPaid && paymentSlipSubmittedAt != null;
 
@@ -390,6 +398,14 @@ class Order {
       paymentSlipRejectReason: payment?['slipRejectReason'] as String?,
       customerName: customer?['name'] as String?,
       customerPhone: customer?['phone'] as String?,
+      suggestionChoices: json['suggestion'] is Map<String, dynamic>
+          ? ((json['suggestion'] as Map<String, dynamic>)['choices']
+                      as List<dynamic>? ??
+                  const [])
+              .cast<String>()
+          : null,
+      suggestionText: (json['suggestion'] as Map<String, dynamic>?)?['otherText']
+          as String?,
     );
   }
 }

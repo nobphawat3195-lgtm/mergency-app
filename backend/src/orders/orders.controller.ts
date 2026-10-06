@@ -19,6 +19,7 @@ import {
   ProposeQuoteDto,
   RateOrderDto,
   RespondQuoteDto,
+  ServiceSuggestionDto,
 } from './dto/order.dto';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
 import { JwtPayload } from '../auth/auth.service';
@@ -69,8 +70,13 @@ export class OrdersController {
 
   @Get(':id')
   @Roles(Role.CUSTOMER, Role.PROVIDER)
-  findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.orders.findAccessibleById(id, user);
+  async findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    const { suggestion, ...order } = await this.orders.findAccessibleById(
+      id,
+      user,
+    );
+    // ข้อเสนอแนะถึงทีม FixGo ช่างไม่ต้องเห็น
+    return user.role === Role.CUSTOMER ? { ...order, suggestion } : order;
   }
 
   /**
@@ -144,6 +150,16 @@ export class OrdersController {
   @Roles(Role.PROVIDER)
   complete(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.orders.completeByProvider(user.sub, id);
+  }
+
+  @Post(':id/suggestion')
+  @Roles(Role.CUSTOMER)
+  suggest(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: ServiceSuggestionDto,
+  ) {
+    return this.orders.suggest(user.sub, id, dto);
   }
 
   @Post(':id/rate')

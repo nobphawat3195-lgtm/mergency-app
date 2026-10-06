@@ -1,7 +1,9 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
+  IsIn,
   IsInt,
   IsLatitude,
   IsLongitude,
@@ -65,6 +67,28 @@ export class ProposeQuoteDto {
   @IsString()
   @Length(1, 500)
   note?: string;
+}
+
+/** ตัวเลือกด่วนของคำถาม "อยากให้ FixGo เพิ่มบริการหรือปรับอะไร" (แอปแสดงเป็นภาษาไทย) */
+export const SUGGESTION_CHOICES = [
+  'TOW_TRUCK',
+  'FASTER_ARRIVAL',
+  'LOWER_PRICE',
+  'MORE_AREAS',
+  'OTHER',
+] as const;
+
+export class ServiceSuggestionDto {
+  @IsArray()
+  @ArrayMaxSize(SUGGESTION_CHOICES.length)
+  @ArrayUnique()
+  @IsIn(SUGGESTION_CHOICES, { each: true, message: 'ตัวเลือกไม่ถูกต้อง' })
+  choices!: string[];
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 300, { message: 'ข้อความยาวได้ไม่เกิน 300 ตัวอักษร' })
+  otherText?: string;
 }
 
 export class RateOrderDto {

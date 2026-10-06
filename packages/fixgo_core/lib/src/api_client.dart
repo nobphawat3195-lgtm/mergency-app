@@ -419,6 +419,19 @@ class FixGoApiClient {
     await _send('DELETE', '/orders/$orderId/share');
   }
 
+  /// คำถามเสริมหลังให้ดาว (ไม่บังคับ ตอบได้ครั้งเดียว) ส่งถึงทีม FixGo ไม่ใช่ช่าง
+  Future<void> sendServiceSuggestion(
+    String orderId, {
+    required List<String> choices,
+    String? otherText,
+  }) async {
+    await _send('POST', '/orders/$orderId/suggestion', body: {
+      'choices': choices,
+      if (otherText != null && otherText.trim().isNotEmpty)
+        'otherText': otherText.trim(),
+    });
+  }
+
   Future<void> rateOrder(String orderId, int score, {String? comment}) async {
     await _send('POST', '/orders/$orderId/rate', body: {
       'score': score,

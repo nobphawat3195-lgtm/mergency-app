@@ -176,6 +176,13 @@ export class AdminController {
     return this.admin.setProviderStatus(id, dto.status, dto.note);
   }
 
+  // ---------- ข้อเสนอแนะจากลูกค้า ----------
+
+  @Get('feedback')
+  customerFeedback() {
+    return this.admin.customerFeedback();
+  }
+
   // ---------- งาน ----------
 
   @Get('orders')
