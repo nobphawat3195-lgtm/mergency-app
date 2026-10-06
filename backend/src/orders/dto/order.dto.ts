@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsInt,
   IsLatitude,
@@ -65,6 +66,22 @@ export class ProposeQuoteDto {
   @IsString()
   @Length(1, 500)
   note?: string;
+}
+
+/** รูปตอนปิดงาน (อัปโหลดผ่าน /uploads/presign scope ORDER ด้วยบัญชีช่างเอง) */
+export class CompleteOrderDto {
+  @IsArray({ message: 'กรุณาแนบรูปรถหลังซ่อมเสร็จอย่างน้อย 1 รูป' })
+  @ArrayMinSize(1, { message: 'กรุณาแนบรูปรถหลังซ่อมเสร็จอย่างน้อย 1 รูป' })
+  @ArrayMaxSize(5, { message: 'แนบรูปรถได้สูงสุด 5 รูป' })
+  @IsString({ each: true })
+  carPhotoUrls!: string[];
+
+  /** ใบเสร็จค่าอะไหล่หรือสลิป ไม่บังคับ */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(3, { message: 'แนบใบเสร็จได้สูงสุด 3 รูป' })
+  @IsString({ each: true })
+  receiptPhotoUrls?: string[];
 }
 
 export class RateOrderDto {

@@ -283,6 +283,8 @@ class Order {
     this.paymentSlipRejectReason,
     this.customerName,
     this.customerPhone,
+    this.carPhotoUrls = const [],
+    this.receiptPhotoUrls = const [],
   });
 
   final String id;
@@ -330,6 +332,12 @@ class Order {
   final String? customerName;
   final String? customerPhone;
 
+  /// รูปรถหลังซ่อมเสร็จที่ช่างแนบตอนปิดงาน
+  final List<String> carPhotoUrls;
+
+  /// ใบเสร็จ/สลิปที่ช่างแนบตอนปิดงาน (ไม่บังคับ)
+  final List<String> receiptPhotoUrls;
+
   bool get awaitingSlipReview => !isPaid && paymentSlipSubmittedAt != null;
 
   bool get isInspection => categorySlug == 'used-car-inspection';
@@ -348,6 +356,12 @@ class Order {
         .whereType<Map<String, dynamic>>()
         .map((photo) => photo['url'] as String)
         .toList();
+    final closePhotos = (json['closePhotos'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>();
+    List<String> closePhotosOf(String kind) => [
+          for (final photo in closePhotos)
+            if (photo['kind'] == kind) photo['url'] as String,
+        ];
 
     return Order(
       id: json['id'] as String,
@@ -390,6 +404,8 @@ class Order {
       paymentSlipRejectReason: payment?['slipRejectReason'] as String?,
       customerName: customer?['name'] as String?,
       customerPhone: customer?['phone'] as String?,
+      carPhotoUrls: closePhotosOf('CAR'),
+      receiptPhotoUrls: closePhotosOf('RECEIPT'),
     );
   }
 }

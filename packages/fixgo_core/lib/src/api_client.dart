@@ -588,8 +588,16 @@ class FixGoApiClient {
         body: {'quoteVersion': quoteVersion, 'priceProposed': priceProposed});
   }
 
-  Future<void> completeJob(String orderId) async {
-    await _send('POST', '/orders/$orderId/complete');
+  /// ปิดงาน: รูปรถหลังซ่อม 1-5 รูป (บังคับ) และใบเสร็จ/สลิปสูงสุด 3 รูป (ไม่บังคับ)
+  Future<void> completeJob(
+    String orderId, {
+    required List<String> carPhotoUrls,
+    List<String> receiptPhotoUrls = const [],
+  }) async {
+    await _send('POST', '/orders/$orderId/complete', body: {
+      'carPhotoUrls': carPhotoUrls,
+      if (receiptPhotoUrls.isNotEmpty) 'receiptPhotoUrls': receiptPhotoUrls,
+    });
   }
 
   // ---------- Wallet (ช่าง) ----------

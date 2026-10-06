@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app_state.dart';
+import 'close_job_screen.dart';
 import 'inspection_form_screen.dart';
 
 /// งานที่ช่างรับไว้แล้ว พร้อมปุ่มอัปเดตสถานะทีละขั้น
@@ -173,28 +174,10 @@ class _JobsScreenState extends State<JobsScreen> {
   }
 
   Future<void> _complete(Order order) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('ยืนยันงานเสร็จ'),
-        content: Text(
-          'ปิดงานด้วยราคาที่ลูกค้ายืนยันแล้ว '
-          '${formatSatang(order.priceProposed ?? order.priceEstimated)} ใช่ไหม',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยังไม่เสร็จ'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ยืนยันปิดงาน'),
-          ),
-        ],
-      ),
+    final closed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => CloseJobScreen(order: order)),
     );
-    if (confirmed != true || !mounted) return;
-    await _run(() => ProviderAppScope.of(context).api.completeJob(order.id));
+    if (closed == true && mounted) await _reload();
   }
 
   Future<void> _confirmCash(Order order) async {

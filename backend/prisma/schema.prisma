@@ -243,7 +243,7 @@ model Order {
   priceFinal     Int? // สตางค์ ใส่ตอนปิดงาน
   commissionRate Float // บันทึกเรตคอมมิชชัน ณ เวลาที่สร้างออเดอร์ (ค่าเริ่มต้น 0.35)
 
-  quoteVersion     Int @default(0)
+  quoteVersion     Int         @default(0)
   quoteStatus      QuoteStatus @default(NOT_REQUESTED)
   quoteNote        String?
   quoteProposedAt  DateTime?
@@ -266,6 +266,7 @@ model Order {
   vehicleType VehicleType     @relation(fields: [vehicleTypeId], references: [id])
 
   photos           OrderPhoto[]
+  closePhotos      OrderClosePhoto[]
   dispatchAttempts DispatchAttempt[]
   payment          Payment?
   walletEntries    WalletEntry[]
@@ -364,6 +365,24 @@ model InspectionItemResult {
   report InspectionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@unique([reportId, itemCode])
+}
+
+enum ClosePhotoKind {
+  CAR // รูปรถหลังซ่อมเสร็จ (บังคับอย่างน้อย 1 รูป)
+  RECEIPT // ใบเสร็จค่าอะไหล่/สลิป (ไม่บังคับ)
+}
+
+/// รูปที่ช่างแนบตอนปิดงาน ลูกค้าเห็นในหน้าติดตามงาน/ประวัติ แอดมินเห็นในรายการออเดอร์
+model OrderClosePhoto {
+  id        String         @id @default(uuid())
+  orderId   String
+  kind      ClosePhotoKind
+  url       String
+  createdAt DateTime       @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
 }
 
 model OrderPhoto {

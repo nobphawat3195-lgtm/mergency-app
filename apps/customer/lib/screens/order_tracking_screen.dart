@@ -287,6 +287,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                   const SizedBox(height: FixGoSpacing.md),
                 ],
                 _PriceCard(order: order),
+                if (order.carPhotoUrls.isNotEmpty ||
+                    order.receiptPhotoUrls.isNotEmpty) ...[
+                  const SizedBox(height: FixGoSpacing.md),
+                  _ClosePhotosCard(order: order),
+                ],
                 const SizedBox(height: FixGoSpacing.lg),
                 if (order.status == OrderStatus.completed && order.isPaid)
                   const Card(
@@ -571,6 +576,46 @@ class _QuoteCard extends StatelessWidget {
                 label: 'ยังไม่ยืนยัน ขอคุยกับช่าง',
                 destructive: true,
                 onPressed: responding ? null : onReject,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// รูปที่ช่างแนบตอนปิดงาน: รถหลังซ่อมเสร็จ และใบเสร็จ/สลิป (ถ้ามี)
+class _ClosePhotosCard extends StatelessWidget {
+  const _ClosePhotosCard({required this.order});
+
+  final Order order;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(FixGoSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'รูปจากช่างตอนปิดงาน',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: FixGoSpacing.sm),
+            if (order.carPhotoUrls.isNotEmpty)
+              PhotoStrip(
+                label: 'รถหลังซ่อมเสร็จ',
+                urls: order.carPhotoUrls,
+                size: 88,
+              ),
+            if (order.receiptPhotoUrls.isNotEmpty) ...[
+              const SizedBox(height: FixGoSpacing.sm),
+              PhotoStrip(
+                label: 'ใบเสร็จ / สลิป',
+                urls: order.receiptPhotoUrls,
+                size: 88,
               ),
             ],
           ],

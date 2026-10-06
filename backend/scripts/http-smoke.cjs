@@ -59,6 +59,11 @@ async function request(method, route, token, body, expected) {
   if (expected !== undefined) assert.equal(response.status, expected, `${method} ${route}: ${text}`);
   return { status: response.status, body: result, headers: response.headers };
 }
+/** ปิดงาน: แนบรูปรถหลังซ่อมที่ช่างอัปโหลดเอง 1 รูป */
+async function closeJob(token, orderId, expected) {
+  const carPhotoUrls = [await uploadImage(token, 'ORDER')];
+  return request('POST', `/orders/${orderId}/complete`, token, { carPhotoUrls }, expected);
+}
 async function check(name, run) {
   await run();
   passed += 1;
@@ -342,7 +347,31 @@ async function main() {
   });
   await check('Complete and confirm cash twice without duplicate commission', async () => {
     await request('PATCH', `/orders/${order.id}/start`, mechanic, undefined, 200);
-    await request('POST', `/orders/${order.id}/complete`, mechanic, undefined, 201);
+    // ต้องมีรูปรถหลังซ่อมอย่างน้อย 1 รูป (สูงสุด 5) รูปต้องเป็นของช่างเอง
+    const noPhoto = await request('POST', `/orders/${order.id}/complete`, mechanic, undefined, 400);
+    assert.ok(String(noPhoto.body.message).includes('กรุณาแนบรูปรถหลังซ่อมเสร็จอย่างน้อย 1 รูป'));
+    await request('POST', `/orders/${order.id}/complete`, mechanic, { carPhotoUrls: [] }, 400);
+    const car = await uploadImage(mechanic, 'ORDER');
+    const receipt = await uploadImage(mechanic, 'ORDER');
+    await request('POST', `/orders/${order.id}/complete`, mechanic, { carPhotoUrls: Array(6).fill(car) }, 400);
+    const customerPhoto = await uploadImage(customer, 'ORDER');
+    await request('POST', `/orders/${order.id}/complete`, mechanic, { carPhotoUrls: [customerPhoto] }, 400);
+    await request(
+      'POST',
+      `/orders/${order.id}/complete`,
+      mechanic,
+      { carPhotoUrls: [car], receiptPhotoUrls: [receipt] },
+      201,
+    );
+    const closed = (await request('GET', `/orders/${order.id}`, customer, undefined, 200)).body;
+    assert.deepEqual(closed.closePhotos, [
+      { kind: 'CAR', url: car },
+      { kind: 'RECEIPT', url: receipt },
+    ]);
+    const history = (await request('GET', '/orders/mine', customer, undefined, 200)).body;
+    assert.equal(history.find((o) => o.id === order.id).closePhotos.length, 2);
+    const adminOrders = (await request('GET', '/admin/orders', staff, undefined, 200)).body;
+    assert.equal(adminOrders.find((o) => o.id === order.id).closePhotos.length, 2);
     for (let i = 0; i < 2; i++)
       await request('POST', `/payments/orders/${order.id}/cash/confirm`, mechanic, undefined, 201);
     assert.equal((await request('GET', '/wallet/balance', mechanic, undefined, 200)).body.balance, -3500);
@@ -367,7 +396,7 @@ async function main() {
       201,
     );
     await request('PATCH', `/orders/${secondOrder.id}/start`, mechanic, undefined, 200);
-    await request('POST', `/orders/${secondOrder.id}/complete`, mechanic, undefined, 201);
+    await closeJob(mechanic, secondOrder.id, 201);
   });
   await check('Assigned mechanic sees customer phone only while the job is open', async () => {
     const open = (await request('POST', '/orders', customer, booking, 201)).body;
@@ -475,7 +504,7 @@ async function main() {
     await request('POST', `/dispatch/offers/${inspected.id}/accept`, mechanic, undefined, 201);
     await request('PATCH', `/orders/${inspected.id}/en-route`, mechanic, undefined, 200);
     await request('PATCH', `/orders/${inspected.id}/start`, mechanic, undefined, 200);
-    await request('POST', `/orders/${inspected.id}/complete`, mechanic, undefined, 400);
+    await closeJob(mechanic, inspected.id, 400);
     await request('POST', `/orders/${inspected.id}/inspection/submit`, mechanic, undefined, 400);
     const checklist = (await request('GET', '/inspections/checklist', mechanic, undefined, 200)).body;
     const picture = await uploadImage(mechanic, 'INSPECTION');
@@ -524,7 +553,7 @@ async function main() {
     assert.equal(report.verdict, 'RECOMMENDED');
     assert.equal(report.items.length, items.length);
     await request('PATCH', `/orders/${inspected.id}/inspection`, mechanic, { summary: 'Cannot change' }, 400);
-    await request('POST', `/orders/${inspected.id}/complete`, mechanic, undefined, 201);
+    await closeJob(mechanic, inspected.id, 201);
     await request('POST', `/payments/orders/${inspected.id}/cash/confirm`, mechanic, undefined, 201);
     await request('DELETE', '/account', mechanic, undefined, 409);
   });
