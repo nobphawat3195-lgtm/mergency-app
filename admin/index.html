@@ -132,6 +132,15 @@
   .tags { display: flex; flex-wrap: wrap; gap: 6px; }
   .tag { background: #ECF8F1; border-radius: 999px; padding: 2px 10px; font-size: 13px; }
   .tools { display: flex; flex-wrap: wrap; gap: 8px; }
+  .catalog { display: grid; gap: 12px; }
+  .catalog-cat { border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; }
+  .catalog-cat.closed { background: #F7F8F8; }
+  .catalog-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .catalog-subs { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .catalog-subs li { padding-left: 14px; border-left: 3px solid var(--border); }
+  .pill { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px; font-weight: 700; }
+  .pill.on { background: #ECF8F1; color: #0B5F45; }
+  .pill.off { background: #FDECEC; color: var(--error); }
   .tools img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; border: 1px solid #D5E8DE; }
   .plate { border: 2px solid #122821; border-radius: 6px; padding: 1px 8px; font-weight: 800; }
   .line-note { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: #FFF4DB; color: #7A4B00; font-size: 14px; }
@@ -254,6 +263,11 @@
     <div class="card">
       <h2>ช่างรออนุมัติ <span class="muted">(ตรวจรูปหน้า เครื่องมือ และบริการที่รับ ก่อนกดอนุมัติ)</span></h2>
       <div id="providers-body" class="applicants"></div>
+    </div>
+
+    <div class="card" id="catalog-card">
+      <h2>หมวดบริการ <span class="muted">(ปิดหมวดที่ยังไม่มีช่าง ลูกค้าจะไม่เห็นและสั่งไม่ได้ ช่างสมัครหมวดที่ปิดไม่ได้)</span></h2>
+      <div id="catalog-body" class="catalog"></div>
     </div>
 
     <div class="card">
@@ -428,7 +442,7 @@ async function showDashboard() {
 
 async function refreshAll() {
   await Promise.all([
-    loadSummary(), loadNoMatch(), loadSlips(), loadSettlements(), loadProviders(), loadWithdrawals(), loadOrders(),
+    loadSummary(), loadNoMatch(), loadSlips(), loadSettlements(), loadProviders(), loadCatalog(), loadWithdrawals(), loadOrders(),
     ...(isOwner() ? [loadFinance(), loadTeam(), loadAudit()] : []),
   ]);
 }
@@ -503,6 +517,8 @@ const AUDIT_LABELS = {
   WITHDRAWAL_REJECT: 'ปฏิเสธคำขอเบิก',
   ADMIN_CREATE: 'เพิ่มบัญชีแอดมิน',
   ADMIN_UPDATE: 'แก้ไขบัญชีแอดมิน',
+  CATEGORY_ACTIVE: 'เปิด/ปิดหมวดบริการ',
+  SUB_SERVICE_ACTIVE: 'เปิด/ปิดบริการย่อย',
 };
 
 async function loadAudit() {
@@ -883,6 +899,59 @@ async function setProviderStatus(id, status) {
     body: JSON.stringify(note ? { status, note: note.trim() } : { status }),
   });
   await Promise.all([loadProviders(), loadSummary()]);
+}
+
+// ---------- หมวดบริการ ----------
+let catalogRows = new Map();
+
+async function loadCatalog() {
+  const categories = await api('/admin/catalog');
+  catalogRows = new Map();
+  el('catalog-body').innerHTML = categories.length === 0
+    ? '<p class="muted">ยังไม่มีหมวดบริการ</p>'
+    : categories.map((category) => {
+      catalogRows.set('category:' + category.id, category);
+      const mechanics = category._count?.providers ?? 0;
+      const subs = (category.subServices || []).map((sub) => {
+        catalogRows.set('sub:' + sub.id, sub);
+        return `
+          <li class="catalog-row">
+            <span>${escapeHtml(sub.name)} <span class="pill ${sub.active ? 'on' : 'off'}">${sub.active ? 'เปิด' : 'ปิด'}</span></span>
+            <button class="ghost" onclick="toggleCatalog(this, 'sub', '${escapeHtml(sub.id)}')">${sub.active ? 'ปิดบริการนี้' : 'เปิดบริการนี้'}</button>
+          </li>`;
+      }).join('');
+      return `
+        <div class="catalog-cat${category.active ? '' : ' closed'}">
+          <div class="catalog-row">
+            <span><strong>${escapeHtml(category.name)}</strong>
+              <span class="pill ${category.active ? 'on' : 'off'}">${category.active ? 'เปิดรับงาน' : 'ปิดอยู่'}</span><br>
+              <small class="muted">ช่างที่อนุมัติแล้ว ${escapeHtml(mechanics)} คน${mechanics === 0 && category.active ? ' · ยังไม่มีช่าง ควรปิดไว้ก่อน' : ''}</small></span>
+            <button class="${category.active ? 'danger' : ''}" onclick="toggleCatalog(this, 'category', '${escapeHtml(category.id)}')">${category.active ? 'ปิดหมวดนี้' : 'เปิดหมวดนี้'}</button>
+          </div>
+          ${subs ? `<ul class="catalog-subs">${subs}</ul>` : ''}
+        </div>`;
+    }).join('');
+}
+
+async function toggleCatalog(button, kind, id) {
+  const row = catalogRows.get(kind + ':' + id);
+  if (!row) return;
+  const next = !row.active;
+  const what = kind === 'category' ? `หมวด "${row.name}"` : `บริการ "${row.name}"`;
+  const effect = next
+    ? 'ลูกค้าจะเห็นและสั่งได้ทันที'
+    : 'ลูกค้าจะไม่เห็นและสั่งไม่ได้ (งานที่สั่งไปแล้วยังทำต่อตามปกติ)';
+  if (!confirm(`${next ? 'เปิด' : 'ปิด'}${what}?\n${effect}`)) return;
+  button.disabled = true;
+  try {
+    await api(`/admin/catalog/${kind === 'category' ? 'categories' : 'sub-services'}/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ active: next }),
+    });
+  } catch (error) {
+    alert(error.message);
+  }
+  await loadCatalog();
 }
 
 async function loadWithdrawals() {

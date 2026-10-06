@@ -60,6 +60,16 @@ export class ProvidersService {
       throw new BadRequestException('บัญชีนี้ลงทะเบียนเป็นช่างไว้แล้ว');
     }
 
+    // หมวดที่แอดมินปิดไว้ (แอปเปิดค้างจากก่อนปิด) สมัครรับไม่ได้
+    const openCategories = await this.prisma.serviceCategory.count({
+      where: { id: { in: dto.categoryIds }, active: true },
+    });
+    if (openCategories !== new Set(dto.categoryIds).size) {
+      throw new BadRequestException(
+        'มีหมวดบริการที่ปิดรับสมัครชั่วคราว กรุณาเลือกหมวดใหม่',
+      );
+    }
+
     const selfDeclaredPhone = Boolean(user.lineUserId || existing?.lineUserId);
     const phone = selfDeclaredPhone
       ? (dto.phone ?? existing?.phone ?? '')

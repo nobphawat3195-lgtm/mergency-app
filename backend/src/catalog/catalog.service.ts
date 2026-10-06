@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -51,8 +55,12 @@ export class CatalogService {
       db.vehicleType.findUnique({ where: { id: vehicleTypeId } }),
     ]);
 
-    if (!subService || !subService.active || !subService.category.active)
-      throw new NotFoundException('ไม่พบบริการย่อยนี้');
+    if (!subService) throw new NotFoundException('ไม่พบบริการย่อยนี้');
+    // แอดมินปิดหมวด/บริการไว้ (เช่น ยังไม่มีช่างรับ) ลูกค้าที่เปิดแอปค้างไว้ก็สั่งไม่ได้
+    if (!subService.active || !subService.category.active)
+      throw new BadRequestException(
+        'บริการนี้ปิดรับงานชั่วคราว กรุณาเลือกบริการอื่น',
+      );
     if (!vehicleType || !vehicleType.active)
       throw new NotFoundException('ไม่พบประเภทรถนี้');
 
