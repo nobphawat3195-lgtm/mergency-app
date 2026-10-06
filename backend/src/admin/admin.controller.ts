@@ -183,6 +183,13 @@ export class AdminController {
     return this.admin.listOrders(status);
   }
 
+  /** อ่านแชทลูกค้า-ช่างของงานนี้ (บันทึกทุกครั้งว่าใครเปิดอ่าน) */
+  @Get('orders/:id/messages')
+  @Audit('ORDER_CHAT_READ', 'order')
+  listOrderMessages(@Param('id') id: string) {
+    return this.admin.listOrderMessages(id);
+  }
+
   @Post('orders/:id/redispatch')
   @Audit('ORDER_REDISPATCH', 'order')
   redispatch(@Param('id') id: string) {

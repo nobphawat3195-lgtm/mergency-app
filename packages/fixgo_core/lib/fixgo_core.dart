@@ -19,6 +19,7 @@ export 'src/token_store.dart';
 export 'src/widgets/fixgo_button.dart';
 export 'src/widgets/line_login.dart';
 export 'src/widgets/map_pin_picker.dart';
+export 'src/widgets/order_chat.dart';
 export 'src/widgets/order_status_chip.dart';
 export 'src/widgets/promptpay_qr_panel.dart';
 export 'src/widgets/step_progress.dart';

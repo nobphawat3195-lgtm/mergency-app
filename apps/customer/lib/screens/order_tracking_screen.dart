@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app_state.dart';
+import '../chat_image.dart';
 import 'inspection_report_screen.dart';
 import 'tracking/live_map_card.dart';
 import 'tracking/provider_trust_card.dart';
@@ -107,14 +108,44 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
       final order =
           await AppStateScope.of(context).api.getOrder(widget.orderId);
       if (!mounted) return;
+      final previous = _order;
       setState(() {
         _order = order;
         _error = null;
       });
+      // ข้อความใหม่จากช่างระหว่างเปิดหน้านี้: เสียงสั้น + แถบแจ้ง (ไม่ดังตอนเปิดหน้าครั้งแรก)
+      if (previous != null && order.chatUnread > previous.chatUnread) {
+        unawaited(ChatChime.play());
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('มีข้อความใหม่จากช่าง'),
+            action: SnackBarAction(label: 'เปิดแชท', onPressed: _openChat),
+          ),
+        );
+      }
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() => _error = error.message);
     }
+  }
+
+  Future<void> _openChat() async {
+    final order = _order;
+    if (order == null) return;
+    final name = order.provider?.nickname;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OrderChatScreen(
+          api: AppStateScope.of(context).api,
+          orderId: order.id,
+          me: ChatSender.customer,
+          title: name == null ? 'แชทกับช่าง' : 'แชทกับช่าง$name',
+          pickImage: pickChatImage,
+        ),
+      ),
+    );
+    // กลับมาแล้ว badge ต้องเป็น 0 (เปิดอ่านแล้ว)
+    if (mounted) await _refresh();
   }
 
   Future<void> _cancel() async {
@@ -259,6 +290,14 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                     ProviderTrustCard(provider: order.provider!),
                     const SizedBox(height: FixGoSpacing.md),
                   ],
+                ],
+                if (order.hasChat) ...[
+                  ChatBadgeButton(
+                    label: order.chatOpen ? 'แชทกับช่าง' : 'ดูแชทย้อนหลัง',
+                    unread: order.chatUnread,
+                    onPressed: _openChat,
+                  ),
+                  const SizedBox(height: FixGoSpacing.md),
                 ],
                 if (_isActive(order)) ...[
                   SafetyActions(

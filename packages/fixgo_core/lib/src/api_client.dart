@@ -412,6 +412,34 @@ class FixGoApiClient {
     });
   }
 
+  // ---------- Chat ----------
+
+  /// เปิดแชทของงาน: ข้อความทั้งหมด และส่งต่อได้ไหม (เรียกแล้วนับว่าอ่านแล้ว)
+  Future<({bool canSend, List<ChatMessage> messages})> getOrderChat(
+    String orderId,
+  ) async {
+    final result =
+        await _send('GET', '/orders/$orderId/messages') as Map<String, dynamic>;
+    return (
+      canSend: result['canSend'] as bool? ?? false,
+      messages: (result['messages'] as List<dynamic>? ?? const [])
+          .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<ChatMessage> sendOrderMessage(
+    String orderId, {
+    String? text,
+    String? imageUrl,
+  }) async {
+    final result = await _send('POST', '/orders/$orderId/messages', body: {
+      if (text != null) 'text': text,
+      if (imageUrl != null) 'imageUrl': imageUrl,
+    }) as Map<String, dynamic>;
+    return ChatMessage.fromJson(result);
+  }
+
   // ---------- Provider ----------
 
   Future<({String accessToken, bool hasProfile})> registerProvider(

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../app_state.dart';
+import '../chat_image.dart';
 import 'wallet_debt_card.dart';
 import 'register_screen.dart';
 
@@ -140,6 +141,23 @@ class _OffersScreenState extends State<OffersScreen> {
       ]);
       if (!mounted) return;
       final orders = results[1] as List<Order>;
+      // ลูกค้าส่งแชทมาระหว่างช่างอยู่หน้าหลัก: เสียงสั้น + แถบแจ้งพร้อมปุ่มเปิดแชท
+      if (state.trackChatUnread(orders)) {
+        final chatting =
+            orders.where((order) => order.chatUnread > 0).firstOrNull;
+        unawaited(ChatChime.play());
+        if (chatting != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('มีข้อความใหม่จากลูกค้า'),
+              action: SnackBarAction(
+                label: 'เปิดแชท',
+                onPressed: () => _openChat(chatting),
+              ),
+            ),
+          );
+        }
+      }
       setState(() {
         _offers = results[0] as List<JobOffer>;
         _activeJob = orders
@@ -165,6 +183,15 @@ class _OffersScreenState extends State<OffersScreen> {
         _error = error.message;
       });
     }
+  }
+
+  Future<void> _openChat(Order order) async {
+    await openCustomerChat(
+      context,
+      api: ProviderAppScope.of(context).api,
+      order: order,
+    );
+    if (mounted) await _refresh();
   }
 
   Future<void> _resubmit() async {
@@ -315,7 +342,20 @@ class _OffersScreenState extends State<OffersScreen> {
                       actionLabel:
                           _activeJob == null ? null : 'ดูรายละเอียดงาน',
                       onAction: () => widget.onOpenTab?.call(1),
-                      child: _JobProgress(order: _activeJob),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _JobProgress(order: _activeJob),
+                          if (_activeJob?.hasChat ?? false) ...[
+                            const SizedBox(height: FixGoSpacing.sm),
+                            ChatBadgeButton(
+                              label: 'แชทกับลูกค้า',
+                              unread: _activeJob!.chatUnread,
+                              onPressed: () => _openChat(_activeJob!),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: FixGoSpacing.md),
                     _SectionCard(

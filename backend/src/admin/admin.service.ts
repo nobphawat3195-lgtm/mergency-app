@@ -155,6 +155,27 @@ export class AdminService {
     });
   }
 
+  /** แชทของงาน ให้แอดมินเปิดอ่านกรณีมีปัญหา (controller บันทึก audit ทุกครั้งที่เปิด) */
+  async listOrderMessages(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, orderNo: true },
+    });
+    if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
+    const messages = await this.prisma.orderMessage.findMany({
+      where: { orderId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        sender: true,
+        text: true,
+        imageUrl: true,
+        createdAt: true,
+      },
+    });
+    return { orderNo: order.orderNo, messages };
+  }
+
   listProviders(status?: ProviderStatus) {
     return this.prisma.provider.findMany({
       where: status ? { status } : undefined,

@@ -110,6 +110,20 @@ class ProviderAppState extends ChangeNotifier {
 
   void notifyJobsChanged() => jobsRevision.value++;
 
+  final Map<String, int> _chatUnread = {};
+
+  /// จำจำนวนข้อความที่ยังไม่อ่านของแต่ละงาน คืน true เมื่อมีข้อความใหม่เพิ่มจากรอบก่อน
+  /// หน้าหลักและหน้างานของฉัน poll พร้อมกันได้ แต่เสียงแจ้งเตือนดังครั้งเดียว
+  bool trackChatUnread(Iterable<Order> orders) {
+    var increased = false;
+    for (final order in orders) {
+      final before = _chatUnread[order.id];
+      if (before != null && order.chatUnread > before) increased = true;
+      _chatUnread[order.id] = order.chatUnread;
+    }
+    return increased;
+  }
+
   void setOnline(bool value) {
     _isOnline = value;
     notifyListeners();

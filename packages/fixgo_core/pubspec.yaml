@@ -27,6 +27,8 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   flutter_web_auth_2: ^5.1.0
+  # ^6.5 ยัง build ได้บน Flutter 3.35 (deploy/web.Dockerfile)
+  audioplayers: ^6.5.0
 
 dev_dependencies:
   flutter_test:
@@ -40,6 +42,7 @@ flutter:
     - assets/icons/ui/
     - assets/brand/
     - assets/guides/
+    - assets/sounds/
   # ต้องมีไฟล์จริงทุกน้ำหนักที่ใช้ ไม่งั้น Flutter จะสังเคราะห์ตัวหนาเอง (faux bold)
   # ทำให้สระ/วรรณยุกต์ไทยหนาไม่เท่ากันและดูแตก
   fonts:

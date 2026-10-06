@@ -25,6 +25,7 @@ import { JwtPayload } from '../auth/auth.service';
 import { OrderEventsService } from '../notifications/order-events.service';
 import { OrderAccessGuard } from './order-access.guard';
 import { OrderShareService } from './order-share.service';
+import { OrderChatService } from './order-chat.service';
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -33,6 +34,7 @@ export class OrdersController {
     private readonly orders: OrdersService,
     private readonly orderEvents: OrderEventsService,
     private readonly orderShare: OrderShareService,
+    private readonly chat: OrderChatService,
   ) {}
 
   @Post()
@@ -49,8 +51,14 @@ export class OrdersController {
 
   @Get('assigned')
   @Roles(Role.PROVIDER)
-  listAssigned(@CurrentUser() user: JwtPayload) {
-    return this.orders.listForProvider(user.sub);
+  async listAssigned(@CurrentUser() user: JwtPayload) {
+    const orders = await this.orders.listForProvider(user.sub);
+    const unread = await this.chat.unreadForProvider(orders);
+    return orders.map((order) => ({
+      ...order,
+      chatOpen: this.chat.isOpen(order),
+      chatUnread: unread.get(order.id) ?? 0,
+    }));
   }
 
   /** สร้าง (หรือคืนลิงก์เดิม) ลิงก์ติดตามงานให้ครอบครัวเปิดดูได้โดยไม่ต้องล็อกอิน */
@@ -69,8 +77,15 @@ export class OrdersController {
 
   @Get(':id')
   @Roles(Role.CUSTOMER, Role.PROVIDER)
-  findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.orders.findAccessibleById(id, user);
+  async findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    const order = await this.orders.findAccessibleById(id, user);
+    // badge แชท: แอปดึงงานนี้ใหม่ทุกครั้งที่มี event (รวมข้อความใหม่) อยู่แล้ว
+    return {
+      ...order,
+      chatOpen: this.chat.isOpen(order),
+      chatUnread: await this.chat.unreadFor(order, user.role),
+      chatHasMessages: await this.chat.hasMessages(order.id),
+    };
   }
 
   /**
