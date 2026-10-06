@@ -109,6 +109,19 @@ export class UpdateLocationDto {
   lng!: number;
 }
 
+/** เวลารับงานเป็นนาทีนับจากเที่ยงคืน 0-1439 (0-1439 ทั้งคู่ = ตลอดเวลา, เริ่ม > เลิก = ข้ามเที่ยงคืน) */
+export class UpdateWorkingHoursDto {
+  @IsInt({ message: 'เวลาเริ่มรับงานไม่ถูกต้อง' })
+  @Min(0, { message: 'เวลาเริ่มรับงานไม่ถูกต้อง' })
+  @Max(1439, { message: 'เวลาเริ่มรับงานไม่ถูกต้อง' })
+  openMinute!: number;
+
+  @IsInt({ message: 'เวลาเลิกรับงานไม่ถูกต้อง' })
+  @Min(0, { message: 'เวลาเลิกรับงานไม่ถูกต้อง' })
+  @Max(1439, { message: 'เวลาเลิกรับงานไม่ถูกต้อง' })
+  closeMinute!: number;
+}
+
 export class SetOnlineDto {
   @IsBoolean()
   isOnline!: boolean;

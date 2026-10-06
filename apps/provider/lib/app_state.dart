@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/widgets.dart';
 
+import 'offer_alarm.dart';
+
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
@@ -12,9 +14,13 @@ abstract final class AppConfig {
 }
 
 class ProviderAppState extends ChangeNotifier {
-  ProviderAppState({required this.api});
+  ProviderAppState({required this.api, OfferAlarm? offerAlarm})
+      : offerAlarm = offerAlarm ?? OfferAlarm();
 
   final FixGoApiClient api;
+
+  /// เสียงปลุกตอนมีงานใหม่ ใช้ร่วมกันทั้งหน้าหลักและปุ่มทดสอบในโปรไฟล์
+  final OfferAlarm offerAlarm;
   final SecureTokenStore _tokenStore =
       const SecureTokenStore('fixgo_provider_access_token');
 
@@ -156,6 +162,7 @@ class ProviderAppState extends ChangeNotifier {
   }
 
   void signOut() {
+    unawaited(offerAlarm.stop());
     // ต้องถอนโทเคน push ก่อนล้าง accessToken
     unawaited(PushNotifications.instance.detach(api));
     api.accessToken = null;
@@ -203,6 +210,7 @@ class ProviderAppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    offerAlarm.dispose();
     jobsRevision.dispose();
     api.dispose();
     super.dispose();

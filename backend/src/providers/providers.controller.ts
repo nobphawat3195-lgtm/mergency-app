@@ -8,6 +8,7 @@ import {
   UpdateLocationDto,
   UpdatePayoutInfoDto,
   UpdatePublicProfileDto,
+  UpdateWorkingHoursDto,
 } from './dto/provider.dto';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
 import { AuthService, JwtPayload } from '../auth/auth.service';
@@ -61,6 +62,14 @@ export class ProvidersController {
     @Body() dto: UpdatePublicProfileDto,
   ) {
     return this.providers.updatePublicProfile(user.sub, dto);
+  }
+
+  @Patch('me/hours')
+  updateWorkingHours(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdateWorkingHoursDto,
+  ) {
+    return this.providers.updateWorkingHours(user.sub, dto);
   }
 
   @Patch('me/payout-info')
