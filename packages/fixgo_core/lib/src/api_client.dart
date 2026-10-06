@@ -219,6 +219,20 @@ class FixGoApiClient {
     );
   }
 
+  /// ช่างที่ถือ pending token ของ LINE (ยังไม่สมัครตอนล็อกอิน) แต่ส่งใบสมัครไปแล้วจากเบราว์เซอร์อื่น:
+  /// ขอโทเคนของบัญชีช่างตัวจริง ยังไม่สมัครได้ [ApiException] 404 ใช้ไม่ได้กับโทเคนนี้ได้ 403
+  Future<({String accessToken, bool hasProfile})>
+      refreshPendingLineSession() async {
+    final result =
+        await _send('POST', '/auth/line/refresh') as Map<String, dynamic>;
+    final token = result['accessToken'] as String;
+    accessToken = token;
+    return (
+      accessToken: token,
+      hasProfile: result['hasProfile'] as bool? ?? true,
+    );
+  }
+
   /// ชื่อและเบอร์ของลูกค้าที่ล็อกอินอยู่ และเข้าด้วย LINE หรือไม่
   Future<({String? name, String? phone, bool viaLine})> getMyAccount() async {
     final result = await _send('GET', '/account') as Map<String, dynamic>;

@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -220,8 +222,7 @@ export class LineLoginService {
     webUrl: string,
     ticket: string,
   ): string {
-    const base =
-      client === 'native' ? NATIVE_RETURN_URLS[app] : `${webUrl}/`;
+    const base = client === 'native' ? NATIVE_RETURN_URLS[app] : `${webUrl}/`;
     return `${base}?line_ticket=${encodeURIComponent(ticket)}`;
   }
 
@@ -354,6 +355,33 @@ export class LineLoginService {
       hasProfile: true,
       userId: customer.id,
     };
+  }
+
+  /**
+   * เปลี่ยน pending token (sub = pending:line:<id>) ที่ค้างอยู่ในเบราว์เซอร์อื่นเป็นโทเคนช่างตัวจริง
+   * เมื่อบัญชี LINE นี้ส่งใบสมัครไปแล้วจากที่อื่น ยังไม่สมัครคืน 404 ให้แอปพาไปหน้าสมัครเหมือนเดิม
+   *
+   * ใช้ได้เฉพาะ pending token ของ LINE: เจ้าของโทเคนยืนยันตัวตนกับ LINE มาแล้วตอนล็อกอิน
+   * ผลจึงเท่ากับการล็อกอิน LINE ใหม่ (ดู providerSession)
+   */
+  async refreshPendingProvider(user: JwtPayload) {
+    const lineUserId = user.sub.startsWith('pending:line:')
+      ? user.sub.slice('pending:line:'.length)
+      : '';
+    if (
+      user.role !== Role.PROVIDER ||
+      !lineUserId ||
+      user.lineUserId !== lineUserId
+    ) {
+      throw new ForbiddenException(
+        'ใช้ได้เฉพาะช่างที่เข้าด้วย LINE และยังไม่ได้สมัคร',
+      );
+    }
+    const session = await this.providerSession(lineUserId);
+    if (!session.hasProfile) {
+      throw new NotFoundException('บัญชี LINE นี้ยังไม่ได้ส่งใบสมัครช่าง');
+    }
+    return session;
   }
 
   /** ช่างที่เคยสมัครด้วย LINE นี้แล้วเข้าบัญชีเดิม คนใหม่ได้โทเคนสำหรับส่งใบสมัคร */
