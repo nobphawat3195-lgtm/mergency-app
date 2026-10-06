@@ -62,19 +62,26 @@ void main() {
     expect(label.style?.color, FixGoColors.error);
   });
 
-  testWidgets('เวลารับงานเลือกได้ด้วยปุ่มเดียว ค่าเริ่มต้น 24 ชั่วโมง',
+  testWidgets('เวลารับงานเลือกได้ด้วยปุ่มเดียว ค่าเริ่มต้นตลอดเวลา',
       (tester) async {
     await _pumpRegister(tester);
 
-    final allDay = find.widgetWithText(ChoiceChip, '24 ชั่วโมง');
+    final allDay = find.widgetWithText(ChoiceChip, 'ตลอดเวลา');
     expect(tester.widget<ChoiceChip>(allDay).selected, true);
+    expect(find.text('รับงานตลอดเวลา'), findsOneWidget);
     // ไม่ต้องตั้งเวลาเองถ้าไม่ได้เลือก "กำหนดเอง"
-    expect(find.text('เปิด'), findsNothing);
+    expect(find.text('เริ่มรับงาน'), findsNothing);
 
     await tester.tap(find.widgetWithText(ChoiceChip, 'กำหนดเอง'));
     await tester.pump();
-    expect(find.text('เปิด'), findsOneWidget);
-    expect(find.text('ปิด'), findsOneWidget);
+    expect(find.text('เริ่มรับงาน'), findsOneWidget);
+    expect(find.text('เลิกรับงาน'), findsOneWidget);
+    // แสดงช่วงที่เลือกชัดเจน นาฬิกา 24 ชม.
+    expect(find.text('รับงาน 08:00 ถึง 20:00'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'กลางคืน 18:00-06:00'));
+    await tester.pump();
+    expect(find.text('รับงาน 18:00 ถึง 06:00 (ข้ามเที่ยงคืน)'), findsOneWidget);
   });
 
   testWidgets('ปุ่มปักหมุดบอกชัดว่าใช้ตำแหน่งปัจจุบัน', (tester) async {

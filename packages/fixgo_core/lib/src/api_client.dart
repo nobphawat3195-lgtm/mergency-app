@@ -434,6 +434,21 @@ class FixGoApiClient {
     return await _send('GET', '/providers/me') as Map<String, dynamic>;
   }
 
+  /// เวลารับงานของช่าง (นาทีนับจากเที่ยงคืน 0-1439) ระบบส่งงานให้เฉพาะในช่วงนี้
+  Future<({int openMinute, int closeMinute})> updateProviderHours({
+    required int openMinute,
+    required int closeMinute,
+  }) async {
+    final result = await _send('PATCH', '/providers/me/hours', body: {
+      'openMinute': openMinute,
+      'closeMinute': closeMinute,
+    }) as Map<String, dynamic>;
+    return (
+      openMinute: result['openMinute'] as int,
+      closeMinute: result['closeMinute'] as int,
+    );
+  }
+
   Future<void> setOnline(bool isOnline) async {
     await _send('PATCH', '/providers/me/online', body: {'isOnline': isOnline});
   }

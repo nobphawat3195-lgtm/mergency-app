@@ -577,6 +577,23 @@ async function main() {
     assert.ok(!JSON.stringify(stored.photoUrl).includes(phone));
     assert.ok(stored.toolPhotos.every((tool) => !tool.url.includes(phone)));
   });
+  await check('Mechanic changes job hours any time; invalid minutes are rejected', async () => {
+    const bangkok = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const nowMinute = bangkok.getUTCHours() * 60 + bangkok.getUTCMinutes();
+    // ช่วง 1 นาทีที่ห่างจากตอนนี้ 12 ชม. = ตอนนี้นอกเวลารับงาน
+    const away = (nowMinute + 720) % 1440;
+    const hours = (
+      await request('PATCH', '/providers/me/hours', mechanic, { openMinute: away, closeMinute: away }, 200)
+    ).body;
+    assert.deepEqual(hours, { openMinute: away, closeMinute: away });
+    assert.equal((await request('GET', '/providers/me', mechanic, undefined, 200)).body.openMinute, away);
+    await request('PATCH', '/providers/me/hours', mechanic, { openMinute: 1440, closeMinute: 0 }, 400);
+    await request('PATCH', '/providers/me/hours', mechanic, { openMinute: -1, closeMinute: 0 }, 400);
+    await request('PATCH', '/providers/me/hours', mechanic, { openMinute: 1.5, closeMinute: 0 }, 400);
+    await request('PATCH', '/providers/me/hours', customer, { openMinute: 0, closeMinute: 1439 }, 403);
+    // กลับเป็นตลอดเวลา
+    await request('PATCH', '/providers/me/hours', mechanic, { openMinute: 0, closeMinute: 1439 }, 200);
+  });
   await check('Account deletion removes profile access and admin actions leave an audit trail', async () => {
     await request('DELETE', '/account', mechanic, undefined, 200);
     await request('GET', '/providers/me', mechanic, undefined, 401);

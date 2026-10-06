@@ -37,6 +37,10 @@ export interface FinanceProviderInput {
   balance: number;
   /** คำขอเบิกที่รอโอน (สตางค์) */
   pendingWithdrawal: number;
+  /** เวลารับงานที่ช่างตั้งเอง (นาทีนับจากเที่ยงคืน) ให้แอดมินเห็นว่าทำไมช่างไม่ได้งาน */
+  openMinute?: number;
+  closeMinute?: number;
+  isOnline?: boolean;
 }
 
 /** วิธีรับเงินของงาน: PAID แล้วใช้ method จริง ยังไม่จ่ายเป็น UNPAID */
@@ -169,6 +173,9 @@ export function summarizeFinance(
       mechanicNet: stats?.mechanicNet ?? 0,
       balance: provider.balance,
       pendingWithdrawal: provider.pendingWithdrawal,
+      openMinute: provider.openMinute,
+      closeMinute: provider.closeMinute,
+      isOnline: provider.isOnline,
     };
   });
   // ช่างที่มีงานในช่วงนี้ขึ้นก่อน เรียงตามยอดงาน
@@ -255,6 +262,9 @@ export class FinanceService {
           realName: true,
           phone: true,
           status: true,
+          openMinute: true,
+          closeMinute: true,
+          isOnline: true,
         },
       }),
       this.prisma.walletEntry.groupBy({

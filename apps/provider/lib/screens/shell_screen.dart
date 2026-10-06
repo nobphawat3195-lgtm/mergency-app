@@ -4,6 +4,7 @@ import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../working_hours.dart';
 import 'public_profile_screen.dart';
 import 'jobs_screen.dart';
 import 'offers_screen.dart';
@@ -159,6 +160,31 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
     });
   }
 
+  Future<void> _editHours(Map<String, dynamic> profile) async {
+    final api = ProviderAppScope.of(context).api;
+    final saved = await showWorkingHoursSheet(
+      context,
+      api: api,
+      open: profile['openMinute'] as int? ?? allDayOpenMinute,
+      close: profile['closeMinute'] as int? ?? allDayCloseMinute,
+    );
+    if (saved == null || !mounted) return;
+    setState(() => _future = api.getProviderProfile());
+  }
+
+  /// เล่นเสียงปลุกสั้นๆ ให้ช่างเช็กว่าเครื่องดังจริง (บนเว็บการแตะนี้ปลดล็อกเสียงไปด้วย)
+  void _testAlarm() {
+    unawaited(ProviderAppScope.of(context).offerAlarm.test());
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'กำลังเล่นเสียงแจ้งเตือน 4 วินาที ถ้าไม่ได้ยิน ให้เพิ่มเสียงเครื่องหรือปิดโหมดเงียบ',
+        ),
+        duration: Duration(seconds: 4),
+      ),
+    );
+  }
+
   Future<void> _editPayoutInfo(Map<String, dynamic> profile) async {
     final api = ProviderAppScope.of(context).api;
     final saved = await showPayoutInfoForm(context, api: api, profile: profile);
@@ -206,6 +232,18 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
                   onTap: () => _editPublicProfile(profile),
                 ),
                 ListTile(
+                  leading: const Icon(Icons.schedule),
+                  title: const Text('เวลารับงาน'),
+                  subtitle: Text(
+                    workingHoursSentence(
+                      profile['openMinute'] as int? ?? allDayOpenMinute,
+                      profile['closeMinute'] as int? ?? allDayCloseMinute,
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _editHours(profile),
+                ),
+                ListTile(
                   leading: const Icon(Icons.account_balance_outlined),
                   title: const Text('ข้อมูลรับเงิน'),
                   subtitle: Text(
@@ -218,6 +256,13 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
                 ),
                 const Divider(),
               ],
+              ListTile(
+                leading: const Icon(Icons.notifications_active_outlined),
+                title: const Text('ทดสอบเสียงแจ้งเตือน'),
+                subtitle: const Text('เสียงที่ดังตอนมีงานใหม่เข้ามา'),
+                onTap: _testAlarm,
+              ),
+              const Divider(),
               AccountSettingsTiles(
                 api: ProviderAppScope.of(context).api,
                 onDeleted: ProviderAppScope.of(context).signOut,

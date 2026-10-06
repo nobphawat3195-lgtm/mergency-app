@@ -17,6 +17,7 @@ import {
   UpdateLocationDto,
   UpdatePayoutInfoDto,
   UpdatePublicProfileDto,
+  UpdateWorkingHoursDto,
 } from './dto/provider.dto';
 
 @Injectable()
@@ -259,6 +260,20 @@ export class ProvidersService {
       if (alsoToolPhoto === 0) await this.uploads.deleteUploads([old]);
     }
     return updated;
+  }
+
+  /** ช่างปรับเวลารับงานเองได้ทุกเมื่อ (แต่ละวันว่างไม่เท่ากัน) ระบบส่งงานใช้ค่านี้ทันที */
+  async updateWorkingHours(providerId: string, dto: UpdateWorkingHoursDto) {
+    const provider = await this.prisma.provider.findUnique({
+      where: { id: providerId },
+      select: { id: true },
+    });
+    if (!provider) throw new NotFoundException('ไม่พบข้อมูลช่าง');
+    return this.prisma.provider.update({
+      where: { id: providerId },
+      data: { openMinute: dto.openMinute, closeMinute: dto.closeMinute },
+      select: { openMinute: true, closeMinute: true },
+    });
   }
 
   async updatePayoutInfo(

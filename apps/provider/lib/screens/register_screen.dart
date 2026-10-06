@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app_state.dart';
+import '../working_hours.dart';
 
 /// แบบฟอร์มลงทะเบียนช่าง — ฟิลด์ตรงกับฟอร์มคัดกรองช่างที่ใช้งานจริง
 class RegisterScreen extends StatefulWidget {
@@ -32,10 +33,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _photoMissing = false;
   final _photoPickerKey = GlobalKey();
 
-  // ค่าเริ่มต้นรับงาน 24 ชั่วโมง (งานฉุกเฉิน) เลือกช่วงอื่นได้ด้วยปุ่มเดียว
-  _HoursPreset _hoursPreset = _HoursPreset.allDay;
-  TimeOfDay _openTime = const TimeOfDay(hour: 8, minute: 0);
-  TimeOfDay _closeTime = const TimeOfDay(hour: 20, minute: 0);
+  // ค่าเริ่มต้นรับงานตลอดเวลา (งานฉุกเฉิน) ปรับทีหลังได้ทุกเมื่อจากหน้าหลัก
+  int _openMinute = allDayOpenMinute;
+  int _closeMinute = allDayCloseMinute;
+  bool _customHours = false;
 
   // null จนกว่าช่างจะกดปักหมุดจริง — ห้าม default เป็นพิกัดปลอม เพราะระบบ
   // dispatch ใช้พิกัดนี้คำนวณระยะทางส่งงาน ถ้าช่างลืมปักหมุดแล้วระบบส่งพิกัดผิด
@@ -78,23 +79,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _phoneController.dispose();
     super.dispose();
   }
-
-  int _toMinutes(TimeOfDay time) => time.hour * 60 + time.minute;
-
-  int get _openMinute => switch (_hoursPreset) {
-        _HoursPreset.allDay => 0,
-        _HoursPreset.day => 8 * 60,
-        _HoursPreset.night => 18 * 60,
-        _HoursPreset.custom => _toMinutes(_openTime),
-      };
-
-  // 23:59 = นาทีสุดท้ายของวัน ระบบส่งงานนับรวมนาทีปิดด้วย จึงครบ 24 ชม.
-  int get _closeMinute => switch (_hoursPreset) {
-        _HoursPreset.allDay => 23 * 60 + 59,
-        _HoursPreset.day => 20 * 60,
-        _HoursPreset.night => 6 * 60,
-        _HoursPreset.custom => _toMinutes(_closeTime),
-      };
 
   String _contentTypeFor(XFile file) {
     final mimeType = file.mimeType;
@@ -219,27 +203,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } finally {
       if (mounted) setState(() => _locatingPin = false);
     }
-  }
-
-  Future<void> _pickTime({required bool isOpen}) async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: isOpen ? _openTime : _closeTime,
-      // พิมพ์ตัวเลขตรงๆ แบบ 24 ชม. ง่ายกว่าหมุนหน้าปัดบนมือถือ
-      initialEntryMode: TimePickerEntryMode.input,
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-        child: child!,
-      ),
-    );
-    if (picked == null) return;
-    setState(() {
-      if (isOpen) {
-        _openTime = picked;
-      } else {
-        _closeTime = picked;
-      }
-    });
   }
 
   Future<void> _submit() async {
@@ -437,40 +400,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
             const SizedBox(height: FixGoSpacing.lg),
             const _SectionTitle('เวลารับงาน'),
-            Wrap(
-              spacing: FixGoSpacing.sm,
-              runSpacing: FixGoSpacing.sm,
-              children: [
-                for (final preset in _HoursPreset.values)
-                  ChoiceChip(
-                    label: Text(preset.label),
-                    selected: _hoursPreset == preset,
-                    onSelected: (_) => setState(() => _hoursPreset = preset),
-                  ),
-              ],
+            Text(
+              'ระบบส่งงานให้เฉพาะในช่วงนี้ แก้ได้ทุกเมื่อจากหน้าหลักของแอป',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-            if (_hoursPreset == _HoursPreset.custom) ...[
-              const SizedBox(height: FixGoSpacing.sm),
-              Row(
-                children: [
-                  Expanded(
-                    child: _TimeField(
-                      label: 'เปิด',
-                      time: _openTime,
-                      onTap: () => _pickTime(isOpen: true),
-                    ),
-                  ),
-                  const SizedBox(width: FixGoSpacing.sm),
-                  Expanded(
-                    child: _TimeField(
-                      label: 'ปิด',
-                      time: _closeTime,
-                      onTap: () => _pickTime(isOpen: false),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            const SizedBox(height: FixGoSpacing.sm),
+            WorkingHoursFields(
+              open: _openMinute,
+              close: _closeMinute,
+              custom: _customHours,
+              onChanged: (open, close, {required custom}) => setState(() {
+                _openMinute = open;
+                _closeMinute = close;
+                _customHours = custom;
+              }),
+            ),
             const SizedBox(height: FixGoSpacing.lg),
             const _SectionTitle('งานบริการที่รับทำ (เลือกได้หลายข้อ)'),
             FutureBuilder<List<ServiceCategory>>(
@@ -644,32 +588,6 @@ class _SectionTitle extends StatelessWidget {
       child: Text(
         title,
         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-      ),
-    );
-  }
-}
-
-class _TimeField extends StatelessWidget {
-  const _TimeField({
-    required this.label,
-    required this.time,
-    required this.onTap,
-  });
-
-  final String label;
-  final TimeOfDay time;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final text =
-        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: InputDecorator(
-        decoration: InputDecoration(labelText: label),
-        child: Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
       ),
     );
   }
@@ -874,17 +792,6 @@ class _ChoiceTile extends StatelessWidget {
       ),
     );
   }
-}
-
-enum _HoursPreset {
-  allDay('24 ชั่วโมง'),
-  day('กลางวัน 08:00-20:00'),
-  night('กลางคืน 18:00-06:00'),
-  custom('กำหนดเอง');
-
-  const _HoursPreset(this.label);
-
-  final String label;
 }
 
 /// ปักหมุดจาก GPS แล้วแสดงที่อยู่ ความแม่นยำ และลิงก์เปิดแผนที่ ให้ช่างเช็กเองได้ว่าตรงไหม
