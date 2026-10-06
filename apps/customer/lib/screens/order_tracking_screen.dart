@@ -132,14 +132,15 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   Future<void> _openChat() async {
     final order = _order;
     if (order == null) return;
-    final name = order.provider?.nickname;
+    // displayName ไม่เติม "ช่าง" ซ้ำถ้าชื่อเล่นขึ้นต้นด้วย "ช่าง" อยู่แล้ว (ตรงกับ mechanicDisplayName ของ backend)
+    final name = order.provider?.displayName;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => OrderChatScreen(
           api: AppStateScope.of(context).api,
           orderId: order.id,
           me: ChatSender.customer,
-          title: name == null ? 'แชทกับช่าง' : 'แชทกับช่าง$name',
+          title: name == null ? 'แชทกับช่าง' : 'แชทกับ$name',
           pickImage: pickChatImage,
         ),
       ),
