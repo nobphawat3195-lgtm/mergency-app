@@ -7,11 +7,14 @@ import {
   Query,
   Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { IsString, MaxLength } from 'class-validator';
 
 import { isProduction } from '../config/environment';
+import { JwtPayload } from './auth.service';
+import { CurrentUser, JwtAuthGuard } from './guards';
 import {
   LINE_STATE_COOKIE,
   LineLoginService,
@@ -93,5 +96,15 @@ export class LineLoginController {
   @Post('exchange')
   exchange(@Body() dto: ExchangeLineTicketDto) {
     return this.line.exchange(dto.ticket);
+  }
+
+  /**
+   * ช่างที่ยังถือ pending token จากการล็อกอินครั้งก่อน (เช่น เบราว์เซอร์ในแอป LINE)
+   * แต่ส่งใบสมัครไปแล้วจากเบราว์เซอร์อื่น: แลกเป็นโทเคนช่างตัวจริง ยังไม่สมัครได้ 404
+   */
+  @Post('refresh')
+  @UseGuards(JwtAuthGuard)
+  refresh(@CurrentUser() user: JwtPayload) {
+    return this.line.refreshPendingProvider(user);
   }
 }
