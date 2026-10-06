@@ -64,6 +64,18 @@ jobs:
           FIREBASE_ANDROID_APP_ID: ${{ matrix.app == 'customer' && vars.FIREBASE_CUSTOMER_ANDROID_APP_ID || vars.FIREBASE_PROVIDER_ANDROID_APP_ID }}
           SENTRY_DSN: ${{ matrix.app == 'customer' && vars.SENTRY_CUSTOMER_DSN || vars.SENTRY_PROVIDER_DSN }}
         run: |
+          # ค่าที่วางจากมือถือมักติดช่องว่างหรือขึ้นบรรทัดใหม่ท้ายค่า (เคยทำ build ล้ม) ตัดหัวท้ายก่อนใช้
+          trim() {
+            local v="${1//$'\r'/}"
+            v="${v//$'\n'/}"
+            v="${v#"${v%%[![:space:]]*}"}"
+            v="${v%"${v##*[![:space:]]}"}"
+            printf '%s' "$v"
+          }
+          names=(API_BASE_URL FIREBASE_PROJECT_ID FIREBASE_SENDER_ID FIREBASE_API_KEY FIREBASE_ANDROID_APP_ID SENTRY_DSN)
+          for name in "${names[@]}"; do
+            printf -v "$name" '%s' "$(trim "$(printenv "$name" || true)")"
+          done
           # ไม่ตั้ง API_BASE_URL แอปจะชี้ http://10.0.2.2:3000 (emulator) ใช้บนมือถือจริงไม่ได้
           # ติดชื่อ artifact ให้เห็นชัดว่าไม่ใช่ build สำหรับแจกผู้ใช้
           if [ -z "$API_BASE_URL" ]; then
@@ -76,14 +88,14 @@ jobs:
           if [ -z "$FIREBASE_PROJECT_ID" ] || [ -z "$FIREBASE_ANDROID_APP_ID" ]; then
             echo "::warning::ไม่ได้ตั้งค่า Firebase: build นี้ไม่มีแจ้งเตือน push"
           fi
-          defines=""
-          for name in API_BASE_URL FIREBASE_PROJECT_ID FIREBASE_SENDER_ID FIREBASE_API_KEY FIREBASE_ANDROID_APP_ID SENTRY_DSN; do
-            value="$(printenv "$name" || true)"
-            [ -n "$value" ] && defines="$defines --dart-define=$name=$value"
+          # array: ค่าที่มีช่องว่างตรงกลางยังเป็น argument เดียว ไม่แตกเป็นหลายตัว
+          defines=()
+          for name in "${names[@]}"; do
+            [ -n "${!name}" ] && defines+=("--dart-define=$name=${!name}")
           done
           build_number=$((GITHUB_RUN_NUMBER + 100))
-          flutter build apk --release --build-number=$build_number $defines
-          flutter build appbundle --release --build-number=$build_number $defines
+          flutter build apk --release --build-number="$build_number" "${defines[@]}"
+          flutter build appbundle --release --build-number="$build_number" "${defines[@]}"
 
       - uses: actions/upload-artifact@v4
         with:
