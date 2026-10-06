@@ -60,6 +60,15 @@
       background: #0B5F45; color: #fff; font-weight: 700; font-size: 18px; border-radius: 14px; text-decoration: none; }
     #landing .call:focus-visible, #landing a:focus-visible { outline: 3px solid #122821; outline-offset: 2px; }
     #landing ul { padding-left: 20px; margin: 8px 0; }
+    #landing .headline { font-size: 26px; line-height: 1.3; font-weight: 800; color: #122821; margin: 24px 0 0; }
+    #landing .lead { margin-top: 8px; }
+    #landing .nobr { white-space: nowrap; }
+    #landing ul.trust { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 10px; }
+    #landing ul.trust li { position: relative; padding: 10px 12px 10px 42px; background: #fff;
+      border: 1px solid #D5E8DE; border-radius: 12px; }
+    #landing ul.trust li::before { content: ""; position: absolute; left: 12px; top: 13px; width: 20px; height: 20px;
+      border-radius: 50%; background: #ECF8F1 no-repeat center / 12px
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.2 4.8 9 10 3.5' fill='none' stroke='%230B5F45' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
     #landing footer { margin-top: 28px; font-size: 14px; color: #4A6259; }
     #landing footer a { color: #0B5F45; }
     #landing[hidden] { display: none; }
@@ -99,7 +108,7 @@
   <main id="landing" aria-busy="true">
     <div class="wrap">
       <div class="intro" aria-hidden="true">
-        <div class="brand">ช่างไปหาคุณ <span>ทุกที่ ทุกเวลา</span></div>
+        <div class="brand">ช่างไปหาคุณ <span>ถึงที่</span></div>
         <div class="road"><span class="lane"></span></div>
         <img class="pin" src="assets/packages/fixgo_core/assets/icons/ui/pin.png" alt="" width="40" height="40">
         <img class="car" src="assets/packages/fixgo_core/assets/icons/vehicles/vehicle_sedan.png" alt="" width="92" height="92">
@@ -110,10 +119,18 @@
         <img src="icons/Icon-192.png" alt="" width="56" height="56">
         <div>
           <h1>FixGo</h1>
-          <p style="margin:0">เรียกช่างช่วยเหลือรถฉุกเฉิน 24 ชั่วโมง</p>
+          <p style="margin:0">เรียกช่างช่วยเหลือรถฉุกเฉินถึงที่</p>
         </div>
       </header>
-      <p class="lead">รถสตาร์ทไม่ติด ยางรั่ว แบตหมด น้ำมันหมด หรือต้องการรถยก เรียกช่างใกล้คุณได้จากเว็บนี้ ไม่ต้องติดตั้งแอป เห็นราคาก่อนเริ่มงานทุกครั้ง</p>
+      <p class="headline"><span class="nobr">รถเสียกลางทาง</span><br><span class="nobr">ไม่ต้องอยู่คนเดียว</span></p>
+      <p class="lead">ช่างตัวจริงที่ FixGo ตรวจสอบตัวตนแล้ว พร้อมไปดูแลคุณถึงที่ เมื่อคุณเดือดร้อน</p>
+      <ul class="trust">
+        <li>รู้ราคาก่อนซ่อม ช่างต้องเสนอราคาให้คุณตกลงก่อนลงมือ</li>
+        <li>เห็นหน้า ชื่อ และทะเบียนรถช่างก่อนเจอตัว</li>
+        <li>แชร์ตำแหน่งให้คนที่คุณรักติดตามได้ตลอดทาง พร้อมปุ่ม SOS</li>
+        <li>คุยกับช่างได้ทั้งโทรและแชทในแอป</li>
+      </ul>
+      <p>รถสตาร์ทไม่ติด ยางรั่ว แบตหมด น้ำมันหมด หรือต้องการรถยก เรียกช่างใกล้คุณได้จากเว็บนี้ ไม่ต้องติดตั้งแอป</p>
       <div class="status" role="status">
         <span class="spinner" aria-hidden="true"></span>
         <span id="landing-status">กำลังเปิดระบบเรียกช่าง...</span>

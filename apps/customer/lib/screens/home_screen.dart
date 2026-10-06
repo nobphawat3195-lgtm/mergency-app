@@ -215,6 +215,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     onShowSteps: () => _showHowItWorks(context),
                   ),
                 ),
+                const SizedBox(height: FixGoSpacing.md),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: FixGoSpacing.md),
+                  child: TrustPoints(),
+                ),
                 const SizedBox(height: FixGoSpacing.lg),
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -500,9 +505,10 @@ class _EmergencyCallCard extends StatelessWidget {
             spacing: 14,
             runSpacing: 6,
             children: [
-              _CheckLabel('ช่างใกล้คุณ'),
+              // ไม่อ้าง 24 ชม.: เรียกได้เมื่อมีช่างเปิดรับงานอยู่ใกล้ๆ เท่านั้น
+              _CheckLabel('ช่างยืนยันตัวตนแล้ว'),
               _CheckLabel('รู้ราคาก่อนซ่อม'),
-              _CheckLabel('เรียกได้ 24 ชม.'),
+              _CheckLabel('ช่างใกล้คุณ'),
             ],
           ),
           const SizedBox(height: 16),
@@ -575,6 +581,94 @@ class _EmergencyCallCard extends StatelessWidget {
   }
 }
 
+/// เหตุผลที่ไว้ใจได้ ทุกข้อต้องเป็นสิ่งที่ระบบทำจริง (ห้ามอ้างรับประกันงานหรือ 24 ชม.)
+/// - ราคา: backend ไม่ให้ช่างเริ่มงานจนกว่าลูกค้ายืนยันราคา
+/// - การ์ดช่าง: รูป ชื่อ ทะเบียนรถ ขึ้นตั้งแต่ช่างรับงาน
+/// - หน้าติดตามงาน: แชร์ลิงก์ให้ครอบครัว และเบอร์ฉุกเฉิน 191/1669
+/// - ติดต่อช่าง: ปุ่มโทรในการ์ดช่าง และแชทในแอป
+class TrustPoints extends StatelessWidget {
+  const TrustPoints({super.key});
+
+  static const points = [
+    (
+      icon: Icons.request_quote_outlined,
+      text: 'รู้ราคาก่อนซ่อม ช่างต้องเสนอราคาให้คุณตกลงก่อนลงมือ',
+    ),
+    (
+      icon: Icons.badge_outlined,
+      text: 'เห็นหน้า ชื่อ และทะเบียนรถช่างก่อนเจอตัว',
+    ),
+    (
+      icon: Icons.share_location_outlined,
+      text: 'แชร์ตำแหน่งให้คนที่คุณรักติดตามได้ตลอดทาง พร้อมปุ่ม SOS',
+    ),
+    (
+      icon: Icons.forum_outlined,
+      text: 'คุยกับช่างได้ทั้งโทรและแชทในแอป',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(FixGoSpacing.md),
+      decoration: BoxDecoration(
+        color: FixGoColors.background,
+        borderRadius: BorderRadius.circular(FixGoRadius.lg),
+        border: Border.all(color: FixGoColors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'ช่างตัวจริงที่ FixGo ตรวจสอบตัวตนแล้ว '
+            'พร้อมไปดูแลคุณถึงที่ เมื่อคุณเดือดร้อน',
+            style: TextStyle(
+              fontSize: 15,
+              height: 1.4,
+              fontWeight: FontWeight.w700,
+              color: FixGoColors.navy,
+            ),
+          ),
+          const SizedBox(height: FixGoSpacing.sm),
+          for (final point in points)
+            Padding(
+              padding: const EdgeInsets.only(top: FixGoSpacing.xs),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: FixGoColors.accentSoft,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(point.icon, size: 18, color: FixGoColors.accent),
+                  ),
+                  const SizedBox(width: FixGoSpacing.sm),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Text(
+                        point.text,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.4,
+                          color: FixGoColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CheckLabel extends StatelessWidget {
   const _CheckLabel(this.label);
 
@@ -636,7 +730,7 @@ class _HeroBanner extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        'รถมีปัญหา\nให้ FixGo ช่วย',
+                        'รถเสียกลางทาง\nไม่ต้องอยู่คนเดียว',
                         style: TextStyle(
                           fontSize: 19 * scale,
                           height: 1.2,
@@ -646,7 +740,7 @@ class _HeroBanner extends StatelessWidget {
                       ),
                       SizedBox(height: 4 * scale),
                       Text(
-                        'ช่างมาถึงที่ แจ้งราคาก่อนซ่อม',
+                        'ช่างตัวจริง ไปดูแลคุณถึงที่',
                         style: TextStyle(
                           fontSize: 12 * scale,
                           height: 1.35,
