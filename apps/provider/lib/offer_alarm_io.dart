@@ -38,7 +38,7 @@ class _NativeOfferAlarm implements OfferAlarmBackend {
     final plugin = _notifications ??= FlutterLocalNotificationsPlugin();
     await (_ready ??= () async {
       await plugin.initialize(
-        settings: const InitializationSettings(
+        const InitializationSettings(
           android: AndroidInitializationSettings('@mipmap/ic_launcher'),
           // ขออนุญาตตอนกดพร้อมรับงาน ไม่ใช่ตอนเปิดแอป
           iOS: DarwinInitializationSettings(
@@ -101,10 +101,10 @@ class _NativeOfferAlarm implements OfferAlarmBackend {
   Future<void> notify(String title, String body) async {
     final plugin = await _plugin();
     await plugin.show(
-      id: 7001,
-      title: title,
-      body: body,
-      notificationDetails: NotificationDetails(
+      7001,
+      title,
+      body,
+      NotificationDetails(
         android: AndroidNotificationDetails(
           _channel.id,
           _channel.name,
