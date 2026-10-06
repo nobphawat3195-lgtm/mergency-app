@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -57,7 +58,8 @@ export class ProvidersService {
             where: { phone: user.phone },
           });
     if (existing && existing.status !== ProviderStatus.REJECTED) {
-      throw new BadRequestException('บัญชีนี้ลงทะเบียนเป็นช่างไว้แล้ว');
+      // 409: แอปรู้ว่าต้องขอโทเคนของบัญชีที่สมัครไว้ (POST /auth/line/refresh) หรือให้ล็อกอินใหม่
+      throw new ConflictException('บัญชีนี้สมัครแล้ว กรุณาเข้าสู่ระบบใหม่');
     }
 
     const selfDeclaredPhone = Boolean(user.lineUserId || existing?.lineUserId);
@@ -277,8 +279,7 @@ export class ProvidersService {
     if (!current) throw new NotFoundException('ไม่พบข้อมูลช่าง');
     // ช่องที่ไม่ได้ส่งมาคงค่าเดิม (undefined) ส่วน null คือให้ลบ
     const next = {
-      bankName:
-        dto.bankName === undefined ? current.bankName : dto.bankName,
+      bankName: dto.bankName === undefined ? current.bankName : dto.bankName,
       bankAccountName:
         dto.bankAccountName === undefined
           ? current.bankAccountName
