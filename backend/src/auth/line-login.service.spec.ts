@@ -1,4 +1,8 @@
-import { UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
 import { LineLoginService, parseLineClient } from './line-login.service';
@@ -212,6 +216,76 @@ describe('LineLoginService', () => {
       expect(payload.lineUserId).toBeUndefined();
     });
 
+    describe('refreshPendingProvider', () => {
+      const pending = {
+        sub: 'pending:line:Uprovider',
+        role: 'PROVIDER' as const,
+        phone: '',
+        lineUserId: 'Uprovider',
+      };
+
+      it('swaps a stale pending token for the account registered elsewhere', async () => {
+        prisma.provider.findUnique.mockResolvedValue({
+          id: 'provider-1',
+          phone: '0812345678',
+          deletedAt: null,
+        });
+        const session = await service.refreshPendingProvider(pending);
+        expect(prisma.provider.findUnique).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { lineUserId: 'Uprovider' } }),
+        );
+        expect(session.hasProfile).toBe(true);
+        expect(session.userId).toBe('provider-1');
+        expect(jwt.verify(session.accessToken)).toMatchObject({
+          sub: 'provider-1',
+          role: 'PROVIDER',
+        });
+      });
+
+      it('returns 404 while the LINE account has not registered', async () => {
+        await expect(
+          service.refreshPendingProvider(pending),
+        ).rejects.toBeInstanceOf(NotFoundException);
+      });
+
+      it('returns 404 for a deleted mechanic account', async () => {
+        prisma.provider.findUnique.mockResolvedValue({
+          id: 'provider-1',
+          phone: '0812345678',
+          deletedAt: new Date(NOW),
+        });
+        await expect(
+          service.refreshPendingProvider(pending),
+        ).rejects.toBeInstanceOf(NotFoundException);
+      });
+
+      it.each([
+        [
+          'an OTP pending token',
+          { ...pending, sub: 'pending:0812345678', lineUserId: undefined },
+        ],
+        [
+          'a registered mechanic token',
+          { ...pending, sub: 'provider-1', lineUserId: undefined },
+        ],
+        ['a customer token', { ...pending, role: 'CUSTOMER' as const }],
+        [
+          'a LINE id that does not match the subject',
+          { ...pending, lineUserId: 'Uother' },
+        ],
+      ])('rejects %s', async (_name, user) => {
+        prisma.provider.findUnique.mockResolvedValue({
+          id: 'provider-1',
+          phone: '0812345678',
+          deletedAt: null,
+        });
+        await expect(
+          service.refreshPendingProvider(user),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(prisma.provider.findUnique).not.toHaveBeenCalled();
+      });
+    });
+
     it('cannot switch the app by editing the signed state cookie', async () => {
       const { url, cookie } = service.start('customer', NOW);
       const forged = cookie.replace('.customer.', '.provider.');
@@ -310,9 +384,9 @@ describe('LineLoginService', () => {
         undefined,
         NOW,
       );
-      expect(
-        redirect.startsWith('fixgofixer://auth/line?line_ticket='),
-      ).toBe(true);
+      expect(redirect.startsWith('fixgofixer://auth/line?line_ticket=')).toBe(
+        true,
+      );
     });
 
     it('sends native failures back to the right app scheme', () => {

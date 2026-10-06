@@ -2,7 +2,7 @@
 // Never use credentials or notification/payment providers from the caller's environment.
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
-const { randomBytes, scryptSync } = require('node:crypto');
+const { createHmac, randomBytes, scryptSync } = require('node:crypto');
 const { mkdtemp, rm } = require('node:fs/promises');
 const net = require('node:net');
 const { tmpdir } = require('node:os');
@@ -22,6 +22,22 @@ let uploads;
 let baseUrl;
 let passed = 0;
 let startupLogs = '';
+const jwtSecret = randomBytes(32).toString('hex');
+
+/** โทเคนช่างที่เข้าด้วย LINE แต่ยังไม่สมัคร (เหมือนที่ /auth/line/exchange ออกให้) */
+function pendingLineToken(lineUserId) {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const body = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({
+    sub: `pending:line:${lineUserId}`,
+    role: 'PROVIDER',
+    phone: '',
+    lineUserId,
+    iat: now,
+    exp: now + 3600,
+  })}`;
+  return `${body}.${createHmac('sha256', jwtSecret).update(body).digest('base64url')}`;
+}
 
 async function request(method, route, token, body, expected) {
   const response = await fetch(`${baseUrl}/api${route}`, {
@@ -174,7 +190,7 @@ async function main() {
       NODE_ENV: 'development',
       PORT: String(port),
       DATABASE_URL: databaseUrl,
-      JWT_SECRET: randomBytes(32).toString('hex'),
+      JWT_SECRET: jwtSecret,
       OTP_SECRET: randomBytes(32).toString('hex'),
       PAYMENT_WEBHOOK_SECRET: randomBytes(32).toString('hex'),
       STORAGE_PROVIDER: 'local',
@@ -622,6 +638,40 @@ async function main() {
     });
     assert.ok(!JSON.stringify(stored.photoUrl).includes(phone));
     assert.ok(stored.toolPhotos.every((tool) => !tool.url.includes(phone)));
+  });
+  await check('A stale pending LINE session switches to the account registered elsewhere', async () => {
+    const stale = pendingLineToken('Usmoke-refresh');
+    await request('POST', '/auth/line/refresh', stale, undefined, 404);
+    const photoUrl = await uploadImage(stale, 'PROVIDER_TOOL');
+    const form = {
+      realName: 'Line refresh',
+      nickname: 'Refresh',
+      experienceYears: 2,
+      baseLat: 13.7,
+      baseLng: 100.5,
+      openMinute: 0,
+      closeMinute: 1439,
+      categoryIds: [category.id],
+      vehicleTypeIds: [vehicle.id],
+      toolPhotoUrls: [photoUrl],
+      photoUrl,
+      vehiclePlate: 'TEST 2',
+      phone: '0800000010',
+    };
+    const registered = (await request('POST', '/providers/register', stale, form, 201)).body;
+    // เบราว์เซอร์อื่นยังถือ pending token เดิม: ส่งซ้ำได้ 409 แล้วแลกเป็นโทเคนบัญชีจริง
+    const again = await request('POST', '/providers/register', stale, form, 409);
+    assert.equal(again.body.message, 'บัญชีนี้สมัครแล้ว กรุณาเข้าสู่ระบบใหม่');
+    await request('GET', '/providers/me', stale, undefined, 404);
+    const session = (await request('POST', '/auth/line/refresh', stale, undefined, 201)).body;
+    assert.equal(session.hasProfile, true);
+    assert.equal(session.userId, registered.provider.id);
+    const me = (await request('GET', '/providers/me', session.accessToken, undefined, 200)).body;
+    assert.equal(me.id, registered.provider.id);
+    // ใช้ได้เฉพาะ pending token ของ LINE
+    await request('POST', '/auth/line/refresh', session.accessToken, undefined, 403);
+    await request('POST', '/auth/line/refresh', await login('0800000011', 'PROVIDER'), undefined, 403);
+    await request('POST', '/auth/line/refresh', undefined, undefined, 401);
   });
   await check('Account deletion removes profile access and admin actions leave an audit trail', async () => {
     await request('DELETE', '/account', mechanic, undefined, 200);
