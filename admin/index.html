@@ -338,6 +338,12 @@ const formatMinute = (minute) =>
   String(Math.floor(minute / 60)).padStart(2, '0') + ':' +
   String(minute % 60).padStart(2, '0');
 
+// เวลารับงานที่ช่างตั้งเอง 00:00-23:59 = ตลอดเวลา ระบบส่งงานให้เฉพาะในช่วงนี้
+const formatJobHours = (open, close) =>
+  open === undefined || close === undefined ? '-'
+    : open === 0 && close === 1439 ? 'ตลอดเวลา'
+      : `${formatMinute(open)}-${formatMinute(close)}`;
+
 async function api(path, options = {}) {
   const response = await fetch(API_BASE + '/api' + path, {
     ...options,
@@ -676,7 +682,8 @@ function renderFinance() {
     : mechanics.map((m) => `
       <tr>
         <td><strong>${escapeHtml(m.realName)}</strong> (${escapeHtml(m.nickname)})<br>
-          <small>${escapeHtml(m.phone)} · ${escapeHtml(PROVIDER_STATUS_LABELS[m.status] || m.status)}</small></td>
+          <small>${escapeHtml(m.phone)} · ${escapeHtml(PROVIDER_STATUS_LABELS[m.status] || m.status)}</small><br>
+          <small>${m.isOnline ? 'พร้อมรับงาน' : 'ปิดรับงาน'} · รับงาน ${escapeHtml(formatJobHours(m.openMinute, m.closeMinute))}</small></td>
         <td class="num">${escapeHtml(m.jobs)}${m.unpaidJobs ? `<br><small>ยังไม่ชำระ ${escapeHtml(m.unpaidJobs)}</small>` : ''}</td>
         <td class="num">${escapeHtml(formatSatang(m.promptPayGross))}<br><small>${escapeHtml(m.promptPayJobs)} งาน</small></td>
         <td class="num">${escapeHtml(formatSatang(m.cashGross))}<br><small>${escapeHtml(m.cashJobs)} งาน</small></td>
@@ -871,7 +878,7 @@ async function loadProviders() {
         <dl>
           <dt>ร้าน/อู่</dt><dd>${escapeHtml(provider.shopName || '-')}</dd>
           <dt>เฟซบุ๊ก</dt><dd>${escapeHtml(provider.facebookPage || '-')}</dd>
-          <dt>เวลาทำงาน</dt><dd>${escapeHtml(formatMinute(provider.openMinute))}-${escapeHtml(formatMinute(provider.closeMinute))}</dd>
+          <dt>เวลารับงาน</dt><dd>${escapeHtml(formatJobHours(provider.openMinute, provider.closeMinute))}</dd>
           <dt>พื้นที่รับงาน</dt><dd><a href="${escapeHtml(map)}" target="_blank" rel="noopener">ดูบนแผนที่</a></dd>
           <dt>รถที่ใช้</dt><dd>${provider.vehiclePlate ? `<span class="plate">${escapeHtml(provider.vehiclePlate)}</span>` : '-'} ${escapeHtml(provider.vehicleDesc || '')}</dd>
           <dt>บริการที่รับ</dt><dd class="tags">${categories || '-'}</dd>
