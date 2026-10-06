@@ -6,6 +6,8 @@ import 'package:geolocator/geolocator.dart';
 
 import '../app_state.dart';
 import '../chat_image.dart';
+import '../offer_alarm.dart';
+import '../working_hours.dart';
 import 'wallet_debt_card.dart';
 import 'register_screen.dart';
 
@@ -41,9 +43,19 @@ class _OffersScreenState extends State<OffersScreen> {
   WalletDebt? _debt;
   StreamSubscription<PushEvent>? _pushSub;
 
+  /// เวลารับงานจากโปรไฟล์ (null จนกว่าจะโหลดเสร็จ)
+  int? _openMinute;
+  int? _closeMinute;
+
+  /// งานที่เคยเห็นแล้ว (ไม่ปลุกซ้ำ) และงานที่กำลังปลุกอยู่ จนกว่าช่างจะรับ/ปฏิเสธ/ปิดเสียง หรือหมดเวลา
+  final Set<String> _seenOfferIds = {};
+  Set<String> _ringingIds = {};
+  Timer? _expiryTimer;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _alarm = ProviderAppScope.of(context).offerAlarm;
     if (_timer != null) return;
     unawaited(_syncOnlineStatus());
     // มีงานใหม่หรือสถานะงานเปลี่ยน: ดึงทันทีไม่ต้องรอรอบ 10 วิ
@@ -72,6 +84,8 @@ class _OffersScreenState extends State<OffersScreen> {
       setState(() {
         _accountStatus = profile['status'] as String?;
         _reviewNote = profile['reviewNote'] as String?;
+        _openMinute = profile['openMinute'] as int?;
+        _closeMinute = profile['closeMinute'] as int?;
       });
       final debt = await state.api.getWalletDebt();
       if (mounted) setState(() => _debt = debt);
@@ -89,9 +103,105 @@ class _OffersScreenState extends State<OffersScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _expiryTimer?.cancel();
     _positionSub?.cancel();
     _pushSub?.cancel();
+    unawaited(_alarm.stop());
     super.dispose();
+  }
+
+  // เก็บไว้ตั้งแต่ didChangeDependencies: ตอน dispose อ่าน ProviderAppScope ไม่ได้แล้ว
+  late OfferAlarm _alarm;
+
+  /// งานใหม่ที่ยังไม่เคยเห็น: ปลุก (เสียงวน + สั่น + การ์ดกระพริบ) และพากลับมาหน้าหลัก
+  /// หยุดเมื่อช่างรับ/ปฏิเสธ/กดปิดเสียง หรือทุกงานที่ปลุกอยู่หมดเวลา/หายไปจากรายการ
+  void _updateAlarm() {
+    final now = DateTime.now();
+    final live = {
+      for (final offer in _offers)
+        if (offer.expiresAt.isAfter(now)) offer.orderId,
+    };
+    final fresh = live.difference(_seenOfferIds);
+    _seenOfferIds.addAll(live);
+    _ringingIds = _ringingIds.intersection(live)..addAll(fresh);
+
+    if (fresh.isNotEmpty) {
+      final offer = _offers.firstWhere((o) => o.orderId == fresh.first);
+      unawaited(_alarm.ring(
+        body: [
+          offer.subServiceName ?? offer.categoryName ?? 'งานซ่อมรถ',
+          'ห่าง ${offer.distanceKm.toStringAsFixed(1)} กม.',
+        ].join(' · '),
+      ));
+      widget.onOpenTab?.call(0);
+    }
+    if (_ringingIds.isEmpty) unawaited(_alarm.stop());
+
+    // หมดเวลาตอบงานที่กำลังปลุก: หยุดเองแม้ยังไม่ถึงรอบดึงข้อมูลถัดไป
+    _expiryTimer?.cancel();
+    final ringing = _offers.where((o) => _ringingIds.contains(o.orderId));
+    if (ringing.isNotEmpty) {
+      final next = ringing
+          .map((o) => o.expiresAt)
+          .reduce((a, b) => a.isBefore(b) ? a : b);
+      _expiryTimer = Timer(next.difference(now) + const Duration(seconds: 1),
+          () {
+        if (mounted) setState(_updateAlarm);
+      });
+    }
+  }
+
+  void _silence([String? orderId]) {
+    setState(() {
+      if (orderId == null) {
+        _ringingIds = {};
+      } else {
+        _ringingIds.remove(orderId);
+      }
+    });
+    if (_ringingIds.isEmpty) unawaited(_alarm.stop());
+  }
+
+  Future<void> _editHours() async {
+    final saved = await showWorkingHoursSheet(
+      context,
+      api: ProviderAppScope.of(context).api,
+      open: _openMinute ?? allDayOpenMinute,
+      close: _closeMinute ?? allDayCloseMinute,
+    );
+    if (saved == null || !mounted) return;
+    _applyHours(saved.open, saved.close);
+  }
+
+  void _applyHours(int open, int close) {
+    setState(() {
+      _openMinute = open;
+      _closeMinute = close;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('บันทึกแล้ว: ${workingHoursSentence(open, close)}')),
+    );
+  }
+
+  /// ปุ่มในกล่องเตือนนอกเวลา: รับงานตลอดเวลา หรือขยายถึงเที่ยงคืน
+  Future<void> _workNow({required bool untilMidnight}) async {
+    final next = untilMidnight
+        ? extendWorkingHours(
+            open: _openMinute ?? allDayOpenMinute,
+            close: _closeMinute ?? allDayCloseMinute,
+          )
+        : (open: allDayOpenMinute, close: allDayCloseMinute);
+    try {
+      final saved = await ProviderAppScope.of(context)
+          .api
+          .updateProviderHours(openMinute: next.open, closeMinute: next.close);
+      if (!mounted) return;
+      _applyHours(saved.openMinute, saved.closeMinute);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    }
   }
 
   /// เริ่มส่งตำแหน่งขึ้น backend ต่อเนื่องขณะออนไลน์ — ระบบ auto-dispatch ใช้
@@ -160,6 +270,7 @@ class _OffersScreenState extends State<OffersScreen> {
       }
       setState(() {
         _offers = results[0] as List<JobOffer>;
+        _updateAlarm();
         _activeJob = orders
             .where(
               (order) =>
@@ -202,6 +313,8 @@ class _OffersScreenState extends State<OffersScreen> {
   }
 
   Future<void> _toggleOnline(bool value) async {
+    // ต้องเรียกก่อน await แรก: เบราว์เซอร์ยอมให้ปลดล็อกเสียง/ขอสิทธิ์แจ้งเตือนเฉพาะตอนแตะจอ
+    if (value) _alarm.prepare();
     try {
       await ProviderAppScope.of(context).api.setOnline(value);
       if (!mounted) return;
@@ -225,6 +338,7 @@ class _OffersScreenState extends State<OffersScreen> {
   }
 
   Future<void> _accept(JobOffer offer) async {
+    _silence(offer.orderId);
     try {
       await ProviderAppScope.of(context).api.acceptOffer(offer.orderId);
       if (!mounted) return;
@@ -242,6 +356,7 @@ class _OffersScreenState extends State<OffersScreen> {
   }
 
   Future<void> _reject(JobOffer offer) async {
+    _silence(offer.orderId);
     try {
       await ProviderAppScope.of(context).api.rejectOffer(offer.orderId);
       await _refresh();
@@ -255,6 +370,12 @@ class _OffersScreenState extends State<OffersScreen> {
   @override
   Widget build(BuildContext context) {
     final isOnline = ProviderAppScope.of(context).isOnline;
+    final open = _openMinute;
+    final close = _closeMinute;
+    final outsideHours = isOnline &&
+        open != null &&
+        close != null &&
+        !isWithinWorkingHours(open, close, bangkokMinuteOfDay());
     return Scaffold(
       backgroundColor: FixGoColors.surface,
       body: RefreshIndicator(
@@ -262,7 +383,14 @@ class _OffersScreenState extends State<OffersScreen> {
         child: ListView(
           padding: const EdgeInsets.only(bottom: FixGoSpacing.xl),
           children: [
-            _FixerHeader(isOnline: isOnline, onToggle: _toggleOnline),
+            _FixerHeader(
+              isOnline: isOnline,
+              onToggle: _toggleOnline,
+              hoursLabel: open == null || close == null
+                  ? null
+                  : workingHoursLabel(open, close),
+              onEditHours: _editHours,
+            ),
             Transform.translate(
               offset: const Offset(0, -28),
               child: Padding(
@@ -278,6 +406,15 @@ class _OffersScreenState extends State<OffersScreen> {
                         status: _accountStatus!,
                         note: _reviewNote,
                         onResubmit: _resubmit,
+                      ),
+                      const SizedBox(height: FixGoSpacing.md),
+                    ],
+                    if (outsideHours) ...[
+                      _OutsideHoursCard(
+                        hours: workingHoursLabel(open, close),
+                        onWorkNow: () => _workNow(untilMidnight: false),
+                        onUntilMidnight: () => _workNow(untilMidnight: true),
+                        onEdit: _editHours,
                       ),
                       const SizedBox(height: FixGoSpacing.md),
                     ],
@@ -322,11 +459,15 @@ class _OffersScreenState extends State<OffersScreen> {
                                 )
                               : Column(
                                   children: [
+                                    if (_ringingIds.isNotEmpty)
+                                      _RingingBanner(onSilence: _silence),
                                     for (final (index, offer)
                                         in _offers.indexed) ...[
                                       if (index > 0) const Divider(height: 32),
                                       _OfferCard(
                                         offer: offer,
+                                        ringing: _ringingIds
+                                            .contains(offer.orderId),
                                         onAccept: () => _accept(offer),
                                         onReject: () => _reject(offer),
                                       ),
@@ -442,10 +583,19 @@ class _TodaySummary {
 }
 
 class _FixerHeader extends StatelessWidget {
-  const _FixerHeader({required this.isOnline, required this.onToggle});
+  const _FixerHeader({
+    required this.isOnline,
+    required this.onToggle,
+    required this.hoursLabel,
+    required this.onEditHours,
+  });
 
   final bool isOnline;
   final ValueChanged<bool> onToggle;
+
+  /// "ตลอดเวลา" หรือ "08:00-20:00" (null ระหว่างโหลดโปรไฟล์)
+  final String? hoursLabel;
+  final VoidCallback onEditHours;
 
   @override
   Widget build(BuildContext context) {
@@ -501,7 +651,16 @@ class _FixerHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              _OnlineToggle(isOnline: isOnline, onToggle: onToggle),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _OnlineToggle(isOnline: isOnline, onToggle: onToggle),
+                  if (hoursLabel != null) ...[
+                    const SizedBox(height: 6),
+                    _HoursChip(label: hoursLabel!, onTap: onEditHours),
+                  ],
+                ],
+              ),
             ],
           ),
         ),
@@ -968,9 +1127,13 @@ class _OfferCard extends StatefulWidget {
     required this.offer,
     required this.onAccept,
     required this.onReject,
+    this.ringing = false,
   });
 
   final JobOffer offer;
+
+  /// งานใหม่ที่กำลังปลุก: การ์ดกระพริบทุกวินาทีจนกว่าจะรับ/ปฏิเสธ
+  final bool ringing;
   final VoidCallback onAccept;
   final VoidCallback onReject;
 
@@ -1001,9 +1164,21 @@ class _OfferCardState extends State<_OfferCard> {
     final expired = remaining.isNegative;
     final minutes = remaining.inMinutes.clamp(0, 99);
     final seconds = (remaining.inSeconds % 60).clamp(0, 59);
+    final flash = widget.ringing && !expired && remaining.inSeconds.isEven;
 
-    return Padding(
-      padding: EdgeInsets.zero,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      padding: widget.ringing ? const EdgeInsets.all(FixGoSpacing.sm) : EdgeInsets.zero,
+      decoration: BoxDecoration(
+        color: flash ? const Color(0x33C7EE77) : null,
+        borderRadius: BorderRadius.circular(FixGoRadius.md),
+        border: widget.ringing
+            ? Border.all(
+                color: flash ? FixGoColors.jade : FixGoColors.hairline,
+                width: 2,
+              )
+            : null,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1118,6 +1293,153 @@ class _OfferCardState extends State<_OfferCard> {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ใต้สวิตช์พร้อมรับงาน: ช่วงเวลารับงานตอนนี้ แตะเพื่อแก้
+class _HoursChip extends StatelessWidget {
+  const _HoursChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'เวลารับงาน $label แตะเพื่อแก้',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(FixGoRadius.md),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.schedule, size: 16, color: Color(0xFFC9DDD4)),
+              const SizedBox(width: 4),
+              Text(
+                'รับงาน: $label',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.edit, size: 14, color: FixGoColors.lime),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// เปิดพร้อมรับงานอยู่ แต่ตอนนี้นอกเวลารับงานที่ตั้งไว้: dispatch จะข้ามช่างคนนี้
+class _OutsideHoursCard extends StatelessWidget {
+  const _OutsideHoursCard({
+    required this.hours,
+    required this.onWorkNow,
+    required this.onUntilMidnight,
+    required this.onEdit,
+  });
+
+  final String hours;
+  final VoidCallback onWorkNow;
+  final VoidCallback onUntilMidnight;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(FixGoSpacing.md),
+      decoration: BoxDecoration(
+        color: FixGoColors.warning.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(FixGoRadius.lg),
+        border: Border.all(color: FixGoColors.warning, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: FixGoColors.warning),
+              SizedBox(width: FixGoSpacing.sm),
+              Expanded(
+                child: Text(
+                  'ตอนนี้นอกเวลารับงานที่ตั้งไว้ ระบบจะไม่ส่งงานให้',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: FixGoColors.navy,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'เวลารับงานของคุณ: $hours',
+            style: const TextStyle(color: FixGoColors.textSecondary),
+          ),
+          const SizedBox(height: FixGoSpacing.sm),
+          FilledButton.icon(
+            onPressed: onWorkNow,
+            icon: const Icon(Icons.bolt),
+            label: const Text('รับงานตอนนี้เลย (ตลอดเวลา)'),
+          ),
+          const SizedBox(height: FixGoSpacing.xs),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onUntilMidnight,
+                  child: const Text('ถึงเที่ยงคืน'),
+                ),
+              ),
+              const SizedBox(width: FixGoSpacing.sm),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onEdit,
+                  child: const Text('แก้เวลารับงาน'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// แถบบนรายการงานตอนกำลังปลุก: ปิดเสียงได้โดยไม่ต้องรับ/ปฏิเสธทันที
+class _RingingBanner extends StatelessWidget {
+  const _RingingBanner({required this.onSilence});
+
+  final VoidCallback onSilence;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: FixGoSpacing.sm),
+      child: Row(
+        children: [
+          const Icon(Icons.notifications_active, color: FixGoColors.error),
+          const SizedBox(width: FixGoSpacing.xs),
+          const Expanded(
+            child: Text(
+              'งานใหม่! กดรับหรือปฏิเสธก่อนหมดเวลา',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: onSilence,
+            icon: const Icon(Icons.volume_off, size: 18),
+            label: const Text('ปิดเสียง'),
           ),
         ],
       ),
