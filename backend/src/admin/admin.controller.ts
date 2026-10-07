@@ -59,6 +59,11 @@ export class SetProviderStatusDto {
   note?: string;
 }
 
+export class SetActiveDto {
+  @IsBoolean()
+  active!: boolean;
+}
+
 export class CancelOrderDto {
   /** ข้อความนี้ส่งถึงลูกค้าทาง push เขียนให้ลูกค้าอ่านเข้าใจ */
   @IsString()
@@ -174,6 +179,25 @@ export class AdminController {
     @Body() dto: SetProviderStatusDto,
   ) {
     return this.admin.setProviderStatus(id, dto.status, dto.note);
+  }
+
+  // ---------- หมวดบริการ (เปิด/ปิดหมวดที่ยังไม่มีช่าง) ----------
+
+  @Get('catalog')
+  listCatalog() {
+    return this.admin.listCatalog();
+  }
+
+  @Patch('catalog/categories/:id')
+  @Audit('CATEGORY_ACTIVE', 'serviceCategory')
+  setCategoryActive(@Param('id') id: string, @Body() dto: SetActiveDto) {
+    return this.admin.setCategoryActive(id, dto.active);
+  }
+
+  @Patch('catalog/sub-services/:id')
+  @Audit('SUB_SERVICE_ACTIVE', 'subService')
+  setSubServiceActive(@Param('id') id: string, @Body() dto: SetActiveDto) {
+    return this.admin.setSubServiceActive(id, dto.active);
   }
 
   // ---------- งาน ----------

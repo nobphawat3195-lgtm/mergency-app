@@ -639,6 +639,30 @@ async function main() {
     assert.ok(!JSON.stringify(stored.photoUrl).includes(phone));
     assert.ok(stored.toolPhotos.every((tool) => !tool.url.includes(phone)));
   });
+  await check('Admin closes a category: customers cannot see or book it until reopened', async () => {
+    const catalog = (await request('GET', '/admin/catalog', staff, undefined, 200)).body;
+    const row = catalog.find((item) => item.id === category.id);
+    assert.ok(row && row.active && typeof row._count.providers === 'number');
+    await request('PATCH', `/admin/catalog/categories/${category.id}`, customer, { active: false }, 403);
+    await request('PATCH', `/admin/catalog/categories/${category.id}`, staff, { active: 'no' }, 400);
+    await request('PATCH', `/admin/catalog/categories/${category.id}`, staff, { active: false }, 200);
+    const visible = (await request('GET', '/catalog/categories', undefined, undefined, 200)).body;
+    assert.ok(!visible.some((item) => item.id === category.id));
+    await request('GET', `/catalog/categories/${category.id}/sub-services`, undefined, undefined, 404);
+    const closed = await request('POST', '/orders', customer, booking, 400);
+    assert.equal(closed.body.message, 'บริการนี้ปิดรับงานชั่วคราว กรุณาเลือกบริการอื่น');
+    await request('PATCH', `/admin/catalog/categories/${category.id}`, staff, { active: true }, 200);
+
+    // ปิดเฉพาะบริการย่อย
+    await request('PATCH', `/admin/catalog/sub-services/${booking.subServiceId}`, owner, { active: false }, 200);
+    const subs = (await request('GET', `/catalog/categories/${category.id}/sub-services`, undefined, undefined, 200)).body;
+    assert.ok(!subs.some((item) => item.id === booking.subServiceId));
+    await request('POST', '/orders', customer, booking, 400);
+    await request('PATCH', `/admin/catalog/sub-services/${booking.subServiceId}`, owner, { active: true }, 200);
+    assert.ok(
+      (await prisma.adminAuditLog.count({ where: { action: { in: ['CATEGORY_ACTIVE', 'SUB_SERVICE_ACTIVE'] } } })) >= 4,
+    );
+  });
   await check('Mechanic changes job hours any time; invalid minutes are rejected', async () => {
     const bangkok = new Date(Date.now() + 7 * 60 * 60 * 1000);
     const nowMinute = bangkok.getUTCHours() * 60 + bangkok.getUTCMinutes();

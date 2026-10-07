@@ -176,6 +176,52 @@ export class AdminService {
     return { orderNo: order.orderNo, messages };
   }
 
+  /**
+   * หมวดบริการและบริการย่อยทั้งหมด (รวมที่ปิดอยู่) พร้อมจำนวนช่างที่อนุมัติแล้วในหมวด
+   * ให้แอดมินเห็นว่าหมวดไหนยังไม่มีช่าง ควรปิดไว้ก่อน
+   */
+  listCatalog() {
+    return this.prisma.serviceCategory.findMany({
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        subServices: { orderBy: { sortOrder: 'asc' } },
+        _count: {
+          select: {
+            providers: {
+              where: {
+                provider: {
+                  status: ProviderStatus.VERIFIED,
+                  deletedAt: null,
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async setCategoryActive(id: string, active: boolean) {
+    const found = await this.prisma.serviceCategory.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!found) throw new NotFoundException('ไม่พบหมวดบริการ');
+    return this.prisma.serviceCategory.update({
+      where: { id },
+      data: { active },
+    });
+  }
+
+  async setSubServiceActive(id: string, active: boolean) {
+    const found = await this.prisma.subService.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!found) throw new NotFoundException('ไม่พบบริการย่อย');
+    return this.prisma.subService.update({ where: { id }, data: { active } });
+  }
+
   listProviders(status?: ProviderStatus) {
     return this.prisma.provider.findMany({
       where: status ? { status } : undefined,

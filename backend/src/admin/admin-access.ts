@@ -77,7 +77,14 @@ export class AdminAccessGuard implements CanActivate {
 }
 
 /** ฟิลด์จาก body ที่ปลอดภัยพอจะเก็บในบันทึก (ไม่มีรหัสผ่าน) */
-const DETAIL_FIELDS = ['status', 'note', 'reason', 'role', 'disabled'];
+const DETAIL_FIELDS = [
+  'status',
+  'note',
+  'reason',
+  'role',
+  'disabled',
+  'active',
+];
 
 @Injectable()
 export class AdminAuditService {
