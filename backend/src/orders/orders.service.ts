@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  ClosePhotoKind,
   OrderStatus,
   PaymentStatus,
   QuoteStatus,
@@ -26,7 +27,14 @@ import {
   InspectionsService,
 } from '../inspections/inspections.service';
 import { PROVIDER_CARD_SELECT, presentProviderCard } from './provider-card';
+
+/** รูปตอนปิดงาน เรียงตามลำดับที่ช่างแนบ */
+const CLOSE_PHOTOS = {
+  select: { kind: true, url: true },
+  orderBy: { createdAt: 'asc' },
+} as const;
 import {
+  CompleteOrderDto,
   CreateOrderDto,
   ProposeQuoteDto,
   RateOrderDto,
@@ -157,6 +165,7 @@ export class OrdersService {
         subService: true,
         vehicleType: true,
         photos: true,
+        closePhotos: CLOSE_PHOTOS,
         payment: PAYMENT_SUMMARY,
         rating: true,
         suggestion: { select: { choices: true, otherText: true } },
@@ -206,7 +215,7 @@ export class OrdersService {
   listForCustomer(customerId: string) {
     return this.prisma.order.findMany({
       where: { customerId },
-      include: { category: true, subService: true },
+      include: { category: true, subService: true, closePhotos: CLOSE_PHOTOS },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -219,6 +228,7 @@ export class OrdersService {
         category: true,
         subService: true,
         photos: true,
+        closePhotos: CLOSE_PHOTOS,
         payment: PAYMENT_SUMMARY,
         inspection: {
           select: {
@@ -428,7 +438,12 @@ export class OrdersService {
   }
 
   /** ช่างปิดงานด้วยราคาที่ลูกค้ายืนยันแล้ว ระบบสร้างรายการชำระเงินรอลูกค้าจ่าย */
-  async completeByProvider(providerId: string, orderId: string) {
+  /** ปิดงาน: ต้องแนบรูปรถหลังซ่อม 1-5 รูป แนบใบเสร็จ/สลิปเพิ่มได้ (ไม่บังคับ) */
+  async completeByProvider(
+    providerId: string,
+    orderId: string,
+    dto: CompleteOrderDto,
+  ) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
     });
@@ -446,6 +461,12 @@ export class OrdersService {
       throw new BadRequestException('ไม่พบราคาที่ลูกค้ายืนยันแล้ว');
     }
     await this.inspections.assertSubmittedIfRequired(orderId);
+    const receipts = dto.receiptPhotoUrls ?? [];
+    this.uploads.assertOwnedUploads(
+      [...dto.carPhotoUrls, ...receipts],
+      providerId,
+      'ORDER',
+    );
 
     await this.prisma.$transaction(async (tx) => {
       const completed = await tx.order.updateMany({
@@ -464,6 +485,20 @@ export class OrdersService {
       if (completed.count !== 1) {
         throw new BadRequestException('ออเดอร์นี้ถูกปิดงานไปแล้ว');
       }
+      await tx.orderClosePhoto.createMany({
+        data: [
+          ...dto.carPhotoUrls.map((url) => ({
+            orderId,
+            kind: ClosePhotoKind.CAR,
+            url,
+          })),
+          ...receipts.map((url) => ({
+            orderId,
+            kind: ClosePhotoKind.RECEIPT,
+            url,
+          })),
+        ],
+      });
 
       await tx.payment.upsert({
         where: { orderId },

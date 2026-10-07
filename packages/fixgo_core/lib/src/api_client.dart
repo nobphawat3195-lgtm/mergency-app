@@ -439,6 +439,34 @@ class FixGoApiClient {
     });
   }
 
+  // ---------- Chat ----------
+
+  /// เปิดแชทของงาน: ข้อความทั้งหมด และส่งต่อได้ไหม (เรียกแล้วนับว่าอ่านแล้ว)
+  Future<({bool canSend, List<ChatMessage> messages})> getOrderChat(
+    String orderId,
+  ) async {
+    final result =
+        await _send('GET', '/orders/$orderId/messages') as Map<String, dynamic>;
+    return (
+      canSend: result['canSend'] as bool? ?? false,
+      messages: (result['messages'] as List<dynamic>? ?? const [])
+          .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<ChatMessage> sendOrderMessage(
+    String orderId, {
+    String? text,
+    String? imageUrl,
+  }) async {
+    final result = await _send('POST', '/orders/$orderId/messages', body: {
+      if (text != null) 'text': text,
+      if (imageUrl != null) 'imageUrl': imageUrl,
+    }) as Map<String, dynamic>;
+    return ChatMessage.fromJson(result);
+  }
+
   // ---------- Provider ----------
 
   Future<({String accessToken, bool hasProfile})> registerProvider(
@@ -616,8 +644,16 @@ class FixGoApiClient {
         body: {'quoteVersion': quoteVersion, 'priceProposed': priceProposed});
   }
 
-  Future<void> completeJob(String orderId) async {
-    await _send('POST', '/orders/$orderId/complete');
+  /// ปิดงาน: รูปรถหลังซ่อม 1-5 รูป (บังคับ) และใบเสร็จ/สลิปสูงสุด 3 รูป (ไม่บังคับ)
+  Future<void> completeJob(
+    String orderId, {
+    required List<String> carPhotoUrls,
+    List<String> receiptPhotoUrls = const [],
+  }) async {
+    await _send('POST', '/orders/$orderId/complete', body: {
+      'carPhotoUrls': carPhotoUrls,
+      if (receiptPhotoUrls.isNotEmpty) 'receiptPhotoUrls': receiptPhotoUrls,
+    });
   }
 
   // ---------- Wallet (ช่าง) ----------
