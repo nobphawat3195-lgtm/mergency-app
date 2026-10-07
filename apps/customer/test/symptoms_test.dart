@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:fixgo_core/fixgo_core.dart';
 import 'package:fixgo_customer/symptoms.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,5 +44,17 @@ void main() {
   test('ข้อความอาการไม่ซ้ำกัน', () {
     final labels = carSymptoms.map((s) => s.label).toSet();
     expect(labels, hasLength(carSymptoms.length));
+  });
+
+  test('หมวดที่แอดมินปิด (API ไม่ส่งมา) ไม่แสดงอาการของหมวดนั้น', () {
+    ServiceCategory category(String slug) =>
+        ServiceCategory(id: slug, slug: slug, name: slug, iconKey: slug);
+    final battery = carSymptoms.firstWhere((s) => s.categorySlug == 'battery');
+    final tire = carSymptoms.firstWhere((s) => s.categorySlug == 'tire');
+
+    final onlyBattery = openSymptoms([category('battery')]);
+    expect(onlyBattery, contains(battery));
+    expect(onlyBattery, isNot(contains(tire)));
+    expect(openSymptoms(const []), isEmpty);
   });
 }
