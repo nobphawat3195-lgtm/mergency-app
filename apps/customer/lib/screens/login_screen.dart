@@ -131,7 +131,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return FixGoAuthLayout(
-      tagline: 'รถเสีย ไม่ต้องรอ\nเรียกช่างใกล้คุณได้ 24 ชม.',
+      tagline: 'รถเสียกลางทาง\nไม่ต้องอยู่คนเดียว',
       footer: const FixGoTrustRow(
         items: [
           (icon: Icons.near_me_outlined, label: 'ช่างใกล้คุณ\nไปถึงไว'),
