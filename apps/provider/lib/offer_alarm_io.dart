@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 import 'offer_alarm.dart';
 
@@ -21,8 +23,11 @@ const _channel = AndroidNotificationChannel(
 class _NativeOfferAlarm implements OfferAlarmBackend {
   // สร้างตอนใช้ครั้งแรก: เทสต์ที่ไม่มี plugin จะไม่แตะ platform channel
   AudioPlayer? _player;
+  AudioPlayer? _voicePlayer;
+  FlutterTts? _tts;
   FlutterLocalNotificationsPlugin? _notifications;
   Future<void>? _ready;
+  Future<_Voice>? _voice;
 
   @override
   bool get isInBackground {
@@ -73,21 +78,71 @@ class _NativeOfferAlarm implements OfferAlarmBackend {
     }());
   }
 
+  // ดังแม้เปิดโหมดเงียบ (iOS) เหมือนนาฬิกาปลุก
+  static final _loud = AudioContextConfig(respectSilence: false).build();
+
   @override
-  Future<void> startSound() async {
+  Future<void> playChime() async {
     final player = _player ??= AudioPlayer();
-    await player.setReleaseMode(ReleaseMode.loop);
-    // ดังแม้เปิดโหมดเงียบ (iOS) เหมือนนาฬิกาปลุก
+    await player.setReleaseMode(ReleaseMode.stop);
     await player.play(
       AssetSource('sounds/offer_alarm.wav'),
       volume: 1,
-      ctx: AudioContextConfig(respectSilence: false).build(),
+      ctx: _loud,
     );
+  }
+
+  /// เลือกครั้งเดียว: ไฟล์เสียงที่อัดเอง > TTS ภาษาไทย > ไม่พูด
+  Future<_Voice> _pickVoice() async {
+    if (await hasOfferVoiceAsset()) return _Voice.recorded;
+    final tts = _tts ??= FlutterTts();
+    try {
+      if (await tts.isLanguageAvailable(offerVoiceLanguage) != true) {
+        return _Voice.none;
+      }
+      await tts.setLanguage(offerVoiceLanguage);
+      // flutter_tts ใช้ 0.5 เป็นความเร็วปกติทั้ง Android และ iOS
+      await tts.setSpeechRate(0.5);
+      await tts.setVolume(1);
+      await tts.awaitSpeakCompletion(true);
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await tts.setSharedInstance(true);
+        await tts.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playback,
+          [IosTextToSpeechAudioCategoryOptions.mixWithOthers],
+        );
+      }
+      return _Voice.tts;
+    } catch (_) {
+      return _Voice.none;
+    }
+  }
+
+  @override
+  Future<void> speak(String text) async {
+    switch (await (_voice ??= _pickVoice())) {
+      case _Voice.recorded:
+        final player = _voicePlayer ??= AudioPlayer();
+        await player.setReleaseMode(ReleaseMode.stop);
+        final done = player.onPlayerComplete.first;
+        await player.play(
+          AssetSource(offerVoiceAsset.replaceFirst('assets/', '')),
+          volume: 1,
+          ctx: _loud,
+        );
+        await done;
+      case _Voice.tts:
+        await _tts?.speak(text);
+      case _Voice.none:
+        return;
+    }
   }
 
   @override
   Future<void> stopSound() async {
     await _player?.stop();
+    await _voicePlayer?.stop();
+    await _tts?.stop();
   }
 
   @override
@@ -124,3 +179,5 @@ class _NativeOfferAlarm implements OfferAlarmBackend {
     );
   }
 }
+
+enum _Voice { recorded, tts, none }

@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Backend implements OfferAlarmBackend {
-  int starts = 0;
+  int chimes = 0;
   int stops = 0;
 
   @override
@@ -17,7 +17,9 @@ class _Backend implements OfferAlarmBackend {
   @override
   void requestNotificationPermission() {}
   @override
-  Future<void> startSound() async => starts++;
+  Future<void> playChime() async => chimes++;
+  @override
+  Future<void> speak(String text) async {}
   @override
   Future<void> stopSound() async => stops++;
   @override
@@ -114,22 +116,24 @@ void main() {
       (tester) async {
     final (_, api, backend) = await _pump(tester, offers: [_offer('1')]);
 
-    expect(backend.starts, 1);
+    expect(backend.chimes, 1);
     expect(find.text('งานใหม่! กดรับหรือปฏิเสธก่อนหมดเวลา'), findsOneWidget);
 
-    // รอบดึงข้อมูลถัดไปเห็นงานเดิม ไม่ปลุกซ้ำ
+    // ดังวนทุก 4 วิ (0, 4, 8) รอบดึงข้อมูลถัดไปเห็นงานเดิมไม่เริ่มปลุกซ้อน
     await tester.pump(const Duration(seconds: 10));
-    expect(backend.starts, 1);
+    expect(backend.chimes, 3);
 
     await tester.tap(find.text('ปิดเสียง'));
     await tester.pump();
     expect(backend.stops, 1);
     expect(find.text('งานใหม่! กดรับหรือปฏิเสธก่อนหมดเวลา'), findsNothing);
+    await tester.pump(const Duration(seconds: 8));
+    expect(backend.chimes, 3);
 
     // งานใหม่อีกงานปลุกอีกครั้ง
     api.offers = [_offer('1'), _offer('2')];
-    await tester.pump(const Duration(seconds: 10));
-    expect(backend.starts, 2);
+    await tester.pump(const Duration(seconds: 2));
+    expect(backend.chimes, 4);
   });
 
   testWidgets('shows the current job hours under the switch', (tester) async {

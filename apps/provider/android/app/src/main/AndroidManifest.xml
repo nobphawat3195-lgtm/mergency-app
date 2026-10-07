@@ -65,5 +65,9 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Android 11+: ต้องประกาศไม่งั้นมองไม่เห็นเครื่องอ่านเสียง (TTS) ตอนพูดแจ้งงานเข้า -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
     </queries>
 </manifest>
