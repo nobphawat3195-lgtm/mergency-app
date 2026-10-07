@@ -38,6 +38,7 @@ import {
   CreateOrderDto,
   ProposeQuoteDto,
   RateOrderDto,
+  ServiceSuggestionDto,
   RespondQuoteDto,
 } from './dto/order.dto';
 
@@ -167,6 +168,7 @@ export class OrdersService {
         closePhotos: CLOSE_PHOTOS,
         payment: PAYMENT_SUMMARY,
         rating: true,
+        suggestion: { select: { choices: true, otherText: true } },
         inspection: {
           select: {
             brand: true,
@@ -511,6 +513,45 @@ export class OrdersService {
 
     void this.push.completed(order.customerId, order, order.priceProposed);
     return this.findById(orderId);
+  }
+
+  /**
+   * คำถามเสริมหลังให้ดาว: อยากให้ FixGo เพิ่มบริการหรือปรับอะไร (ไม่บังคับ ตอบได้ครั้งเดียว)
+   * ข้อมูลนี้ไปที่ทีม FixGo ไม่แสดงให้ช่างเห็น
+   */
+  async suggest(
+    customerId: string,
+    orderId: string,
+    dto: ServiceSuggestionDto,
+  ) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { customerId: true, rating: { select: { id: true } } },
+    });
+    if (!order || order.customerId !== customerId) {
+      throw new NotFoundException('ไม่พบออเดอร์นี้');
+    }
+    if (!order.rating) {
+      throw new BadRequestException('ให้คะแนนบริการก่อนแล้วค่อยตอบคำถามนี้');
+    }
+    const otherText = dto.otherText?.trim() || null;
+    if (dto.choices.length === 0 && !otherText) {
+      throw new BadRequestException('เลือกอย่างน้อย 1 ข้อ หรือพิมพ์ความเห็น');
+    }
+    try {
+      return await this.prisma.serviceSuggestion.create({
+        data: { orderId, choices: dto.choices, otherText },
+        select: { choices: true, otherText: true },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new BadRequestException('ตอบคำถามนี้ไปแล้ว ขอบคุณครับ');
+      }
+      throw error;
+    }
   }
 
   async rate(customerId: string, orderId: string, dto: RateOrderDto) {

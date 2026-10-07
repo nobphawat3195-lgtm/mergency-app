@@ -132,6 +132,11 @@
   .tags { display: flex; flex-wrap: wrap; gap: 6px; }
   .tag { background: #ECF8F1; border-radius: 999px; padding: 2px 10px; font-size: 13px; }
   .tools { display: flex; flex-wrap: wrap; gap: 8px; }
+  .fb-bars { display: grid; gap: 10px; margin: 8px 0 16px; }
+  .fb-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; font-size: 14px; max-width: 560px; }
+  .fb-track { grid-column: 1 / -1; height: 12px; background: #ECF8F1; border-radius: 4px; overflow: hidden; }
+  .fb-fill { height: 100%; background: #0B5F45; border-radius: 0 4px 4px 0; min-width: 2px; }
+  .fb-value { text-align: right; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
   .photos-dialog { width: min(560px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
   .photos-dialog::backdrop { background: rgba(18, 40, 33, 0.45); }
   .photos-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -274,6 +279,14 @@
     <div class="card">
       <h2>ช่างรออนุมัติ <span class="muted">(ตรวจรูปหน้า เครื่องมือ และบริการที่รับ ก่อนกดอนุมัติ)</span></h2>
       <div id="providers-body" class="applicants"></div>
+    </div>
+
+    <div class="card" id="feedback-card">
+      <h2>ข้อเสนอแนะจากลูกค้า <span class="muted">(ถามหลังลูกค้าให้ดาว: อยากให้ FixGo เพิ่มบริการหรือปรับอะไร ไม่บังคับตอบ)</span></h2>
+      <div id="feedback-summary"></div>
+      <div class="table-wrap"><table><thead><tr>
+        <th>เมื่อ</th><th>งาน</th><th>ดาว</th><th>เลือก</th><th>ความเห็น</th>
+      </tr></thead><tbody id="feedback-body"></tbody></table></div>
     </div>
 
     <div class="card" id="catalog-card">
@@ -470,7 +483,7 @@ async function showDashboard() {
 
 async function refreshAll() {
   await Promise.all([
-    loadSummary(), loadNoMatch(), loadSlips(), loadSettlements(), loadProviders(), loadCatalog(), loadWithdrawals(), loadOrders(),
+    loadSummary(), loadNoMatch(), loadSlips(), loadSettlements(), loadProviders(), loadCatalog(), loadFeedback(), loadWithdrawals(), loadOrders(),
     ...(isOwner() ? [loadFinance(), loadTeam(), loadAudit()] : []),
   ]);
 }
@@ -929,6 +942,47 @@ async function setProviderStatus(id, status) {
     body: JSON.stringify(note ? { status, note: note.trim() } : { status }),
   });
   await Promise.all([loadProviders(), loadSummary()]);
+}
+
+// ---------- ข้อเสนอแนะจากลูกค้า ----------
+const SUGGESTION_LABELS = {
+  TOW_TRUCK: 'เพิ่มบริการรถยก',
+  FASTER_ARRIVAL: 'ช่างมาเร็วขึ้น',
+  LOWER_PRICE: 'ราคาถูกลง',
+  MORE_AREAS: 'เพิ่มพื้นที่ให้บริการ',
+  OTHER: 'อื่นๆ',
+};
+
+async function loadFeedback() {
+  const data = await api('/admin/feedback');
+  if (data.total === 0) {
+    el('feedback-summary').innerHTML = '<p class="muted">ยังไม่มีลูกค้าตอบ</p>';
+    el('feedback-body').innerHTML = '';
+    return;
+  }
+  // เรียงจากมากไปน้อย ความยาวแท่ง = สัดส่วนของคนที่ตอบ (เลือกได้หลายข้อ รวมจึงเกิน 100%)
+  const rows = Object.keys(SUGGESTION_LABELS)
+    .map((code) => ({ code, count: data.counts[code] || 0 }))
+    .sort((a, b) => b.count - a.count);
+  el('feedback-summary').innerHTML = `
+    <p class="muted">ตอบแล้ว ${escapeHtml(data.total)} คน (เลือกได้หลายข้อ)</p>
+    <div class="fb-bars" role="list">${rows.map((row) => {
+      const percent = Math.round((row.count / data.total) * 100);
+      const label = SUGGESTION_LABELS[row.code];
+      return `<div class="fb-row" role="listitem" title="${escapeHtml(label)}: ${escapeHtml(row.count)} คน (${percent}%)">
+        <span>${escapeHtml(label)}</span>
+        <span class="fb-value">${escapeHtml(row.count)} คน · ${percent}%</span>
+        <div class="fb-track"><div class="fb-fill" style="width:${percent}%"></div></div>
+      </div>`;
+    }).join('')}</div>`;
+  el('feedback-body').innerHTML = data.recent.map((row) => `
+    <tr>
+      <td>${escapeHtml(new Date(row.createdAt).toLocaleDateString('th-TH'))}</td>
+      <td>${escapeHtml(row.orderNo)}<br><small>${escapeHtml(row.serviceName)}</small></td>
+      <td>${row.score ? escapeHtml(row.score + '/5') : '-'}</td>
+      <td>${row.choices.map((code) => escapeHtml(SUGGESTION_LABELS[code] || code)).join(', ') || '-'}</td>
+      <td>${escapeHtml(row.otherText || '-')}</td>
+    </tr>`).join('');
 }
 
 // ---------- หมวดบริการ ----------

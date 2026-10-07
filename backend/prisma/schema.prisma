@@ -276,6 +276,7 @@ model Order {
   payment          Payment?
   walletEntries    WalletEntry[]
   rating           Rating?
+  suggestion       ServiceSuggestion?
   inspection       InspectionReport?
 
   @@index([customerId])
@@ -552,6 +553,20 @@ model Rating {
   createdAt DateTime @default(now())
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+/// คำตอบหลังให้ดาว "อยากให้ FixGo เพิ่มบริการหรือปรับอะไร" (ไม่บังคับ ตอบได้ครั้งเดียวต่องาน)
+/// choices เก็บรหัสตัวเลือก เช่น TOW_TRUCK, FASTER_ARRIVAL, LOWER_PRICE, MORE_AREAS, OTHER
+model ServiceSuggestion {
+  id        String   @id @default(uuid())
+  orderId   String   @unique
+  choices   String[]
+  otherText String?
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
 }
 
 enum SettlementStatus {

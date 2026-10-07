@@ -11,6 +11,7 @@ import 'inspection_report_screen.dart';
 import 'tracking/live_map_card.dart';
 import 'tracking/provider_trust_card.dart';
 import 'tracking/safety_actions.dart';
+import 'tracking/suggestion_card.dart';
 
 class OrderTrackingScreen extends StatefulWidget {
   const OrderTrackingScreen({super.key, required this.orderId});
@@ -26,6 +27,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   String? _error;
   Timer? _pollTimer;
   bool _respondingToQuote = false;
+
+  /// กดข้ามคำถามเสริมหลังให้ดาวแล้ว (ไม่ถามซ้ำระหว่างเปิดหน้านี้)
+  bool _suggestionSkipped = false;
   StreamSubscription<PushEvent>? _pushSub;
   StreamSubscription<String>? _liveSub;
   Timer? _reconnectTimer;
@@ -379,6 +383,27 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                     order: order,
                     onSubmitted: _refresh,
                   ),
+                  if (order.ratingScore != null &&
+                      !order.suggestionSent &&
+                      !_suggestionSkipped) ...[
+                    const SizedBox(height: FixGoSpacing.md),
+                    SuggestionCard(
+                      api: AppStateScope.of(context).api,
+                      orderId: order.id,
+                      onDone: (sent) {
+                        if (sent) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('ขอบคุณ ทีมงานได้รับความเห็นแล้ว'),
+                            ),
+                          );
+                          unawaited(_refresh());
+                        } else {
+                          setState(() => _suggestionSkipped = true);
+                        }
+                      },
+                    ),
+                  ],
                 ],
                 if (order.status == OrderStatus.searching ||
                     order.status == OrderStatus.created ||

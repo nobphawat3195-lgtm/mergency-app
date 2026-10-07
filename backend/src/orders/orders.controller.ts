@@ -20,6 +20,7 @@ import {
   ProposeQuoteDto,
   RateOrderDto,
   RespondQuoteDto,
+  ServiceSuggestionDto,
 } from './dto/order.dto';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
 import { JwtPayload } from '../auth/auth.service';
@@ -79,14 +80,19 @@ export class OrdersController {
   @Get(':id')
   @Roles(Role.CUSTOMER, Role.PROVIDER)
   async findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    const order = await this.orders.findAccessibleById(id, user);
+    const { suggestion, ...order } = await this.orders.findAccessibleById(
+      id,
+      user,
+    );
     // badge แชท: แอปดึงงานนี้ใหม่ทุกครั้งที่มี event (รวมข้อความใหม่) อยู่แล้ว
-    return {
+    const result = {
       ...order,
       chatOpen: this.chat.isOpen(order),
       chatUnread: await this.chat.unreadFor(order, user.role),
       chatHasMessages: await this.chat.hasMessages(order.id),
     };
+    // ข้อเสนอแนะถึงทีม FixGo ช่างไม่ต้องเห็น
+    return user.role === Role.CUSTOMER ? { ...result, suggestion } : result;
   }
 
   /**
@@ -164,6 +170,16 @@ export class OrdersController {
     @Body() dto: CompleteOrderDto,
   ) {
     return this.orders.completeByProvider(user.sub, id, dto);
+  }
+
+  @Post(':id/suggestion')
+  @Roles(Role.CUSTOMER)
+  suggest(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: ServiceSuggestionDto,
+  ) {
+    return this.orders.suggest(user.sub, id, dto);
   }
 
   @Post(':id/rate')

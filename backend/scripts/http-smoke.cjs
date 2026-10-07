@@ -454,6 +454,30 @@ async function main() {
     await request('PATCH', `/orders/${secondOrder.id}/start`, mechanic, undefined, 200);
     await closeJob(mechanic, secondOrder.id, 201);
   });
+  await check('Post-service suggestion: once per rated order, hidden from the mechanic', async () => {
+    const path = `/orders/${order.id}/suggestion`;
+    // งานที่ยังไม่ให้ดาวตอบไม่ได้
+    const unrated = await request('POST', `/orders/${secondOrder.id}/suggestion`, customer, { choices: ['TOW_TRUCK'] }, 400);
+    assert.equal(unrated.body.message, 'ให้คะแนนบริการก่อนแล้วค่อยตอบคำถามนี้');
+    await request('POST', path, customer, { choices: ['FREE_PIZZA'] }, 400);
+    await request('POST', path, customer, { choices: ['TOW_TRUCK', 'TOW_TRUCK'] }, 400);
+    await request('POST', path, customer, { choices: [], otherText: '   ' }, 400);
+    await request('POST', path, stranger, { choices: ['TOW_TRUCK'] }, 404);
+    await request('POST', path, mechanic, { choices: ['TOW_TRUCK'] }, 403);
+    const saved = (
+      await request('POST', path, customer, { choices: ['TOW_TRUCK', 'OTHER'], otherText: '  อยากให้มีบริการล้างรถ ' }, 201)
+    ).body;
+    assert.deepEqual(saved, { choices: ['TOW_TRUCK', 'OTHER'], otherText: 'อยากให้มีบริการล้างรถ' });
+    await request('POST', path, customer, { choices: ['LOWER_PRICE'] }, 400);
+    assert.deepEqual((await request('GET', `/orders/${order.id}`, customer, undefined, 200)).body.suggestion, saved);
+    assert.equal('suggestion' in (await request('GET', `/orders/${order.id}`, mechanic, undefined, 200)).body, false);
+    const feedback = (await request('GET', '/admin/feedback', staff, undefined, 200)).body;
+    assert.equal(feedback.total, 1);
+    assert.deepEqual(feedback.counts, { TOW_TRUCK: 1, OTHER: 1 });
+    assert.equal(feedback.recent[0].otherText, 'อยากให้มีบริการล้างรถ');
+    assert.equal(feedback.recent[0].score, 5);
+    await request('GET', '/admin/feedback', customer, undefined, 403);
+  });
   await check('Assigned mechanic sees customer phone only while the job is open', async () => {
     const open = (await request('POST', '/orders', customer, booking, 201)).body;
     await request('POST', `/dispatch/offers/${open.id}/accept`, mechanic, undefined, 201);
