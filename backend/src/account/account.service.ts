@@ -135,6 +135,25 @@ export class AccountService {
         where: { orderId: { in: orderIds } },
         data: { comment: null },
       });
+      // แชทของงานลูกค้า (ทั้งสองฝั่ง มีจุดนัดและรายละเอียดรถของลูกค้า) และรูปรถ/ใบเสร็จตอนปิดงาน
+      const chatImages = await tx.orderMessage.findMany({
+        where: { orderId: { in: orderIds }, imageUrl: { not: null } },
+        select: { imageUrl: true },
+      });
+      await tx.orderMessage.deleteMany({
+        where: { orderId: { in: orderIds } },
+      });
+      const closePhotos = await tx.orderClosePhoto.findMany({
+        where: { orderId: { in: orderIds } },
+        select: { url: true },
+      });
+      await tx.orderClosePhoto.deleteMany({
+        where: { orderId: { in: orderIds } },
+      });
+      await tx.serviceSuggestion.updateMany({
+        where: { orderId: { in: orderIds } },
+        data: { otherText: null },
+      });
       if (customer.phone) {
         await tx.otpCode.deleteMany({
           where: { phone: customer.phone, role: Role.CUSTOMER },
@@ -155,6 +174,8 @@ export class AccountService {
       return [
         ...orderPhotos.map((photo) => photo.url),
         ...slips.map((slip) => slip.slipUrl as string),
+        ...chatImages.map((message) => message.imageUrl as string),
+        ...closePhotos.map((photo) => photo.url),
       ];
     });
     // ลบไฟล์หลัง commit แล้วเท่านั้น ถ้า transaction ล้มรูปต้องยังอยู่ครบ
@@ -221,6 +242,20 @@ export class AccountService {
           'ยังมีรายการชำระหรือสลิปที่รอตรวจ กรุณารอให้เรียบร้อยก่อนลบบัญชี',
         );
       await tx.providerToolPhoto.deleteMany({ where: { providerId } });
+      // ข้อความแชทที่ช่างพิมพ์/ส่งรูป ลบเนื้อหาออก (ฝั่งลูกค้ายังเห็นว่ามีข้อความแต่ไม่เห็นเนื้อหา)
+      const chatImages = await tx.orderMessage.findMany({
+        where: {
+          order: { providerId },
+          sender: 'PROVIDER',
+          imageUrl: { not: null },
+        },
+        select: { imageUrl: true },
+      });
+      photoUrls.push(...chatImages.map((m) => m.imageUrl as string));
+      await tx.orderMessage.updateMany({
+        where: { order: { providerId }, sender: 'PROVIDER' },
+        data: { text: null, imageUrl: null },
+      });
       await tx.dispatchAttempt.deleteMany({
         where: { providerId, status: 'OFFERED' },
       });

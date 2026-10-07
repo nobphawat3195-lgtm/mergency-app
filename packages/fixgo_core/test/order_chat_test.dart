@@ -96,6 +96,22 @@ void main() {
     );
   });
 
+  testWidgets('a message whose sender deleted their account says so',
+      (tester) async {
+    final api = _ChatApi(
+      canSend: true,
+      messages: [
+        ChatMessage(
+          id: '1',
+          sender: ChatSender.provider,
+          createdAt: DateTime(2026, 10, 6, 9, 0),
+        ),
+      ],
+    );
+    await _pump(tester, api);
+    expect(find.text('ข้อความนี้ถูกลบแล้ว'), findsOneWidget);
+  });
+
   testWidgets('badge button shows unread count', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
