@@ -15,6 +15,7 @@ import { OrderStatus, Role } from '@prisma/client';
 
 import { OrdersService } from './orders.service';
 import {
+  CompleteOrderDto,
   CreateOrderDto,
   ProposeQuoteDto,
   RateOrderDto,
@@ -157,8 +158,12 @@ export class OrdersController {
 
   @Post(':id/complete')
   @Roles(Role.PROVIDER)
-  complete(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.orders.completeByProvider(user.sub, id);
+  complete(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: CompleteOrderDto,
+  ) {
+    return this.orders.completeByProvider(user.sub, id, dto);
   }
 
   @Post(':id/rate')

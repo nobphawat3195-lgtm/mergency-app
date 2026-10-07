@@ -280,6 +280,10 @@ export class AdminService {
         subService: true,
         customer: { select: { phone: true, name: true } },
         provider: { select: { realName: true, nickname: true, phone: true } },
+        closePhotos: {
+          select: { kind: true, url: true },
+          orderBy: { createdAt: 'asc' },
+        },
         _count: { select: { dispatchAttempts: true } },
       },
       orderBy: { createdAt: 'desc' },
