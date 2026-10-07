@@ -28,7 +28,11 @@ class OffersScreen extends StatefulWidget {
 class _OffersScreenState extends State<OffersScreen> {
   List<JobOffer> _offers = const [];
   bool _loading = true;
-  String? _error;
+  Object? _error;
+
+  /// งานที่กำลังกดรับ/ปฏิเสธ (กันกดซ้ำระหว่างรอ)
+  String? _respondingOfferId;
+  bool _togglingOnline = false;
   Timer? _timer;
   StreamSubscription<Position>? _positionSub;
   bool _restoredTrackingStarted = false;
@@ -200,7 +204,7 @@ class _OffersScreenState extends State<OffersScreen> {
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+          .showSnackBar(SnackBar(content: Text(userMessageFor(error))));
     }
   }
 
@@ -287,11 +291,11 @@ class _OffersScreenState extends State<OffersScreen> {
         _loading = false;
         _error = null;
       });
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = error.message;
+        _error = error;
       });
     }
   }
@@ -315,6 +319,9 @@ class _OffersScreenState extends State<OffersScreen> {
   Future<void> _toggleOnline(bool value) async {
     // ต้องเรียกก่อน await แรก: เบราว์เซอร์ยอมให้ปลดล็อกเสียง/ขอสิทธิ์แจ้งเตือนเฉพาะตอนแตะจอ
     if (value) _alarm.prepare();
+    // กดสวิตช์รัวระหว่างรอ: ทำทีละคำสั่ง
+    if (_togglingOnline) return;
+    _togglingOnline = true;
     try {
       await ProviderAppScope.of(context).api.setOnline(value);
       if (!mounted) return;
@@ -331,14 +338,18 @@ class _OffersScreenState extends State<OffersScreen> {
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+          .showSnackBar(SnackBar(content: Text(userMessageFor(error))));
       // ถูกปิดเพราะค้างค่าบริการ: ดึงยอดล่าสุดมาแสดงการ์ดโอนชำระ
       if (error.statusCode == 403) unawaited(_syncOnlineStatus());
+    } finally {
+      _togglingOnline = false;
     }
   }
 
   Future<void> _accept(JobOffer offer) async {
+    if (_respondingOfferId != null) return;
     _silence(offer.orderId);
+    setState(() => _respondingOfferId = offer.orderId);
     try {
       await ProviderAppScope.of(context).api.acceptOffer(offer.orderId);
       if (!mounted) return;
@@ -347,23 +358,29 @@ class _OffersScreenState extends State<OffersScreen> {
         const SnackBar(content: Text('รับงานแล้ว ดูรายละเอียดในแท็บงานของฉัน')),
       );
       await _refresh();
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      showResultSnackBar(context, error: error);
       await _refresh();
+    } finally {
+      if (mounted) setState(() => _respondingOfferId = null);
     }
   }
 
   Future<void> _reject(JobOffer offer) async {
+    if (_respondingOfferId != null) return;
     _silence(offer.orderId);
+    setState(() => _respondingOfferId = offer.orderId);
     try {
       await ProviderAppScope.of(context).api.rejectOffer(offer.orderId);
       await _refresh();
-    } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      showResultSnackBar(context, success: 'ปฏิเสธงานแล้ว');
+    } catch (error) {
+      if (!mounted) return;
+      showResultSnackBar(context, error: error);
+    } finally {
+      if (mounted) setState(() => _respondingOfferId = null);
     }
   }
 
@@ -439,10 +456,19 @@ class _OffersScreenState extends State<OffersScreen> {
                                 child: CircularProgressIndicator(),
                               ),
                             )
+                          : _offers.isEmpty && _error != null
+                              ? ErrorStateView(
+                                  compact: true,
+                                  error: _error,
+                                  title: 'โหลดงานใหม่ไม่สำเร็จ',
+                                  onRetry: () {
+                                    setState(() => _loading = true);
+                                    unawaited(_refresh());
+                                  },
+                                )
                           : _offers.isEmpty
                               ? _EmptyOffers(
-                                  message: _error ??
-                                      (_accountStatus != null &&
+                                  message: (_accountStatus != null &&
                                               _accountStatus != 'VERIFIED'
                                           ? 'รับงานได้หลังทีมงานอนุมัติบัญชี'
                                           : _debt?.blocked == true
@@ -468,6 +494,8 @@ class _OffersScreenState extends State<OffersScreen> {
                                         offer: offer,
                                         ringing: _ringingIds
                                             .contains(offer.orderId),
+                                        busy: _respondingOfferId ==
+                                            offer.orderId,
                                         onAccept: () => _accept(offer),
                                         onReject: () => _reject(offer),
                                       ),
@@ -1128,6 +1156,7 @@ class _OfferCard extends StatefulWidget {
     required this.onAccept,
     required this.onReject,
     this.ringing = false,
+    this.busy = false,
   });
 
   final JobOffer offer;
@@ -1136,6 +1165,9 @@ class _OfferCard extends StatefulWidget {
   final bool ringing;
   final VoidCallback onAccept;
   final VoidCallback onReject;
+
+  /// กำลังส่งคำตอบ: ปุ่มกดไม่ได้จนกว่าจะเสร็จ
+  final bool busy;
 
   @override
   State<_OfferCard> createState() => _OfferCardState();
@@ -1278,8 +1310,13 @@ class _OfferCardState extends State<_OfferCard> {
               Expanded(
                 flex: 3,
                 child: ElevatedButton.icon(
-                  onPressed: expired ? null : widget.onAccept,
-                  icon: const Icon(Icons.check_circle_rounded),
+                  onPressed: expired || widget.busy ? null : widget.onAccept,
+                  icon: widget.busy
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.check_circle_rounded),
                   label: const Text('รับงาน'),
                 ),
               ),
@@ -1287,9 +1324,13 @@ class _OfferCardState extends State<_OfferCard> {
               Expanded(
                 flex: 2,
                 child: OutlinedButton.icon(
-                  onPressed: expired ? null : widget.onReject,
+                  onPressed: expired || widget.busy ? null : widget.onReject,
                   icon: const Icon(Icons.close_rounded),
-                  label: const Text('ปฏิเสธ'),
+                  // จอแคบ (360 dp) ห้ามตัดคำเป็น "ปฏิเส / ธ"
+                  label: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('ปฏิเสธ', maxLines: 1, softWrap: false),
+                  ),
                 ),
               ),
             ],

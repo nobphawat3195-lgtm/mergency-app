@@ -127,7 +127,7 @@ class _SettlementDialog extends StatefulWidget {
 }
 
 class _SettlementDialogState extends State<_SettlementDialog> {
-  late final Future<
+  late Future<
       ({
         int amount,
         String qrPayload,
@@ -164,7 +164,7 @@ class _SettlementDialogState extends State<_SettlementDialog> {
       await widget.api.submitSettlementSlip(url);
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) setState(() => _error = userMessageFor(error));
     } catch (_) {
       if (mounted) setState(() => _error = 'อัปโหลดสลิปไม่สำเร็จ กรุณาลองใหม่');
     } finally {
@@ -181,12 +181,11 @@ class _SettlementDialogState extends State<_SettlementDialog> {
           future: _qr,
           builder: (context, snapshot) {
             if (snapshot.hasError) {
-              final error = snapshot.error;
-              return Text(
-                error is ApiException
-                    ? error.message
-                    : 'โหลด QR ไม่สำเร็จ กรุณาลองใหม่',
-                style: const TextStyle(color: FixGoColors.error),
+              return ErrorStateView(
+                compact: true,
+                error: snapshot.error,
+                title: 'โหลด QR ไม่สำเร็จ',
+                onRetry: () => setState(() => _qr = widget.api.getSettlementQr()),
               );
             }
             final qr = snapshot.data;

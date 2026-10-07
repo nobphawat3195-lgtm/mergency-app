@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../api_client.dart';
 import '../models.dart';
 import '../theme.dart';
+import 'async_state.dart';
 
 /// รูปที่แอปเลือกมาให้แนบในแชท (แต่ละแอปใช้ image_picker ของตัวเอง)
 typedef ChatImage = ({Uint8List bytes, String fileName, String contentType});
@@ -94,7 +95,7 @@ class _OrderChatScreenState extends State<OrderChatScreen> {
   bool _canSend = false;
   bool _loading = true;
   bool _sending = false;
-  String? _error;
+  Object? _error;
   Timer? _poll;
 
   @override
@@ -128,11 +129,11 @@ class _OrderChatScreenState extends State<OrderChatScreen> {
       });
       if (chat.messages.length != before) _scrollToEnd();
       if (incoming) unawaited(ChatChime.play());
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = error.message;
+        _error = error;
       });
     }
   }
@@ -159,10 +160,9 @@ class _OrderChatScreenState extends State<OrderChatScreen> {
       if (imageUrl == null) _input.clear();
       setState(() => _messages = [..._messages, message]);
       _scrollToEnd();
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      showResultSnackBar(context, error: error);
       unawaited(_load());
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -183,13 +183,15 @@ class _OrderChatScreenState extends State<OrderChatScreen> {
         scope: 'ORDER',
       );
       await _send(imageUrl: url);
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
       setState(() => _sending = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      showResultSnackBar(context, error: error);
     }
   }
+
+  /// โหลดครั้งแรกไม่สำเร็จ (ยังไม่มีข้อความให้แสดง)
+  bool get _failed => _error != null && _messages.isEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -200,35 +202,45 @@ class _OrderChatScreenState extends State<OrderChatScreen> {
         children: [
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _messages.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(FixGoSpacing.lg),
-                          child: Text(
-                            _error ??
-                                (_canSend
-                                    ? 'ยังไม่มีข้อความ ทักทายหรือแจ้งรายละเอียดเพิ่มเติมได้เลย'
-                                    : 'ไม่มีข้อความในงานนี้'),
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: _scroll,
-                        padding: const EdgeInsets.all(FixGoSpacing.md),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final message = _messages[index];
-                          return _Bubble(
-                            message: message,
-                            mine: message.sender == widget.me,
-                          );
+                ? const LoadingStateView(message: 'กำลังโหลดแชท')
+                : _failed
+                    ? ErrorStateView(
+                        error: _error,
+                        title: 'โหลดแชทไม่สำเร็จ',
+                        onRetry: () {
+                          setState(() => _loading = true);
+                          unawaited(_load());
                         },
-                      ),
+                      )
+                    : _messages.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(FixGoSpacing.lg),
+                              child: Text(
+                                _canSend
+                                    ? 'ยังไม่มีข้อความ ทักทายหรือแจ้งรายละเอียดเพิ่มเติมได้เลย'
+                                    : 'ไม่มีข้อความในงานนี้',
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: _scroll,
+                            padding: const EdgeInsets.all(FixGoSpacing.md),
+                            itemCount: _messages.length,
+                            itemBuilder: (context, index) {
+                              final message = _messages[index];
+                              return _Bubble(
+                                message: message,
+                                mine: message.sender == widget.me,
+                              );
+                            },
+                          ),
           ),
-          if (!_loading && !_canSend)
+          if (_loading || _failed)
+            const SizedBox.shrink()
+          else if (!_canSend)
             Container(
               width: double.infinity,
               color: FixGoColors.disabledBackground,
@@ -242,7 +254,7 @@ class _OrderChatScreenState extends State<OrderChatScreen> {
                 ),
               ),
             )
-          else if (!_loading)
+          else
             SafeArea(
               top: false,
               child: Padding(

@@ -1113,30 +1113,30 @@ class _CategorySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget content;
-    if (snapshot.connectionState == ConnectionState.waiting) {
-      content = const Padding(
-        padding: EdgeInsets.all(FixGoSpacing.xl),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    } else if (snapshot.hasError) {
+    // ดึงลงเพื่อรีเฟรช: แสดงรายการเดิมต่อ ไม่สลับเป็น spinner ให้จอกระตุก
+    final categories = snapshot.data;
+    if (categories == null && snapshot.hasError) {
       content = Padding(
         padding: const EdgeInsets.all(FixGoSpacing.md),
-        child: Column(
-          children: [
-            const Text(
-              'โหลดรายการบริการไม่สำเร็จ',
-              style: TextStyle(color: FixGoColors.error),
-            ),
-            TextButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('ลองใหม่'),
-            ),
-          ],
+        child: ErrorStateView(
+          compact: true,
+          title: 'โหลดรายการบริการไม่สำเร็จ',
+          error: snapshot.error,
+          onRetry: onRetry,
         ),
       );
+    } else if (categories == null) {
+      content = const SizedBox(
+        height: 180,
+        child: LoadingStateView(),
+      );
+    } else if (categories.isEmpty) {
+      content = const EmptyStateView(
+        icon: Icons.build_circle_outlined,
+        title: 'ตอนนี้ยังไม่มีบริการที่เปิดรับงาน',
+        message: 'ดึงหน้าจอลงเพื่อโหลดใหม่ หรือกลับมาลองอีกครั้งภายหลัง',
+      );
     } else {
-      final categories = snapshot.data ?? const [];
       content = GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),

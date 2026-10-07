@@ -91,7 +91,7 @@ class _PayoutInfoDialogState extends State<_PayoutInfoDialog> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = error.message;
+        _error = userMessageFor(error);
       });
     }
   }

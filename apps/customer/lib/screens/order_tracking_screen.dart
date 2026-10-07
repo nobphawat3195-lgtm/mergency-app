@@ -24,9 +24,11 @@ class OrderTrackingScreen extends StatefulWidget {
 
 class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   Order? _order;
-  String? _error;
+  Object? _error;
   Timer? _pollTimer;
   bool _respondingToQuote = false;
+  bool _paying = false;
+  bool _cancelling = false;
 
   /// กดข้ามคำถามเสริมหลังให้ดาวแล้ว (ไม่ถามซ้ำระหว่างเปิดหน้านี้)
   bool _suggestionSkipped = false;
@@ -127,9 +129,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           ),
         );
       }
-    } on ApiException catch (error) {
+    } catch (error) {
+      // โหลดไม่ได้ (เน็ตหลุด/ระบบขัดข้อง): ถ้ามีข้อมูลเดิมแสดงต่อ ถ้ายังไม่มีแสดงปุ่มลองใหม่
       if (!mounted) return;
-      setState(() => _error = error.message);
+      setState(() => _error = error);
     }
   }
 
@@ -154,6 +157,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   }
 
   Future<void> _cancel() async {
+    if (_cancelling) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -173,17 +177,23 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     );
     if (confirmed != true || !mounted) return;
 
+    setState(() => _cancelling = true);
     try {
       await AppStateScope.of(context).api.cancelOrder(widget.orderId);
       await _refresh();
-    } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      showResultSnackBar(context, success: 'ยกเลิกการเรียกช่างแล้ว');
+    } catch (error) {
+      if (!mounted) return;
+      showResultSnackBar(context, error: error);
+    } finally {
+      if (mounted) setState(() => _cancelling = false);
     }
   }
 
   Future<void> _pay() async {
+    if (_paying) return;
+    setState(() => _paying = true);
     try {
       final api = AppStateScope.of(context).api;
       final charge = await api.createPromptPayCharge(widget.orderId);
@@ -209,10 +219,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           const SnackBar(content: Text('ชำระเงินเรียบร้อย ขอบคุณที่ใช้บริการ')),
         );
       }
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      showResultSnackBar(context, error: error);
+    } finally {
+      if (mounted) setState(() => _paying = false);
     }
   }
 
@@ -245,7 +256,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+          .showSnackBar(SnackBar(content: Text(userMessageFor(error))));
     } finally {
       if (mounted) setState(() => _respondingToQuote = false);
     }
@@ -278,12 +289,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
       backgroundColor: FixGoColors.surface,
       appBar: AppBar(title: const Text('ติดตามงาน')),
       body: order == null
-          ? Center(
-              child: _error != null
-                  ? Text(_error!,
-                      style: const TextStyle(color: FixGoColors.error))
-                  : const CircularProgressIndicator(),
-            )
+          ? _error != null
+              ? ErrorStateView(
+                  error: _error,
+                  title: 'โหลดข้อมูลงานไม่สำเร็จ',
+                  onRetry: () {
+                    setState(() => _error = null);
+                    unawaited(_refresh());
+                  },
+                )
+              : const LoadingStateView(message: 'กำลังโหลดข้อมูลงาน')
           : ListView(
               padding: const EdgeInsets.all(FixGoSpacing.md),
               children: [
@@ -369,6 +384,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                         ? 'ดู QR / แนบสลิปใหม่'
                         : 'ชำระเงินผ่านพร้อมเพย์',
                     icon: Icons.qr_code_2,
+                    loading: _paying,
                     onPressed: _pay,
                   ),
                   const SizedBox(height: FixGoSpacing.sm),
@@ -415,7 +431,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                   FixGoSecondaryButton(
                     label: 'ยกเลิกการเรียกช่าง',
                     destructive: true,
-                    onPressed: _cancel,
+                    onPressed: _cancelling ? null : _cancel,
                   ),
                 ],
               ],
@@ -958,7 +974,7 @@ class _FeedbackCardState extends State<_FeedbackCard> {
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+          .showSnackBar(SnackBar(content: Text(userMessageFor(error))));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -1099,7 +1115,7 @@ class _PromptPayDialogState extends State<_PromptPayDialog> {
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+          .showSnackBar(SnackBar(content: Text(userMessageFor(error))));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

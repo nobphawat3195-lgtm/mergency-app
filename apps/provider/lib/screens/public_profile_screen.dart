@@ -55,7 +55,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           );
       if (mounted) setState(() => _photoUrl = url);
     } on ApiException catch (error) {
-      _toast(error.message);
+      _toast(userMessageFor(error));
     } catch (_) {
       _toast('อ่านหรืออัปโหลดรูปไม่สำเร็จ');
     } finally {
@@ -80,7 +80,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } on ApiException catch (error) {
-      _toast(error.message);
+      _toast(userMessageFor(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

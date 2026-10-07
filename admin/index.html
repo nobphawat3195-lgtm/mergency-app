@@ -115,6 +115,9 @@
   .stat:first-child { background: linear-gradient(135deg, #16A37B, #0B5F45); }
   .stat.alert { background: var(--warn-soft); outline: 2px solid #F5A524; }
   .card.alert { border-color: #F5A524; }
+  .load-error { margin: 8px 0 12px; padding: 12px; border-radius: 10px; background: #FDECEC; color: #8A1C1C;
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .load-error button { margin-left: auto; }
   .muted { color: var(--text-secondary); font-size: 13px; }
   .stat:first-child .value, .stat:first-child .label { color: #fff; }
   .stat .value { font-size: 26px; font-weight: 800; color: var(--navy); }
@@ -218,7 +221,7 @@
       <div class="finance-filters">
         <label>ตั้งแต่วันที่<input type="date" id="fin-from"></label>
         <label>ถึงวันที่<input type="date" id="fin-to"></label>
-        <button onclick="loadFinance()">ดูรายงาน</button>
+        <button onclick="loadSection(loadFinance, 'fin-orders-body')">ดูรายงาน</button>
         <button class="ghost" onclick="setFinanceMonth(0)">เดือนนี้</button>
         <button class="ghost" onclick="setFinanceMonth(-1)">เดือนก่อน</button>
       </div>
@@ -308,7 +311,7 @@
         <input id="team-name" placeholder="ชื่อ">
         <input id="team-password" type="password" placeholder="รหัสผ่านอย่างน้อย 12 ตัว" autocomplete="new-password">
         <select id="team-role"><option value="STAFF">ทีมงาน</option><option value="OWNER">เจ้าของ</option></select>
-        <button onclick="createTeamMember()">เพิ่มบัญชี</button>
+        <button id="team-add" onclick="createTeamMember()">เพิ่มบัญชี</button>
       </div>
       <div class="table-wrap"><table><thead><tr>
         <th>ชื่อ</th><th>เบอร์</th><th>สิทธิ์</th><th>สถานะ</th><th></th>
@@ -379,27 +382,64 @@ const formatJobHours = (open, close) =>
     : open === 0 && close === 1439 ? 'ตลอดเวลา'
       : `${formatMinute(open)}-${formatMinute(close)}`;
 
+const HAS_THAI = /[\u0E00-\u0E7F]/;
+
+// ข้อความ error ที่แสดงให้ทีมงานเห็น: ภาษาไทยเท่านั้น (ไม่โชว์ "Failed to fetch" หรือ error ดิบ)
+function thaiError(error) {
+  const message = error?.message || '';
+  return HAS_THAI.test(message) ? message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
+}
+
 async function api(path, options = {}) {
-  const response = await fetch(API_BASE + '/api' + path, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: 'Bearer ' + token } : {}),
-      ...(options.headers || {}),
-    },
-  });
+  let response;
+  try {
+    response = await fetch(API_BASE + '/api' + path, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        ...(options.headers || {}),
+      },
+    });
+  } catch (_) {
+    throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่');
+  }
   if (!response.ok) {
-    let message = 'เกิดข้อผิดพลาด (' + response.status + ')';
+    let message = response.status >= 500
+      ? 'ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง'
+      : 'เกิดข้อผิดพลาด (' + response.status + ')';
     try {
       const body = await response.json();
-      if (body.message) message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
+      const raw = Array.isArray(body.message) ? body.message.join(', ') : body.message;
+      if (raw && HAS_THAI.test(raw)) message = raw;
     } catch (_) { /* ไม่ใช่ JSON */ }
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
   return response.status === 204 ? null : response.json();
 }
 
+// กันกดซ้ำ: คำสั่งเดียวกันทำได้ทีละครั้ง ปุ่มที่กดถูกปิดไว้ระหว่างรอ
+const actionsInFlight = new Set();
+async function once(key, button, action) {
+  if (actionsInFlight.has(key)) return;
+  actionsInFlight.add(key);
+  if (button) button.disabled = true;
+  try {
+    await action();
+  } catch (error) {
+    alert(thaiError(error));
+  } finally {
+    actionsInFlight.delete(key);
+    if (button) button.disabled = false;
+  }
+}
+
 async function login() {
+  if (actionsInFlight.has('login')) return;
+  actionsInFlight.add('login');
+  el('login-btn').disabled = true;
   el('login-error').textContent = '';
   try {
     const result = await api('/admin/login', {
@@ -413,7 +453,10 @@ async function login() {
     sessionStorage.setItem('fixgo_admin_token', token);
     await showDashboard();
   } catch (error) {
-    el('login-error').textContent = error.message;
+    el('login-error').textContent = thaiError(error);
+  } finally {
+    actionsInFlight.delete('login');
+    el('login-btn').disabled = false;
   }
 }
 
@@ -455,7 +498,7 @@ async function runMoneyAction(button, key, message, action) {
   try {
     await action();
   } catch (error) {
-    alert(error.message);
+    alert(thaiError(error));
   } finally {
     moneyInFlight.delete(key);
     buttons.forEach((node) => { node.disabled = false; });
@@ -469,7 +512,7 @@ async function showDashboard() {
     me = await api('/admin/me');
   } catch (error) {
     logout();
-    el('login-error').textContent = error.message;
+    el('login-error').textContent = thaiError(error);
     return;
   }
   el('whoami').innerHTML = `${escapeHtml(me.name)} <span class="role ${me.role.toLowerCase()}">${escapeHtml(ROLE_LABELS[me.role])}</span>`;
@@ -481,11 +524,47 @@ async function showDashboard() {
   await refreshAll();
 }
 
+// แต่ละส่วนโหลดแยกกัน: ส่วนไหนพังแสดง "โหลดไม่สำเร็จ" + ปุ่มลองใหม่เฉพาะส่วนนั้น ส่วนอื่นใช้ได้ตามปกติ
+const SECTIONS = [
+  [loadSummary, 'stats'], [loadNoMatch, 'nomatch-body'], [loadSlips, 'slips-body'],
+  [loadSettlements, 'settlements-body'], [loadProviders, 'providers-body'], [loadCatalog, 'catalog-body'],
+  [loadFeedback, 'feedback-body'], [loadWithdrawals, 'withdrawals-body'], [loadOrders, 'orders-body'],
+];
+const OWNER_SECTIONS = [[loadFinance, 'fin-orders-body'], [loadTeam, 'team-body'], [loadAudit, 'audit-body']];
+const loadedSections = new Set();
+
+function sectionStatus(anchorId) {
+  const card = el(anchorId).closest('.card');
+  let box = card.querySelector(':scope > .load-state');
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'load-state';
+    const heading = card.querySelector(':scope > h2');
+    card.insertBefore(box, heading ? heading.nextSibling : card.firstChild);
+  }
+  return box;
+}
+
+async function loadSection(loader, anchorId) {
+  const box = sectionStatus(anchorId);
+  // โหลดครั้งแรกเท่านั้นที่ขึ้น "กำลังโหลด" รอบรีเฟรชอัตโนมัติไม่ทำให้จอกระพริบ
+  if (!loadedSections.has(loader)) box.innerHTML = '<p class="muted">กำลังโหลด...</p>';
+  try {
+    await loader();
+    loadedSections.add(loader);
+    box.innerHTML = '';
+  } catch (error) {
+    if (error?.status === 401) return logout();
+    box.innerHTML = `<div class="load-error"><strong>โหลดไม่สำเร็จ</strong> ${escapeHtml(thaiError(error))}
+      <button type="button">ลองใหม่</button></div>`;
+    box.querySelector('button').onclick = () => loadSection(loader, anchorId);
+  }
+}
+
 async function refreshAll() {
-  await Promise.all([
-    loadSummary(), loadNoMatch(), loadSlips(), loadSettlements(), loadProviders(), loadCatalog(), loadFeedback(), loadWithdrawals(), loadOrders(),
-    ...(isOwner() ? [loadFinance(), loadTeam(), loadAudit()] : []),
-  ]);
+  await Promise.all(
+    [...SECTIONS, ...(isOwner() ? OWNER_SECTIONS : [])].map(([loader, anchorId]) => loadSection(loader, anchorId)),
+  );
 }
 
 // ---------- ทีมงาน ----------
@@ -510,7 +589,7 @@ async function loadTeam() {
 }
 
 async function createTeamMember() {
-  try {
+  await once('team:create', el('team-add'), async () => {
     await api('/admin/admins', {
       method: 'POST',
       body: JSON.stringify({
@@ -521,20 +600,15 @@ async function createTeamMember() {
       }),
     });
     el('team-phone').value = el('team-name').value = el('team-password').value = '';
-  } catch (error) {
-    alert(error.message);
-  }
+    alert('เพิ่มบัญชีทีมงานแล้ว');
+  });
   await refreshAll();
 }
 
 async function updateTeamMember(id, change) {
   if (change.disabled && !confirm('ปิดบัญชีนี้? คนนี้จะออกจากระบบทันทีและเข้าใหม่ไม่ได้')) return;
   if (change.role === 'OWNER' && !confirm('ให้สิทธิ์เจ้าของ? คนนี้จะยืนยันเงินเข้าออกและจัดการทีมงานได้')) return;
-  try {
-    await api('/admin/admins/' + id, { method: 'PATCH', body: JSON.stringify(change) });
-  } catch (error) {
-    alert(error.message);
-  }
+  await once('team:' + id, null, () => api('/admin/admins/' + id, { method: 'PATCH', body: JSON.stringify(change) }));
   await refreshAll();
 }
 
@@ -670,7 +744,7 @@ function setFinanceMonth(offset) {
   el('fin-from').value = bangkokDate(offset);
   const today = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
   el('fin-to').value = offset === 0 ? today : bangkokDate(offset, true);
-  loadFinance().catch((error) => alert(error.message));
+  loadSection(loadFinance, 'fin-orders-body');
 }
 
 async function loadFinance() {
@@ -842,14 +916,12 @@ async function rejectSettlement(button, id) {
 }
 
 async function redispatch(id) {
-  try {
+  await once('order:' + id, null, async () => {
     const result = await api('/admin/orders/' + id + '/redispatch', { method: 'POST' });
     alert(result.status === 'SEARCHING'
       ? 'ส่งข้อเสนอให้ช่างแล้ว รอช่างกดรับ'
       : 'ยังไม่มีช่างที่ออนไลน์ในรัศมี ลองโทรเรียกช่างให้เปิดแอปแล้วกดอีกครั้ง');
-  } catch (error) {
-    alert(error.message);
-  }
+  });
   await refreshAll();
 }
 
@@ -859,14 +931,13 @@ async function cancelOrder(id) {
     'ขออภัย ตอนนี้ไม่มีช่างว่างในพื้นที่ของคุณ ทีมงานยกเลิกงานให้แล้ว ไม่มีค่าใช้จ่าย',
   );
   if (!reason) return;
-  try {
+  await once('order:' + id, null, async () => {
     await api('/admin/orders/' + id + '/cancel', {
       method: 'POST',
       body: JSON.stringify({ reason }),
     });
-  } catch (error) {
-    alert(error.message);
-  }
+    alert('ยกเลิกงานแล้ว ลูกค้าได้รับแจ้งเรียบร้อย');
+  });
   await refreshAll();
 }
 
@@ -937,11 +1008,11 @@ async function setProviderStatus(id, status) {
   } else if (!confirm('อนุมัติช่างคนนี้ให้เริ่มรับงาน?')) {
     return;
   }
-  await api('/admin/providers/' + id + '/status', {
+  await once('provider:' + id, null, () => api('/admin/providers/' + id + '/status', {
     method: 'PATCH',
     body: JSON.stringify(note ? { status, note: note.trim() } : { status }),
-  });
-  await Promise.all([loadProviders(), loadSummary()]);
+  }));
+  await Promise.all([loadSection(loadProviders, 'providers-body'), loadSection(loadSummary, 'stats')]);
 }
 
 // ---------- ข้อเสนอแนะจากลูกค้า ----------
@@ -1026,16 +1097,11 @@ async function toggleCatalog(button, kind, id) {
     ? 'ลูกค้าจะเห็นและสั่งได้ทันที'
     : 'ลูกค้าจะไม่เห็นและสั่งไม่ได้ (งานที่สั่งไปแล้วยังทำต่อตามปกติ)';
   if (!confirm(`${next ? 'เปิด' : 'ปิด'}${what}?\n${effect}`)) return;
-  button.disabled = true;
-  try {
-    await api(`/admin/catalog/${kind === 'category' ? 'categories' : 'sub-services'}/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ active: next }),
-    });
-  } catch (error) {
-    alert(error.message);
-  }
-  await loadCatalog();
+  await once('catalog:' + kind + ':' + id, button, () => api(`/admin/catalog/${kind === 'category' ? 'categories' : 'sub-services'}/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ active: next }),
+  }));
+  await loadSection(loadCatalog, 'catalog-body');
 }
 
 async function loadWithdrawals() {
@@ -1121,7 +1187,7 @@ async function openOrderChat(orderId) {
   try {
     chat = await api('/admin/orders/' + orderId + '/messages');
   } catch (error) {
-    alert(error.message);
+    alert(thaiError(error));
     return;
   }
   el('chat-title').textContent = 'แชทงาน ' + chat.orderNo;

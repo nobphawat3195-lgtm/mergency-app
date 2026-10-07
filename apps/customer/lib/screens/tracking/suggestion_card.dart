@@ -63,7 +63,7 @@ class _SuggestionCardState extends State<SuggestionCard> {
       if (!mounted) return;
       setState(() {
         _sending = false;
-        _error = error.message;
+        _error = userMessageFor(error);
       });
     }
   }

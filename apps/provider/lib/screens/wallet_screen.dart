@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 
@@ -21,7 +23,8 @@ class _WalletScreenState extends State<WalletScreen> {
   WalletDebt? _debt;
   List<WalletEntry> _entries = const [];
   bool _loading = true;
-  String? _error;
+  Object? _error;
+  bool _withdrawing = false;
 
   @override
   void didChangeDependencies() {
@@ -56,16 +59,26 @@ class _WalletScreenState extends State<WalletScreen> {
         _loading = false;
         _error = null;
       });
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = error.message;
+        _error = error;
       });
     }
   }
 
   Future<void> _withdraw() async {
+    if (_withdrawing) return;
+    setState(() => _withdrawing = true);
+    try {
+      await _requestWithdrawal();
+    } finally {
+      if (mounted) setState(() => _withdrawing = false);
+    }
+  }
+
+  Future<void> _requestWithdrawal() async {
     final balance = _balance ?? 0;
     if (balance <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -87,10 +100,9 @@ class _WalletScreenState extends State<WalletScreen> {
             await showPayoutInfoForm(context, api: api, profile: profile);
         if (!saved || !mounted) return;
       }
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      showResultSnackBar(context, error: error);
       return;
     }
     if (!mounted) return;
@@ -150,10 +162,9 @@ class _WalletScreenState extends State<WalletScreen> {
         const SnackBar(content: Text('ส่งคำขอแล้ว ทีมงานจะโอนให้เร็วที่สุด')),
       );
       await _reload();
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      showResultSnackBar(context, error: error);
     }
   }
 
@@ -176,7 +187,20 @@ class _WalletScreenState extends State<WalletScreen> {
       backgroundColor: FixGoColors.surface,
       appBar: AppBar(title: const Text('กระเป๋าเงิน')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingStateView(message: 'กำลังโหลดกระเป๋าเงิน')
+          // โหลดครั้งแรกไม่สำเร็จ: ห้ามโชว์ยอด ฿0 ให้เข้าใจผิด
+          : _balance == null && _error != null
+              ? ErrorStateView(
+                  error: _error,
+                  title: 'โหลดกระเป๋าเงินไม่สำเร็จ',
+                  onRetry: () {
+                    setState(() {
+                      _loading = true;
+                      _error = null;
+                    });
+                    unawaited(_reload());
+                  },
+                )
           : RefreshIndicator(
               onRefresh: _reload,
               child: ListView(
@@ -236,14 +260,17 @@ class _WalletScreenState extends State<WalletScreen> {
                   ],
                   if (_error != null) ...[
                     const SizedBox(height: FixGoSpacing.md),
-                    Text(_error!,
-                        style: const TextStyle(color: FixGoColors.error)),
+                    const Text(
+                      'อัปเดตยอดล่าสุดไม่สำเร็จ ดึงหน้าจอลงเพื่อลองใหม่',
+                      style: TextStyle(color: FixGoColors.error),
+                    ),
                   ],
                   if ((_balance ?? 0) > 0) ...[
                     const SizedBox(height: FixGoSpacing.md),
                     FixGoButton(
                       label: 'ขอเบิกเงิน',
                       icon: Icons.account_balance_wallet_outlined,
+                      loading: _withdrawing,
                       onPressed: _withdraw,
                     ),
                   ],
@@ -255,7 +282,7 @@ class _WalletScreenState extends State<WalletScreen> {
                   const SizedBox(height: FixGoSpacing.sm),
                   if (_entries.isEmpty)
                     Text(
-                      'ยังไม่มีรายการ',
+                      'ยังไม่มีรายการ รายได้จากงานที่ปิดแล้วจะแสดงที่นี่',
                       style: Theme.of(context).textTheme.bodySmall,
                     )
                   else

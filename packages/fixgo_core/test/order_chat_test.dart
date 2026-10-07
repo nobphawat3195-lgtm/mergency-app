@@ -10,12 +10,15 @@ class _ChatApi extends FixGoApiClient {
   final bool canSend;
   final List<ChatMessage> messages;
   final sent = <String>[];
+  bool fail = false;
 
   @override
   Future<({bool canSend, List<ChatMessage> messages})> getOrderChat(
     String orderId,
-  ) async =>
-      (canSend: canSend, messages: List.of(messages));
+  ) async {
+    if (fail) throw ApiException(502, 'Bad Gateway');
+    return (canSend: canSend, messages: List.of(messages));
+  }
 
   @override
   Future<ChatMessage> sendOrderMessage(
@@ -94,6 +97,29 @@ void main() {
       find.text('งานนี้จบแล้วหรือยังไม่มีช่างรับ แชทอ่านได้อย่างเดียว'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a failed load offers retry instead of a read-only chat',
+      (tester) async {
+    final api = _ChatApi(
+      canSend: true,
+      messages: [_msg('1', ChatSender.provider, 'ถึงแล้วครับ')],
+    )..fail = true;
+    await _pump(tester, api);
+    expect(find.text('โหลดแชทไม่สำเร็จ'), findsOneWidget);
+    expect(find.textContaining('Bad Gateway'), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+    expect(
+      find.text('งานนี้จบแล้วหรือยังไม่มีช่างรับ แชทอ่านได้อย่างเดียว'),
+      findsNothing,
+    );
+
+    api.fail = false;
+    await tester.tap(find.text('ลองใหม่'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('ถึงแล้วครับ'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
   });
 
   testWidgets('badge button shows unread count', (tester) async {

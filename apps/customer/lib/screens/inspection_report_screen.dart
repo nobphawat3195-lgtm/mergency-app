@@ -45,17 +45,14 @@ class _InspectionReportScreenState extends State<InspectionReportScreen> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                snapshot.error is ApiException
-                    ? (snapshot.error as ApiException).message
-                    : 'โหลดรายงานไม่สำเร็จ',
-                style: const TextStyle(color: FixGoColors.error),
-              ),
+            return ErrorStateView(
+              error: snapshot.error,
+              title: 'โหลดรายงานไม่สำเร็จ',
+              onRetry: () => setState(() => _future = _load()),
             );
           }
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const LoadingStateView(message: 'กำลังโหลดรายงาน');
           }
           final (checklist, report) = snapshot.data!;
           if (!report.isSubmitted) {
