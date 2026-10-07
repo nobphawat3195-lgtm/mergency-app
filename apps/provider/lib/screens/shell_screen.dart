@@ -172,13 +172,13 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
     setState(() => _future = api.getProviderProfile());
   }
 
-  /// เล่นเสียงปลุกสั้นๆ ให้ช่างเช็กว่าเครื่องดังจริง (บนเว็บการแตะนี้ปลดล็อกเสียงไปด้วย)
+  /// เล่นเสียงปลุก + เสียงพูด 1 รอบให้ช่างเช็กว่าเครื่องดังจริง (บนเว็บการแตะนี้ปลดล็อกเสียงไปด้วย)
   void _testAlarm() {
     unawaited(ProviderAppScope.of(context).offerAlarm.test());
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'กำลังเล่นเสียงแจ้งเตือน 4 วินาที ถ้าไม่ได้ยิน ให้เพิ่มเสียงเครื่องหรือปิดโหมดเงียบ',
+          'กำลังเล่นเสียงแจ้งเตือนและเสียงพูด ถ้าไม่ได้ยิน ให้เพิ่มเสียงเครื่องหรือปิดโหมดเงียบ',
         ),
         duration: Duration(seconds: 4),
       ),
@@ -259,7 +259,8 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
               ListTile(
                 leading: const Icon(Icons.notifications_active_outlined),
                 title: const Text('ทดสอบเสียงแจ้งเตือน'),
-                subtitle: const Text('เสียงที่ดังตอนมีงานใหม่เข้ามา'),
+                subtitle:
+                    const Text('เสียงปลุกและเสียงพูดที่ดังตอนมีงานใหม่เข้ามา'),
                 onTap: _testAlarm,
               ),
               const Divider(),
