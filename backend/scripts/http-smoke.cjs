@@ -64,6 +64,16 @@ async function closeJob(token, orderId, expected) {
   const carPhotoUrls = [await uploadImage(token, 'ORDER')];
   return request('POST', `/orders/${orderId}/complete`, token, { carPhotoUrls }, expected);
 }
+/** บันทึก audit ของแอดมินเขียนหลังส่ง response แล้ว (ไม่ให้งานหลักช้า) ต้องรอให้แถวมาถึงก่อนนับ */
+async function auditCount(where, atLeast) {
+  let count = 0;
+  for (let i = 0; i < 30; i++) {
+    count = await prisma.adminAuditLog.count({ where });
+    if (count >= atLeast) break;
+    await delay(100);
+  }
+  return count;
+}
 async function check(name, run) {
   await run();
   passed += 1;
@@ -381,7 +391,7 @@ async function main() {
     // แอดมินเปิดอ่านได้และมีบันทึก
     const forAdmin = (await request('GET', `/admin/orders/${order.id}/messages`, staff, undefined, 200)).body;
     assert.equal(forAdmin.messages.length, 3);
-    assert.equal(await prisma.adminAuditLog.count({ where: { action: 'ORDER_CHAT_READ', targetId: order.id } }), 1);
+    assert.equal(await auditCount({ action: 'ORDER_CHAT_READ', targetId: order.id }, 1), 1);
     await request('GET', `/admin/orders/${order.id}/messages`, customer, undefined, 403);
   });
   await check('Complete and confirm cash twice without duplicate commission', async () => {
@@ -689,7 +699,7 @@ async function main() {
     await request('POST', '/orders', customer, booking, 400);
     await request('PATCH', `/admin/catalog/sub-services/${booking.subServiceId}`, owner, { active: true }, 200);
     assert.ok(
-      (await prisma.adminAuditLog.count({ where: { action: { in: ['CATEGORY_ACTIVE', 'SUB_SERVICE_ACTIVE'] } } })) >= 4,
+      (await auditCount({ action: { in: ['CATEGORY_ACTIVE', 'SUB_SERVICE_ACTIVE'] } }, 4)) >= 4,
     );
   });
   await check('Mechanic changes job hours any time; invalid minutes are rejected', async () => {
