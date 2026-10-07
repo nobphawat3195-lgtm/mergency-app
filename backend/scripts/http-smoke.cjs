@@ -345,6 +345,45 @@ async function main() {
     await request('DELETE', `/orders/${order.id}/share`, customer, undefined, 200);
     await request('GET', `/public/track/${shared.token}`, undefined, undefined, 404);
   });
+  await check('Order chat: only the customer and assigned mechanic can read or send', async () => {
+    const path = `/orders/${order.id}/messages`;
+    const sent = (await request('POST', path, customer, { text: '  ถึงประมาณกี่โมงครับ  ' }, 201)).body;
+    assert.equal(sent.text, 'ถึงประมาณกี่โมงครับ');
+    assert.equal(sent.sender, 'CUSTOMER');
+    const photo = await uploadImage(mechanic, 'ORDER');
+    await request('POST', path, mechanic, { text: 'อีก 10 นาทีครับ', imageUrl: photo }, 201);
+    // รูปของคนอื่น/ลิงก์ภายนอกส่งไม่ได้
+    await request('POST', path, customer, { imageUrl: photo }, 400);
+    await request('POST', path, customer, { imageUrl: 'https://evil.example/x.png' }, 400);
+    await request('POST', path, customer, { text: '   ' }, 400);
+    await request('POST', path, customer, { text: 'x'.repeat(1001) }, 400);
+
+    // คนนอกงานอ่าน/ส่งไม่ได้ และไม่รู้ว่างานมีอยู่จริง
+    await request('GET', path, stranger, undefined, 404);
+    await request('POST', path, stranger, { text: 'hi' }, 404);
+    await request('GET', path, owner, undefined, 403);
+    await request('GET', path, undefined, undefined, 401);
+
+    // badge: ลูกค้ามีข้อความใหม่จากช่าง 1 ข้อความ เปิดอ่านแล้วเป็น 0
+    assert.equal((await request('GET', `/orders/${order.id}`, customer, undefined, 200)).body.chatUnread, 1);
+    const opened = (await request('GET', path, customer, undefined, 200)).body;
+    assert.equal(opened.canSend, true);
+    assert.deepEqual(opened.messages.map((m) => m.sender), ['CUSTOMER', 'PROVIDER']);
+    assert.equal(opened.messages[1].imageUrl, photo);
+    const detail = (await request('GET', `/orders/${order.id}`, customer, undefined, 200)).body;
+    assert.equal(detail.chatUnread, 0);
+    assert.equal(detail.chatOpen, true);
+    // ช่างตอบแล้วถือว่าอ่านข้อความก่อนหน้า ข้อความใหม่หลังจากนั้นนับเป็น badge
+    await request('POST', path, customer, { text: 'โอเคครับ' }, 201);
+    const assigned = (await request('GET', '/orders/assigned', mechanic, undefined, 200)).body;
+    assert.equal(assigned.find((o) => o.id === order.id).chatUnread, 1);
+
+    // แอดมินเปิดอ่านได้และมีบันทึก
+    const forAdmin = (await request('GET', `/admin/orders/${order.id}/messages`, staff, undefined, 200)).body;
+    assert.equal(forAdmin.messages.length, 3);
+    assert.equal(await prisma.adminAuditLog.count({ where: { action: 'ORDER_CHAT_READ', targetId: order.id } }), 1);
+    await request('GET', `/admin/orders/${order.id}/messages`, customer, undefined, 403);
+  });
   await check('Complete and confirm cash twice without duplicate commission', async () => {
     await request('PATCH', `/orders/${order.id}/start`, mechanic, undefined, 200);
     // ต้องมีรูปรถหลังซ่อมอย่างน้อย 1 รูป (สูงสุด 5) รูปต้องเป็นของช่างเอง
@@ -376,6 +415,13 @@ async function main() {
       await request('POST', `/payments/orders/${order.id}/cash/confirm`, mechanic, undefined, 201);
     assert.equal((await request('GET', '/wallet/balance', mechanic, undefined, 200)).body.balance, -3500);
     assert.equal(await prisma.walletEntry.count({ where: { orderId: order.id } }), 1);
+  });
+  await check('Order chat is read-only after the job is completed', async () => {
+    const chat = (await request('GET', `/orders/${order.id}/messages`, mechanic, undefined, 200)).body;
+    assert.equal(chat.canSend, false);
+    assert.equal(chat.messages.length, 3);
+    const closed = await request('POST', `/orders/${order.id}/messages`, customer, { text: 'ขอบคุณครับ' }, 400);
+    assert.equal(closed.body.message, 'งานนี้จบแล้ว แชทอ่านย้อนหลังได้อย่างเดียว');
   });
   await check('Rating is recorded once and customer cannot read wallet', async () => {
     await request('POST', `/orders/${order.id}/rate`, customer, { score: 5 }, 201);
@@ -621,6 +667,30 @@ async function main() {
     });
     assert.ok(!JSON.stringify(stored.photoUrl).includes(phone));
     assert.ok(stored.toolPhotos.every((tool) => !tool.url.includes(phone)));
+  });
+  await check('Admin closes a category: customers cannot see or book it until reopened', async () => {
+    const catalog = (await request('GET', '/admin/catalog', staff, undefined, 200)).body;
+    const row = catalog.find((item) => item.id === category.id);
+    assert.ok(row && row.active && typeof row._count.providers === 'number');
+    await request('PATCH', `/admin/catalog/categories/${category.id}`, customer, { active: false }, 403);
+    await request('PATCH', `/admin/catalog/categories/${category.id}`, staff, { active: 'no' }, 400);
+    await request('PATCH', `/admin/catalog/categories/${category.id}`, staff, { active: false }, 200);
+    const visible = (await request('GET', '/catalog/categories', undefined, undefined, 200)).body;
+    assert.ok(!visible.some((item) => item.id === category.id));
+    await request('GET', `/catalog/categories/${category.id}/sub-services`, undefined, undefined, 404);
+    const closed = await request('POST', '/orders', customer, booking, 400);
+    assert.equal(closed.body.message, 'บริการนี้ปิดรับงานชั่วคราว กรุณาเลือกบริการอื่น');
+    await request('PATCH', `/admin/catalog/categories/${category.id}`, staff, { active: true }, 200);
+
+    // ปิดเฉพาะบริการย่อย
+    await request('PATCH', `/admin/catalog/sub-services/${booking.subServiceId}`, owner, { active: false }, 200);
+    const subs = (await request('GET', `/catalog/categories/${category.id}/sub-services`, undefined, undefined, 200)).body;
+    assert.ok(!subs.some((item) => item.id === booking.subServiceId));
+    await request('POST', '/orders', customer, booking, 400);
+    await request('PATCH', `/admin/catalog/sub-services/${booking.subServiceId}`, owner, { active: true }, 200);
+    assert.ok(
+      (await prisma.adminAuditLog.count({ where: { action: { in: ['CATEGORY_ACTIVE', 'SUB_SERVICE_ACTIVE'] } } })) >= 4,
+    );
   });
   await check('Mechanic changes job hours any time; invalid minutes are rejected', async () => {
     const bangkok = new Date(Date.now() + 7 * 60 * 60 * 1000);

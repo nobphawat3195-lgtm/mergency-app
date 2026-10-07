@@ -92,3 +92,9 @@ ServiceCategory? categoryForSymptom(
   }
   return null;
 }
+
+/// อาการที่ยังกดได้: หมวดของอาการต้องเปิดอยู่ (แอดมินปิดหมวดที่ยังไม่มีช่าง
+/// API จะไม่ส่งหมวดนั้นมา) ส่งรายการหมวดที่โหลดแล้วเท่านั้น
+List<CarSymptom> openSymptoms(List<ServiceCategory> categories) => carSymptoms
+    .where((symptom) => categoryForSymptom(symptom, categories) != null)
+    .toList();

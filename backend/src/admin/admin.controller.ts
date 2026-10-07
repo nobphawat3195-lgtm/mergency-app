@@ -59,6 +59,11 @@ export class SetProviderStatusDto {
   note?: string;
 }
 
+export class SetActiveDto {
+  @IsBoolean()
+  active!: boolean;
+}
+
 export class CancelOrderDto {
   /** ข้อความนี้ส่งถึงลูกค้าทาง push เขียนให้ลูกค้าอ่านเข้าใจ */
   @IsString()
@@ -176,11 +181,37 @@ export class AdminController {
     return this.admin.setProviderStatus(id, dto.status, dto.note);
   }
 
+  // ---------- หมวดบริการ (เปิด/ปิดหมวดที่ยังไม่มีช่าง) ----------
+
+  @Get('catalog')
+  listCatalog() {
+    return this.admin.listCatalog();
+  }
+
+  @Patch('catalog/categories/:id')
+  @Audit('CATEGORY_ACTIVE', 'serviceCategory')
+  setCategoryActive(@Param('id') id: string, @Body() dto: SetActiveDto) {
+    return this.admin.setCategoryActive(id, dto.active);
+  }
+
+  @Patch('catalog/sub-services/:id')
+  @Audit('SUB_SERVICE_ACTIVE', 'subService')
+  setSubServiceActive(@Param('id') id: string, @Body() dto: SetActiveDto) {
+    return this.admin.setSubServiceActive(id, dto.active);
+  }
+
   // ---------- งาน ----------
 
   @Get('orders')
   listOrders(@Query('status') status?: OrderStatus) {
     return this.admin.listOrders(status);
+  }
+
+  /** อ่านแชทลูกค้า-ช่างของงานนี้ (บันทึกทุกครั้งว่าใครเปิดอ่าน) */
+  @Get('orders/:id/messages')
+  @Audit('ORDER_CHAT_READ', 'order')
+  listOrderMessages(@Param('id') id: string) {
+    return this.admin.listOrderMessages(id);
   }
 
   @Post('orders/:id/redispatch')

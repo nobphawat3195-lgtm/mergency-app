@@ -149,6 +149,10 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (context, snapshot) {
             final categories = snapshot.data ?? const <ServiceCategory>[];
             final inspection = _findCategory(categories, 'inspection');
+            // แอดมินปิดหมวดที่ยังไม่มีช่าง: ซ่อนอาการและโปรโมชันของหมวดนั้น
+            // (ระหว่างโหลดยังไม่รู้ว่าเปิดหมวดไหน แสดงอาการทั้งหมดไว้ก่อน)
+            final loaded = snapshot.hasData;
+            final symptoms = loaded ? openSymptoms(categories) : carSymptoms;
 
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -191,21 +195,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: FixGoSpacing.lg),
-                _SectionHeader(
-                  title: 'รถเป็นอะไร? กดเลย',
-                  actionLabel: 'ดูทั้งหมด',
-                  onAction: _scrollToAllServices,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: FixGoSpacing.md,
+                if (symptoms.isNotEmpty) ...[
+                  const SizedBox(height: FixGoSpacing.lg),
+                  _SectionHeader(
+                    title: 'รถเป็นอะไร? กดเลย',
+                    actionLabel: 'ดูทั้งหมด',
+                    onAction: _scrollToAllServices,
                   ),
-                  child: _SymptomGrid(
-                    onSelected: (symptom) =>
-                        _startFromSymptom(symptom, categories),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: FixGoSpacing.md,
+                    ),
+                    child: _SymptomGrid(
+                      symptoms: symptoms,
+                      onSelected: (symptom) =>
+                          _startFromSymptom(symptom, categories),
+                    ),
                   ),
-                ),
+                ],
                 const SizedBox(height: FixGoSpacing.lg),
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -215,16 +222,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     onShowSteps: () => _showHowItWorks(context),
                   ),
                 ),
-                const SizedBox(height: FixGoSpacing.lg),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: FixGoSpacing.md,
+                if (!loaded || inspection != null) ...[
+                  const SizedBox(height: FixGoSpacing.lg),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: FixGoSpacing.md,
+                    ),
+                    child: _InspectionPromoCard(
+                      category: inspection,
+                      onTap: () => _openInspection(inspection),
+                    ),
                   ),
-                  child: _InspectionPromoCard(
-                    category: inspection,
-                    onTap: () => _openInspection(inspection),
-                  ),
-                ),
+                ],
                 const SizedBox(height: FixGoSpacing.lg),
                 Padding(
                   key: _allServicesKey,
@@ -730,8 +739,9 @@ class _SectionHeader extends StatelessWidget {
 
 /// ตารางอาการรถ 3 คอลัมน์ ปุ่มใหญ่กดง่ายด้วยนิ้วโป้ง ข้อความยาวสุด 2 บรรทัด
 class _SymptomGrid extends StatelessWidget {
-  const _SymptomGrid({required this.onSelected});
+  const _SymptomGrid({required this.symptoms, required this.onSelected});
 
+  final List<CarSymptom> symptoms;
   final ValueChanged<CarSymptom> onSelected;
 
   @override
@@ -744,7 +754,7 @@ class _SymptomGrid extends StatelessWidget {
           spacing: spacing,
           runSpacing: spacing,
           children: [
-            for (final symptom in carSymptoms)
+            for (final symptom in symptoms)
               SizedBox(
                 width: width,
                 child: _SymptomTile(

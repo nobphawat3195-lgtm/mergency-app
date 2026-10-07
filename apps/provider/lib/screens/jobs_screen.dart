@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app_state.dart';
+import '../chat_image.dart';
 import 'close_job_screen.dart';
 import 'inspection_form_screen.dart';
 
@@ -85,6 +86,9 @@ class _JobsScreenState extends State<JobsScreen> {
         _orders = orders;
         _error = null;
       });
+      if (ProviderAppScope.of(context).trackChatUnread(orders)) {
+        unawaited(ChatChime.play());
+      }
     } on ApiException catch (error) {
       if (!mounted) return;
       // มีรายการเดิมอยู่แล้วก็แสดงต่อไป รอบถัดไปจะลองใหม่เอง
@@ -431,6 +435,23 @@ class _JobsScreenState extends State<JobsScreen> {
                         if (_isActive(order)) ...[
                           const SizedBox(height: FixGoSpacing.sm),
                           _ContactActions(order: order),
+                        ],
+                        if (order.hasChat) ...[
+                          const SizedBox(height: FixGoSpacing.sm),
+                          ChatBadgeButton(
+                            label: order.chatOpen
+                                ? 'แชทกับลูกค้า'
+                                : 'ดูแชทย้อนหลัง',
+                            unread: order.chatUnread,
+                            onPressed: () async {
+                              await openCustomerChat(
+                                context,
+                                api: ProviderAppScope.of(context).api,
+                                order: order,
+                              );
+                              _reloadQuietly();
+                            },
+                          ),
                         ],
                         if (_isActive(order) && order.photoUrls.isNotEmpty) ...[
                           const SizedBox(height: FixGoSpacing.sm),

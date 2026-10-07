@@ -285,6 +285,9 @@ class Order {
     this.customerPhone,
     this.carPhotoUrls = const [],
     this.receiptPhotoUrls = const [],
+    this.chatOpen = false,
+    this.chatUnread = 0,
+    this.chatHasMessages = false,
   });
 
   final String id;
@@ -337,6 +340,18 @@ class Order {
 
   /// ใบเสร็จ/สลิปที่ช่างแนบตอนปิดงาน (ไม่บังคับ)
   final List<String> receiptPhotoUrls;
+
+  /// แชทกับอีกฝ่ายส่งได้อยู่ (ช่างรับงานแล้วและงานยังไม่จบ)
+  final bool chatOpen;
+
+  /// ข้อความใหม่ของอีกฝ่ายที่ยังไม่ได้เปิดอ่าน (badge)
+  final int chatUnread;
+
+  /// เคยคุยกันแล้ว (ใช้แสดงปุ่มอ่านย้อนหลังหลังงานจบ)
+  final bool chatHasMessages;
+
+  /// มีปุ่มแชทให้กด: ส่งได้อยู่ หรือมีข้อความให้อ่านย้อนหลัง
+  bool get hasChat => chatOpen || chatUnread > 0 || chatHasMessages;
 
   bool get awaitingSlipReview => !isPaid && paymentSlipSubmittedAt != null;
 
@@ -406,8 +421,40 @@ class Order {
       customerPhone: customer?['phone'] as String?,
       carPhotoUrls: closePhotosOf('CAR'),
       receiptPhotoUrls: closePhotosOf('RECEIPT'),
+      chatOpen: json['chatOpen'] as bool? ?? false,
+      chatUnread: json['chatUnread'] as int? ?? 0,
+      chatHasMessages: json['chatHasMessages'] as bool? ?? false,
     );
   }
+}
+
+enum ChatSender { customer, provider }
+
+/// ข้อความแชทในงานระหว่างลูกค้ากับช่าง
+class ChatMessage {
+  const ChatMessage({
+    required this.id,
+    required this.sender,
+    required this.createdAt,
+    this.text,
+    this.imageUrl,
+  });
+
+  final String id;
+  final ChatSender sender;
+  final String? text;
+  final String? imageUrl;
+  final DateTime createdAt;
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+        id: json['id'] as String,
+        sender: json['sender'] == 'PROVIDER'
+            ? ChatSender.provider
+            : ChatSender.customer,
+        text: json['text'] as String?,
+        imageUrl: json['imageUrl'] as String?,
+        createdAt: DateTime.parse(json['createdAt'] as String).toLocal(),
+      );
 }
 
 /// งานที่ถูกเสนอให้ช่าง พร้อมเวลานับถอยหลัง
