@@ -283,6 +283,13 @@ class Order {
     this.paymentSlipRejectReason,
     this.customerName,
     this.customerPhone,
+    this.suggestionChoices,
+    this.suggestionText,
+    this.carPhotoUrls = const [],
+    this.receiptPhotoUrls = const [],
+    this.chatOpen = false,
+    this.chatUnread = 0,
+    this.chatHasMessages = false,
   });
 
   final String id;
@@ -330,6 +337,30 @@ class Order {
   final String? customerName;
   final String? customerPhone;
 
+  /// คำตอบ "อยากให้ FixGo เพิ่มบริการหรือปรับอะไร" (null = ยังไม่ตอบ) ส่งมาเฉพาะแอปลูกค้า
+  final List<String>? suggestionChoices;
+  final String? suggestionText;
+
+  bool get suggestionSent => suggestionChoices != null;
+
+  /// รูปรถหลังซ่อมเสร็จที่ช่างแนบตอนปิดงาน
+  final List<String> carPhotoUrls;
+
+  /// ใบเสร็จ/สลิปที่ช่างแนบตอนปิดงาน (ไม่บังคับ)
+  final List<String> receiptPhotoUrls;
+
+  /// แชทกับอีกฝ่ายส่งได้อยู่ (ช่างรับงานแล้วและงานยังไม่จบ)
+  final bool chatOpen;
+
+  /// ข้อความใหม่ของอีกฝ่ายที่ยังไม่ได้เปิดอ่าน (badge)
+  final int chatUnread;
+
+  /// เคยคุยกันแล้ว (ใช้แสดงปุ่มอ่านย้อนหลังหลังงานจบ)
+  final bool chatHasMessages;
+
+  /// มีปุ่มแชทให้กด: ส่งได้อยู่ หรือมีข้อความให้อ่านย้อนหลัง
+  bool get hasChat => chatOpen || chatUnread > 0 || chatHasMessages;
+
   bool get awaitingSlipReview => !isPaid && paymentSlipSubmittedAt != null;
 
   bool get isInspection => categorySlug == 'used-car-inspection';
@@ -348,6 +379,12 @@ class Order {
         .whereType<Map<String, dynamic>>()
         .map((photo) => photo['url'] as String)
         .toList();
+    final closePhotos = (json['closePhotos'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>();
+    List<String> closePhotosOf(String kind) => [
+          for (final photo in closePhotos)
+            if (photo['kind'] == kind) photo['url'] as String,
+        ];
 
     return Order(
       id: json['id'] as String,
@@ -390,8 +427,50 @@ class Order {
       paymentSlipRejectReason: payment?['slipRejectReason'] as String?,
       customerName: customer?['name'] as String?,
       customerPhone: customer?['phone'] as String?,
+      suggestionChoices: json['suggestion'] is Map<String, dynamic>
+          ? ((json['suggestion'] as Map<String, dynamic>)['choices']
+                      as List<dynamic>? ??
+                  const [])
+              .cast<String>()
+          : null,
+      suggestionText: (json['suggestion'] as Map<String, dynamic>?)?['otherText']
+          as String?,
+      carPhotoUrls: closePhotosOf('CAR'),
+      receiptPhotoUrls: closePhotosOf('RECEIPT'),
+      chatOpen: json['chatOpen'] as bool? ?? false,
+      chatUnread: json['chatUnread'] as int? ?? 0,
+      chatHasMessages: json['chatHasMessages'] as bool? ?? false,
     );
   }
+}
+
+enum ChatSender { customer, provider }
+
+/// ข้อความแชทในงานระหว่างลูกค้ากับช่าง
+class ChatMessage {
+  const ChatMessage({
+    required this.id,
+    required this.sender,
+    required this.createdAt,
+    this.text,
+    this.imageUrl,
+  });
+
+  final String id;
+  final ChatSender sender;
+  final String? text;
+  final String? imageUrl;
+  final DateTime createdAt;
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+        id: json['id'] as String,
+        sender: json['sender'] == 'PROVIDER'
+            ? ChatSender.provider
+            : ChatSender.customer,
+        text: json['text'] as String?,
+        imageUrl: json['imageUrl'] as String?,
+        createdAt: DateTime.parse(json['createdAt'] as String).toLocal(),
+      );
 }
 
 /// งานที่ถูกเสนอให้ช่าง พร้อมเวลานับถอยหลัง

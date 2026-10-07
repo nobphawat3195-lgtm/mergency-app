@@ -1,7 +1,10 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayUnique,
+  ArrayMinSize,
   IsArray,
+  IsIn,
   IsInt,
   IsLatitude,
   IsLongitude,
@@ -65,6 +68,44 @@ export class ProposeQuoteDto {
   @IsString()
   @Length(1, 500)
   note?: string;
+}
+
+/** ตัวเลือกด่วนของคำถาม "อยากให้ FixGo เพิ่มบริการหรือปรับอะไร" (แอปแสดงเป็นภาษาไทย) */
+export const SUGGESTION_CHOICES = [
+  'TOW_TRUCK',
+  'FASTER_ARRIVAL',
+  'LOWER_PRICE',
+  'MORE_AREAS',
+  'OTHER',
+] as const;
+
+export class ServiceSuggestionDto {
+  @IsArray()
+  @ArrayMaxSize(SUGGESTION_CHOICES.length)
+  @ArrayUnique()
+  @IsIn(SUGGESTION_CHOICES, { each: true, message: 'ตัวเลือกไม่ถูกต้อง' })
+  choices!: string[];
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 300, { message: 'ข้อความยาวได้ไม่เกิน 300 ตัวอักษร' })
+  otherText?: string;
+}
+
+/** รูปตอนปิดงาน (อัปโหลดผ่าน /uploads/presign scope ORDER ด้วยบัญชีช่างเอง) */
+export class CompleteOrderDto {
+  @IsArray({ message: 'กรุณาแนบรูปรถหลังซ่อมเสร็จอย่างน้อย 1 รูป' })
+  @ArrayMinSize(1, { message: 'กรุณาแนบรูปรถหลังซ่อมเสร็จอย่างน้อย 1 รูป' })
+  @ArrayMaxSize(5, { message: 'แนบรูปรถได้สูงสุด 5 รูป' })
+  @IsString({ each: true })
+  carPhotoUrls!: string[];
+
+  /** ใบเสร็จค่าอะไหล่หรือสลิป ไม่บังคับ */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(3, { message: 'แนบใบเสร็จได้สูงสุด 3 รูป' })
+  @IsString({ each: true })
+  receiptPhotoUrls?: string[];
 }
 
 export class RateOrderDto {

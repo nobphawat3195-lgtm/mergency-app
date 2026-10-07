@@ -243,7 +243,7 @@ model Order {
   priceFinal     Int? // สตางค์ ใส่ตอนปิดงาน
   commissionRate Float // บันทึกเรตคอมมิชชัน ณ เวลาที่สร้างออเดอร์ (ค่าเริ่มต้น 0.35)
 
-  quoteVersion     Int @default(0)
+  quoteVersion     Int         @default(0)
   quoteStatus      QuoteStatus @default(NOT_REQUESTED)
   quoteNote        String?
   quoteProposedAt  DateTime?
@@ -256,6 +256,10 @@ model Order {
   /// เหตุผลที่ทีมงานยกเลิกงาน (ลูกค้ายกเลิกเองจะเป็น null)
   cancelReason String?
 
+  /// อ่านแชทถึงเมื่อไร (นับข้อความใหม่ของอีกฝ่ายเป็น badge)
+  chatCustomerReadAt DateTime?
+  chatProviderReadAt DateTime?
+
   /// โทเคนลิงก์ติดตามงานที่ลูกค้าแชร์ให้ครอบครัว (สุ่ม 32 ไบต์ ดูได้อย่างเดียว)
   shareToken String? @unique
 
@@ -266,10 +270,13 @@ model Order {
   vehicleType VehicleType     @relation(fields: [vehicleTypeId], references: [id])
 
   photos           OrderPhoto[]
+  closePhotos      OrderClosePhoto[]
+  messages         OrderMessage[]
   dispatchAttempts DispatchAttempt[]
   payment          Payment?
   walletEntries    WalletEntry[]
   rating           Rating?
+  suggestion       ServiceSuggestion?
   inspection       InspectionReport?
 
   @@index([customerId])
@@ -364,6 +371,43 @@ model InspectionItemResult {
   report InspectionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@unique([reportId, itemCode])
+}
+
+enum ClosePhotoKind {
+  CAR // รูปรถหลังซ่อมเสร็จ (บังคับอย่างน้อย 1 รูป)
+  RECEIPT // ใบเสร็จค่าอะไหล่/สลิป (ไม่บังคับ)
+}
+
+/// รูปที่ช่างแนบตอนปิดงาน ลูกค้าเห็นในหน้าติดตามงาน/ประวัติ แอดมินเห็นในรายการออเดอร์
+model OrderClosePhoto {
+  id        String         @id @default(uuid())
+  orderId   String
+  kind      ClosePhotoKind
+  url       String
+  createdAt DateTime       @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+enum ChatSender {
+  CUSTOMER
+  PROVIDER
+}
+
+/// แชทระหว่างลูกค้ากับช่างที่ได้งาน ส่งได้ตั้งแต่ช่างรับงานจนงานจบ หลังจากนั้นอ่านอย่างเดียว
+model OrderMessage {
+  id        String     @id @default(uuid())
+  orderId   String
+  sender    ChatSender
+  text      String?
+  imageUrl  String?
+  createdAt DateTime   @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
 }
 
 model OrderPhoto {
@@ -509,6 +553,20 @@ model Rating {
   createdAt DateTime @default(now())
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+/// คำตอบหลังให้ดาว "อยากให้ FixGo เพิ่มบริการหรือปรับอะไร" (ไม่บังคับ ตอบได้ครั้งเดียวต่องาน)
+/// choices เก็บรหัสตัวเลือก เช่น TOW_TRUCK, FASTER_ARRIVAL, LOWER_PRICE, MORE_AREAS, OTHER
+model ServiceSuggestion {
+  id        String   @id @default(uuid())
+  orderId   String   @unique
+  choices   String[]
+  otherText String?
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
 }
 
 enum SettlementStatus {

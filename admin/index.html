@@ -132,6 +132,23 @@
   .tags { display: flex; flex-wrap: wrap; gap: 6px; }
   .tag { background: #ECF8F1; border-radius: 999px; padding: 2px 10px; font-size: 13px; }
   .tools { display: flex; flex-wrap: wrap; gap: 8px; }
+  .fb-bars { display: grid; gap: 10px; margin: 8px 0 16px; }
+  .fb-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; font-size: 14px; max-width: 560px; }
+  .fb-track { grid-column: 1 / -1; height: 12px; background: #ECF8F1; border-radius: 4px; overflow: hidden; }
+  .fb-fill { height: 100%; background: #0B5F45; border-radius: 0 4px 4px 0; min-width: 2px; }
+  .fb-value { text-align: right; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .photos-dialog { width: min(560px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+  .photos-dialog::backdrop { background: rgba(18, 40, 33, 0.45); }
+  .photos-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .catalog { display: grid; gap: 12px; }
+  .catalog-cat { border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; }
+  .catalog-cat.closed { background: #F7F8F8; }
+  .catalog-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .catalog-subs { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .catalog-subs li { padding-left: 14px; border-left: 3px solid var(--border); }
+  .pill { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px; font-weight: 700; }
+  .pill.on { background: #ECF8F1; color: #0B5F45; }
+  .pill.off { background: #FDECEC; color: var(--error); }
   .tools img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; border: 1px solid #D5E8DE; }
   .plate { border: 2px solid #122821; border-radius: 6px; padding: 1px 8px; font-weight: 800; }
   .line-note { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: #FFF4DB; color: #7A4B00; font-size: 14px; }
@@ -144,6 +161,14 @@
   .finance-note { margin: 12px 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
   .money-pos { color: #0B7A55; font-weight: 700; }
   .money-neg { color: var(--error); font-weight: 700; }
+  .chat-dialog { width: min(560px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+  .chat-dialog::backdrop { background: rgba(18, 40, 33, 0.45); }
+  .chat-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .chat-log { display: grid; gap: 8px; max-height: 60vh; overflow-y: auto; }
+  .chat-msg { max-width: 80%; padding: 8px 12px; border-radius: 12px; background: #ECF8F1; overflow-wrap: anywhere; }
+  .chat-msg.provider { justify-self: end; background: #0B5F45; color: #fff; }
+  .chat-msg img { display: block; max-width: 200px; border-radius: 8px; margin-bottom: 4px; }
+  .chat-msg small { display: block; opacity: 0.75; font-size: 11px; }
   .pill { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; }
   .pill.promptpay { background: #E6F2FF; color: #1D4F91; }
   .pill.cash { background: #ECF8F1; color: #0B5F45; }
@@ -256,6 +281,19 @@
       <div id="providers-body" class="applicants"></div>
     </div>
 
+    <div class="card" id="feedback-card">
+      <h2>ข้อเสนอแนะจากลูกค้า <span class="muted">(ถามหลังลูกค้าให้ดาว: อยากให้ FixGo เพิ่มบริการหรือปรับอะไร ไม่บังคับตอบ)</span></h2>
+      <div id="feedback-summary"></div>
+      <div class="table-wrap"><table><thead><tr>
+        <th>เมื่อ</th><th>งาน</th><th>ดาว</th><th>เลือก</th><th>ความเห็น</th>
+      </tr></thead><tbody id="feedback-body"></tbody></table></div>
+    </div>
+
+    <div class="card" id="catalog-card">
+      <h2>หมวดบริการ <span class="muted">(ปิดหมวดที่ยังไม่มีช่าง ลูกค้าจะไม่เห็นและสั่งไม่ได้ ช่างสมัครหมวดที่ปิดไม่ได้)</span></h2>
+      <div id="catalog-body" class="catalog"></div>
+    </div>
+
     <div class="card">
       <h2>คำขอเบิกเงิน</h2>
       <div class="table-wrap"><table><thead><tr>
@@ -287,9 +325,20 @@
     <div class="card">
       <h2>ออเดอร์ล่าสุด</h2>
       <div class="table-wrap"><table><thead><tr>
-        <th>เลขที่</th><th>บริการ</th><th>ลูกค้า</th><th>ช่าง</th><th>สถานะ</th><th>ราคา</th>
+        <th>เลขที่</th><th>บริการ</th><th>ลูกค้า</th><th>ช่าง</th><th>สถานะ</th><th>ราคา</th><th>รูปปิดงาน</th><th></th>
       </tr></thead><tbody id="orders-body"></tbody></table></div>
     </div>
+
+    <dialog id="photos-dialog" class="photos-dialog">
+      <div class="photos-head"><h2 id="photos-title">รูปปิดงาน</h2><button class="ghost" onclick="el('photos-dialog').close()">ปิด</button></div>
+      <div id="photos-body"></div>
+    </dialog>
+
+    <dialog id="chat-dialog" class="chat-dialog">
+      <div class="chat-head"><h2 id="chat-title">แชท</h2><button class="ghost" onclick="el('chat-dialog').close()">ปิด</button></div>
+      <p class="muted">การเปิดอ่านแชทถูกบันทึกในบันทึกการทำงานทุกครั้ง</p>
+      <div id="chat-body" class="chat-log"></div>
+    </dialog>
   </div>
 </main>
 
@@ -434,7 +483,7 @@ async function showDashboard() {
 
 async function refreshAll() {
   await Promise.all([
-    loadSummary(), loadNoMatch(), loadSlips(), loadSettlements(), loadProviders(), loadWithdrawals(), loadOrders(),
+    loadSummary(), loadNoMatch(), loadSlips(), loadSettlements(), loadProviders(), loadCatalog(), loadFeedback(), loadWithdrawals(), loadOrders(),
     ...(isOwner() ? [loadFinance(), loadTeam(), loadAudit()] : []),
   ]);
 }
@@ -509,6 +558,9 @@ const AUDIT_LABELS = {
   WITHDRAWAL_REJECT: 'ปฏิเสธคำขอเบิก',
   ADMIN_CREATE: 'เพิ่มบัญชีแอดมิน',
   ADMIN_UPDATE: 'แก้ไขบัญชีแอดมิน',
+  ORDER_CHAT_READ: 'เปิดอ่านแชทของงาน',
+  CATEGORY_ACTIVE: 'เปิด/ปิดหมวดบริการ',
+  SUB_SERVICE_ACTIVE: 'เปิด/ปิดบริการย่อย',
 };
 
 async function loadAudit() {
@@ -892,6 +944,100 @@ async function setProviderStatus(id, status) {
   await Promise.all([loadProviders(), loadSummary()]);
 }
 
+// ---------- ข้อเสนอแนะจากลูกค้า ----------
+const SUGGESTION_LABELS = {
+  TOW_TRUCK: 'เพิ่มบริการรถยก',
+  FASTER_ARRIVAL: 'ช่างมาเร็วขึ้น',
+  LOWER_PRICE: 'ราคาถูกลง',
+  MORE_AREAS: 'เพิ่มพื้นที่ให้บริการ',
+  OTHER: 'อื่นๆ',
+};
+
+async function loadFeedback() {
+  const data = await api('/admin/feedback');
+  if (data.total === 0) {
+    el('feedback-summary').innerHTML = '<p class="muted">ยังไม่มีลูกค้าตอบ</p>';
+    el('feedback-body').innerHTML = '';
+    return;
+  }
+  // เรียงจากมากไปน้อย ความยาวแท่ง = สัดส่วนของคนที่ตอบ (เลือกได้หลายข้อ รวมจึงเกิน 100%)
+  const rows = Object.keys(SUGGESTION_LABELS)
+    .map((code) => ({ code, count: data.counts[code] || 0 }))
+    .sort((a, b) => b.count - a.count);
+  el('feedback-summary').innerHTML = `
+    <p class="muted">ตอบแล้ว ${escapeHtml(data.total)} คน (เลือกได้หลายข้อ)</p>
+    <div class="fb-bars" role="list">${rows.map((row) => {
+      const percent = Math.round((row.count / data.total) * 100);
+      const label = SUGGESTION_LABELS[row.code];
+      return `<div class="fb-row" role="listitem" title="${escapeHtml(label)}: ${escapeHtml(row.count)} คน (${percent}%)">
+        <span>${escapeHtml(label)}</span>
+        <span class="fb-value">${escapeHtml(row.count)} คน · ${percent}%</span>
+        <div class="fb-track"><div class="fb-fill" style="width:${percent}%"></div></div>
+      </div>`;
+    }).join('')}</div>`;
+  el('feedback-body').innerHTML = data.recent.map((row) => `
+    <tr>
+      <td>${escapeHtml(new Date(row.createdAt).toLocaleDateString('th-TH'))}</td>
+      <td>${escapeHtml(row.orderNo)}<br><small>${escapeHtml(row.serviceName)}</small></td>
+      <td>${row.score ? escapeHtml(row.score + '/5') : '-'}</td>
+      <td>${row.choices.map((code) => escapeHtml(SUGGESTION_LABELS[code] || code)).join(', ') || '-'}</td>
+      <td>${escapeHtml(row.otherText || '-')}</td>
+    </tr>`).join('');
+}
+
+// ---------- หมวดบริการ ----------
+let catalogRows = new Map();
+
+async function loadCatalog() {
+  const categories = await api('/admin/catalog');
+  catalogRows = new Map();
+  el('catalog-body').innerHTML = categories.length === 0
+    ? '<p class="muted">ยังไม่มีหมวดบริการ</p>'
+    : categories.map((category) => {
+      catalogRows.set('category:' + category.id, category);
+      const mechanics = category._count?.providers ?? 0;
+      const subs = (category.subServices || []).map((sub) => {
+        catalogRows.set('sub:' + sub.id, sub);
+        return `
+          <li class="catalog-row">
+            <span>${escapeHtml(sub.name)} <span class="pill ${sub.active ? 'on' : 'off'}">${sub.active ? 'เปิด' : 'ปิด'}</span></span>
+            <button class="ghost" onclick="toggleCatalog(this, 'sub', '${escapeHtml(sub.id)}')">${sub.active ? 'ปิดบริการนี้' : 'เปิดบริการนี้'}</button>
+          </li>`;
+      }).join('');
+      return `
+        <div class="catalog-cat${category.active ? '' : ' closed'}">
+          <div class="catalog-row">
+            <span><strong>${escapeHtml(category.name)}</strong>
+              <span class="pill ${category.active ? 'on' : 'off'}">${category.active ? 'เปิดรับงาน' : 'ปิดอยู่'}</span><br>
+              <small class="muted">ช่างที่อนุมัติแล้ว ${escapeHtml(mechanics)} คน${mechanics === 0 && category.active ? ' · ยังไม่มีช่าง ควรปิดไว้ก่อน' : ''}</small></span>
+            <button class="${category.active ? 'danger' : ''}" onclick="toggleCatalog(this, 'category', '${escapeHtml(category.id)}')">${category.active ? 'ปิดหมวดนี้' : 'เปิดหมวดนี้'}</button>
+          </div>
+          ${subs ? `<ul class="catalog-subs">${subs}</ul>` : ''}
+        </div>`;
+    }).join('');
+}
+
+async function toggleCatalog(button, kind, id) {
+  const row = catalogRows.get(kind + ':' + id);
+  if (!row) return;
+  const next = !row.active;
+  const what = kind === 'category' ? `หมวด "${row.name}"` : `บริการ "${row.name}"`;
+  const effect = next
+    ? 'ลูกค้าจะเห็นและสั่งได้ทันที'
+    : 'ลูกค้าจะไม่เห็นและสั่งไม่ได้ (งานที่สั่งไปแล้วยังทำต่อตามปกติ)';
+  if (!confirm(`${next ? 'เปิด' : 'ปิด'}${what}?\n${effect}`)) return;
+  button.disabled = true;
+  try {
+    await api(`/admin/catalog/${kind === 'category' ? 'categories' : 'sub-services'}/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ active: next }),
+    });
+  } catch (error) {
+    alert(error.message);
+  }
+  await loadCatalog();
+}
+
 async function loadWithdrawals() {
   const withdrawals = await api('/admin/withdrawals?status=REQUESTED');
   moneyRows.withdrawal = new Map(withdrawals.map((row) => [row.id, row]));
@@ -943,7 +1089,51 @@ async function loadOrders() {
       <td>${escapeHtml(order.provider ? order.provider.nickname : '-')}</td>
       <td>${escapeHtml(STATUS_LABELS[order.status] || order.status)}</td>
       <td>${escapeHtml(formatSatang(order.priceFinal ?? order.priceEstimated))}</td>
-    </tr>`).join('') || '<tr><td colspan="6">ยังไม่มีออเดอร์</td></tr>';
+      <td>${(order.closePhotos || []).length
+        ? `<button class="ghost" onclick="openClosePhotos('${escapeHtml(order.id)}')">ดู ${escapeHtml(order.closePhotos.length)} รูป</button>`
+        : '-'}</td>
+      <td>${order.provider ? `<button class="ghost" onclick="openOrderChat('${escapeHtml(order.id)}')">ดูแชท</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="8">ยังไม่มีออเดอร์</td></tr>';
+  closePhotoRows = new Map(orders.map((order) => [order.id, order]));
+}
+
+// รูปที่ช่างแนบตอนปิดงาน: รถหลังซ่อม (บังคับ) และใบเสร็จ/สลิป (ไม่บังคับ)
+let closePhotoRows = new Map();
+
+function openClosePhotos(orderId) {
+  const order = closePhotoRows.get(orderId);
+  if (!order) return;
+  const section = (title, kind) => {
+    const photos = (order.closePhotos || []).filter((photo) => photo.kind === kind);
+    if (photos.length === 0) return '';
+    return `<p class="muted">${title}</p><div class="tools">${photos.map((photo) =>
+      `<a href="${escapeHtml(photo.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(photo.url)}" alt="${title}"></a>`).join('')}</div>`;
+  };
+  el('photos-title').textContent = 'รูปปิดงาน ' + order.orderNo;
+  el('photos-body').innerHTML = section('รถหลังซ่อมเสร็จ', 'CAR') + section('ใบเสร็จ / สลิป', 'RECEIPT');
+  el('photos-dialog').showModal();
+}
+
+// แชทลูกค้า-ช่าง: เปิดเฉพาะกรณีมีปัญหา backend บันทึก ORDER_CHAT_READ ทุกครั้ง
+async function openOrderChat(orderId) {
+  if (!confirm('เปิดอ่านแชทระหว่างลูกค้ากับช่างของงานนี้?\nระบบจะบันทึกว่าคุณเปิดอ่าน')) return;
+  let chat;
+  try {
+    chat = await api('/admin/orders/' + orderId + '/messages');
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
+  el('chat-title').textContent = 'แชทงาน ' + chat.orderNo;
+  el('chat-body').innerHTML = chat.messages.length === 0
+    ? '<p class="muted">ไม่มีข้อความ</p>'
+    : chat.messages.map((message) => `
+      <div class="chat-msg ${message.sender === 'PROVIDER' ? 'provider' : ''}">
+        ${message.imageUrl ? `<a href="${escapeHtml(message.imageUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(message.imageUrl)}" alt="รูปในแชท"></a>` : ''}
+        ${message.text ? escapeHtml(message.text) : ''}
+        <small>${message.sender === 'PROVIDER' ? 'ช่าง' : 'ลูกค้า'} · ${escapeHtml(new Date(message.createdAt).toLocaleString('th-TH'))}</small>
+      </div>`).join('');
+  el('chat-dialog').showModal();
 }
 
 el('login-btn').addEventListener('click', login);

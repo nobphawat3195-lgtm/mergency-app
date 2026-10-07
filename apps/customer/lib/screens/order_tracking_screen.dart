@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app_state.dart';
+import '../chat_image.dart';
 import 'inspection_report_screen.dart';
 import 'tracking/live_map_card.dart';
 import 'tracking/provider_trust_card.dart';
 import 'tracking/safety_actions.dart';
+import 'tracking/suggestion_card.dart';
 
 class OrderTrackingScreen extends StatefulWidget {
   const OrderTrackingScreen({super.key, required this.orderId});
@@ -25,6 +27,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   String? _error;
   Timer? _pollTimer;
   bool _respondingToQuote = false;
+
+  /// กดข้ามคำถามเสริมหลังให้ดาวแล้ว (ไม่ถามซ้ำระหว่างเปิดหน้านี้)
+  bool _suggestionSkipped = false;
   StreamSubscription<PushEvent>? _pushSub;
   StreamSubscription<String>? _liveSub;
   Timer? _reconnectTimer;
@@ -107,14 +112,45 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
       final order =
           await AppStateScope.of(context).api.getOrder(widget.orderId);
       if (!mounted) return;
+      final previous = _order;
       setState(() {
         _order = order;
         _error = null;
       });
+      // ข้อความใหม่จากช่างระหว่างเปิดหน้านี้: เสียงสั้น + แถบแจ้ง (ไม่ดังตอนเปิดหน้าครั้งแรก)
+      if (previous != null && order.chatUnread > previous.chatUnread) {
+        unawaited(ChatChime.play());
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('มีข้อความใหม่จากช่าง'),
+            action: SnackBarAction(label: 'เปิดแชท', onPressed: _openChat),
+          ),
+        );
+      }
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() => _error = error.message);
     }
+  }
+
+  Future<void> _openChat() async {
+    final order = _order;
+    if (order == null) return;
+    // displayName ไม่เติม "ช่าง" ซ้ำถ้าชื่อเล่นขึ้นต้นด้วย "ช่าง" อยู่แล้ว (ตรงกับ mechanicDisplayName ของ backend)
+    final name = order.provider?.displayName;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OrderChatScreen(
+          api: AppStateScope.of(context).api,
+          orderId: order.id,
+          me: ChatSender.customer,
+          title: name == null ? 'แชทกับช่าง' : 'แชทกับ$name',
+          pickImage: pickChatImage,
+        ),
+      ),
+    );
+    // กลับมาแล้ว badge ต้องเป็น 0 (เปิดอ่านแล้ว)
+    if (mounted) await _refresh();
   }
 
   Future<void> _cancel() async {
@@ -260,6 +296,14 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                     const SizedBox(height: FixGoSpacing.md),
                   ],
                 ],
+                if (order.hasChat) ...[
+                  ChatBadgeButton(
+                    label: order.chatOpen ? 'แชทกับช่าง' : 'ดูแชทย้อนหลัง',
+                    unread: order.chatUnread,
+                    onPressed: _openChat,
+                  ),
+                  const SizedBox(height: FixGoSpacing.md),
+                ],
                 if (_isActive(order)) ...[
                   SafetyActions(
                     api: AppStateScope.of(context).api,
@@ -287,6 +331,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                   const SizedBox(height: FixGoSpacing.md),
                 ],
                 _PriceCard(order: order),
+                if (order.carPhotoUrls.isNotEmpty ||
+                    order.receiptPhotoUrls.isNotEmpty) ...[
+                  const SizedBox(height: FixGoSpacing.md),
+                  _ClosePhotosCard(order: order),
+                ],
                 const SizedBox(height: FixGoSpacing.lg),
                 if (order.status == OrderStatus.completed && order.isPaid)
                   const Card(
@@ -334,6 +383,27 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                     order: order,
                     onSubmitted: _refresh,
                   ),
+                  if (order.ratingScore != null &&
+                      !order.suggestionSent &&
+                      !_suggestionSkipped) ...[
+                    const SizedBox(height: FixGoSpacing.md),
+                    SuggestionCard(
+                      api: AppStateScope.of(context).api,
+                      orderId: order.id,
+                      onDone: (sent) {
+                        if (sent) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('ขอบคุณ ทีมงานได้รับความเห็นแล้ว'),
+                            ),
+                          );
+                          unawaited(_refresh());
+                        } else {
+                          setState(() => _suggestionSkipped = true);
+                        }
+                      },
+                    ),
+                  ],
                 ],
                 if (order.status == OrderStatus.searching ||
                     order.status == OrderStatus.created ||
@@ -571,6 +641,46 @@ class _QuoteCard extends StatelessWidget {
                 label: 'ยังไม่ยืนยัน ขอคุยกับช่าง',
                 destructive: true,
                 onPressed: responding ? null : onReject,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// รูปที่ช่างแนบตอนปิดงาน: รถหลังซ่อมเสร็จ และใบเสร็จ/สลิป (ถ้ามี)
+class _ClosePhotosCard extends StatelessWidget {
+  const _ClosePhotosCard({required this.order});
+
+  final Order order;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(FixGoSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'รูปจากช่างตอนปิดงาน',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: FixGoSpacing.sm),
+            if (order.carPhotoUrls.isNotEmpty)
+              PhotoStrip(
+                label: 'รถหลังซ่อมเสร็จ',
+                urls: order.carPhotoUrls,
+                size: 88,
+              ),
+            if (order.receiptPhotoUrls.isNotEmpty) ...[
+              const SizedBox(height: FixGoSpacing.sm),
+              PhotoStrip(
+                label: 'ใบเสร็จ / สลิป',
+                urls: order.receiptPhotoUrls,
+                size: 88,
               ),
             ],
           ],

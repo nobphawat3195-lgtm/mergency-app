@@ -419,11 +419,52 @@ class FixGoApiClient {
     await _send('DELETE', '/orders/$orderId/share');
   }
 
+  /// คำถามเสริมหลังให้ดาว (ไม่บังคับ ตอบได้ครั้งเดียว) ส่งถึงทีม FixGo ไม่ใช่ช่าง
+  Future<void> sendServiceSuggestion(
+    String orderId, {
+    required List<String> choices,
+    String? otherText,
+  }) async {
+    await _send('POST', '/orders/$orderId/suggestion', body: {
+      'choices': choices,
+      if (otherText != null && otherText.trim().isNotEmpty)
+        'otherText': otherText.trim(),
+    });
+  }
+
   Future<void> rateOrder(String orderId, int score, {String? comment}) async {
     await _send('POST', '/orders/$orderId/rate', body: {
       'score': score,
       if (comment != null) 'comment': comment,
     });
+  }
+
+  // ---------- Chat ----------
+
+  /// เปิดแชทของงาน: ข้อความทั้งหมด และส่งต่อได้ไหม (เรียกแล้วนับว่าอ่านแล้ว)
+  Future<({bool canSend, List<ChatMessage> messages})> getOrderChat(
+    String orderId,
+  ) async {
+    final result =
+        await _send('GET', '/orders/$orderId/messages') as Map<String, dynamic>;
+    return (
+      canSend: result['canSend'] as bool? ?? false,
+      messages: (result['messages'] as List<dynamic>? ?? const [])
+          .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<ChatMessage> sendOrderMessage(
+    String orderId, {
+    String? text,
+    String? imageUrl,
+  }) async {
+    final result = await _send('POST', '/orders/$orderId/messages', body: {
+      if (text != null) 'text': text,
+      if (imageUrl != null) 'imageUrl': imageUrl,
+    }) as Map<String, dynamic>;
+    return ChatMessage.fromJson(result);
   }
 
   // ---------- Provider ----------
@@ -603,8 +644,16 @@ class FixGoApiClient {
         body: {'quoteVersion': quoteVersion, 'priceProposed': priceProposed});
   }
 
-  Future<void> completeJob(String orderId) async {
-    await _send('POST', '/orders/$orderId/complete');
+  /// ปิดงาน: รูปรถหลังซ่อม 1-5 รูป (บังคับ) และใบเสร็จ/สลิปสูงสุด 3 รูป (ไม่บังคับ)
+  Future<void> completeJob(
+    String orderId, {
+    required List<String> carPhotoUrls,
+    List<String> receiptPhotoUrls = const [],
+  }) async {
+    await _send('POST', '/orders/$orderId/complete', body: {
+      'carPhotoUrls': carPhotoUrls,
+      if (receiptPhotoUrls.isNotEmpty) 'receiptPhotoUrls': receiptPhotoUrls,
+    });
   }
 
   // ---------- Wallet (ช่าง) ----------

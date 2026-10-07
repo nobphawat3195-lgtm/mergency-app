@@ -155,6 +155,115 @@ export class AdminService {
     });
   }
 
+  /**
+   * ข้อเสนอแนะจากลูกค้าหลังให้ดาว: นับตามตัวเลือก + ความเห็นล่าสุด 100 รายการ
+   * (นับจากทุกคำตอบ ไม่ใช่เฉพาะ 100 รายการล่าสุด)
+   */
+  async customerFeedback() {
+    const [total, grouped, recent] = await Promise.all([
+      this.prisma.serviceSuggestion.count(),
+      this.prisma.$queryRaw<{ choice: string; count: bigint }[]>`
+        SELECT unnest("choices") AS choice, COUNT(*) AS count
+        FROM "ServiceSuggestion"
+        GROUP BY choice`,
+      this.prisma.serviceSuggestion.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          choices: true,
+          otherText: true,
+          createdAt: true,
+          order: {
+            select: {
+              orderNo: true,
+              rating: { select: { score: true } },
+              subService: { select: { name: true } },
+            },
+          },
+        },
+      }),
+    ]);
+    return {
+      total,
+      counts: Object.fromEntries(
+        grouped.map((row) => [row.choice, Number(row.count)]),
+      ),
+      recent: recent.map(({ order, ...row }) => ({
+        ...row,
+        orderNo: order.orderNo,
+        score: order.rating?.score ?? null,
+        serviceName: order.subService.name,
+      })),
+    };
+  }
+
+  /** แชทของงาน ให้แอดมินเปิดอ่านกรณีมีปัญหา (controller บันทึก audit ทุกครั้งที่เปิด) */
+  async listOrderMessages(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, orderNo: true },
+    });
+    if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้');
+    const messages = await this.prisma.orderMessage.findMany({
+      where: { orderId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        sender: true,
+        text: true,
+        imageUrl: true,
+        createdAt: true,
+      },
+    });
+    return { orderNo: order.orderNo, messages };
+  }
+
+  /**
+   * หมวดบริการและบริการย่อยทั้งหมด (รวมที่ปิดอยู่) พร้อมจำนวนช่างที่อนุมัติแล้วในหมวด
+   * ให้แอดมินเห็นว่าหมวดไหนยังไม่มีช่าง ควรปิดไว้ก่อน
+   */
+  listCatalog() {
+    return this.prisma.serviceCategory.findMany({
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        subServices: { orderBy: { sortOrder: 'asc' } },
+        _count: {
+          select: {
+            providers: {
+              where: {
+                provider: {
+                  status: ProviderStatus.VERIFIED,
+                  deletedAt: null,
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async setCategoryActive(id: string, active: boolean) {
+    const found = await this.prisma.serviceCategory.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!found) throw new NotFoundException('ไม่พบหมวดบริการ');
+    return this.prisma.serviceCategory.update({
+      where: { id },
+      data: { active },
+    });
+  }
+
+  async setSubServiceActive(id: string, active: boolean) {
+    const found = await this.prisma.subService.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!found) throw new NotFoundException('ไม่พบบริการย่อย');
+    return this.prisma.subService.update({ where: { id }, data: { active } });
+  }
+
   listProviders(status?: ProviderStatus) {
     return this.prisma.provider.findMany({
       where: status ? { status } : undefined,
@@ -213,6 +322,10 @@ export class AdminService {
         subService: true,
         customer: { select: { phone: true, name: true } },
         provider: { select: { realName: true, nickname: true, phone: true } },
+        closePhotos: {
+          select: { kind: true, url: true },
+          orderBy: { createdAt: 'asc' },
+        },
         _count: { select: { dispatchAttempts: true } },
       },
       orderBy: { createdAt: 'desc' },
