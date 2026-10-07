@@ -21,7 +21,8 @@ export type PushType =
   | 'ACCOUNT'
   | 'WALLET'
   | 'PAID'
-  | 'PAYMENT_REVIEW';
+  | 'PAYMENT_REVIEW'
+  | 'CHAT';
 
 interface OrderRef {
   id: string;
@@ -278,6 +279,18 @@ export class PushService {
       order,
       'ช่างเสนอราคาแล้ว',
       `ราคา ${formatBaht(amountSatang)} รอคุณยืนยันก่อนเริ่มงาน`,
+    );
+  }
+
+  /** ไม่ใส่เนื้อความใน push (ขึ้นบนหน้าจอล็อก) ให้เปิดอ่านในแอป */
+  chatMessage(role: Role, userId: string, order: OrderRef, from: string) {
+    return this.sendToUsers(
+      role,
+      [userId],
+      'CHAT',
+      order,
+      `ข้อความใหม่จาก${from}`,
+      `งาน ${order.orderNo} เปิดแชทในแอปเพื่ออ่าน`,
     );
   }
 
