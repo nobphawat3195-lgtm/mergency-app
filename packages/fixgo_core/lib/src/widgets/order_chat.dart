@@ -355,6 +355,17 @@ class _Bubble extends StatelessWidget {
                   style: TextStyle(
                     color: mine ? Colors.white : FixGoColors.textPrimary,
                   ),
+                )
+              // ผู้ส่งลบบัญชีแล้ว เนื้อหาข้อความถูกลบตามนโยบายความเป็นส่วนตัว
+              else if (image == null)
+                Text(
+                  'ข้อความนี้ถูกลบแล้ว',
+                  style: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: mine
+                        ? FixGoColors.accentSoft
+                        : FixGoColors.textSecondary,
+                  ),
                 ),
               const SizedBox(height: 2),
               Text(
