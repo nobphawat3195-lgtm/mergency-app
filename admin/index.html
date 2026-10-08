@@ -118,6 +118,7 @@
   .load-error { margin: 8px 0 12px; padding: 12px; border-radius: 10px; background: #FDECEC; color: #8A1C1C;
     display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .load-error button { margin-left: auto; }
+  .card.stale > :not(h2):not(.load-state):not(.finance-filters) { opacity: .45; }
   .muted { color: var(--text-secondary); font-size: 13px; }
   .stat:first-child .value, .stat:first-child .label { color: #fff; }
   .stat .value { font-size: 26px; font-weight: 800; color: var(--navy); }
@@ -553,9 +554,14 @@ async function loadSection(loader, anchorId) {
     await loader();
     loadedSections.add(loader);
     box.innerHTML = '';
+    box.parentElement.classList.remove('stale');
   } catch (error) {
     if (error?.status === 401) return logout();
-    box.innerHTML = `<div class="load-error"><strong>โหลดไม่สำเร็จ</strong> ${escapeHtml(thaiError(error))}
+    // เคยโหลดได้: ตัวเลขเดิมยังอยู่แต่ทำให้จางลง บอกชัดว่าอาจไม่ใช่ล่าสุด
+    // ไม่เคยโหลดได้: ไม่มีตัวเลขให้เห็น มีแค่กล่อง error กับปุ่มลองใหม่
+    const stale = loadedSections.has(loader);
+    box.parentElement.classList.toggle('stale', stale);
+    box.innerHTML = `<div class="load-error"><strong>${stale ? 'โหลดข้อมูลใหม่ไม่สำเร็จ ตัวเลขด้านล่างเป็นข้อมูลเดิม อาจไม่ใช่ล่าสุด' : 'โหลดไม่สำเร็จ'}</strong> ${escapeHtml(thaiError(error))}
       <button type="button">ลองใหม่</button></div>`;
     box.querySelector('button').onclick = () => loadSection(loader, anchorId);
   }

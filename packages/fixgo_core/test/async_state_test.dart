@@ -116,6 +116,26 @@ void main() {
     });
   });
 
+  testWidgets('stale banner says the numbers may be old and can retry',
+      (tester) async {
+    var retried = 0;
+    await tester.pumpWidget(
+      _app(
+        StaleDataBanner(
+          error: ApiException(
+              503, 'เชื่อมต่อไม่ได้ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่'),
+          onRetry: () => retried++,
+        ),
+      ),
+    );
+    expect(
+      find.textContaining('ข้อมูลนี้อาจไม่ใช่ล่าสุด'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('ลองใหม่'));
+    expect(retried, 1);
+  });
+
   testWidgets('BusyButton blocks double taps while waiting', (tester) async {
     var calls = 0;
     final done = Completer<void>();

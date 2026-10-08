@@ -148,8 +148,8 @@ class _OffersScreenState extends State<OffersScreen> {
       final next = ringing
           .map((o) => o.expiresAt)
           .reduce((a, b) => a.isBefore(b) ? a : b);
-      _expiryTimer = Timer(next.difference(now) + const Duration(seconds: 1),
-          () {
+      _expiryTimer =
+          Timer(next.difference(now) + const Duration(seconds: 1), () {
         if (mounted) setState(_updateAlarm);
       });
     }
@@ -183,7 +183,8 @@ class _OffersScreenState extends State<OffersScreen> {
       _closeMinute = close;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('บันทึกแล้ว: ${workingHoursSentence(open, close)}')),
+      SnackBar(
+          content: Text('บันทึกแล้ว: ${workingHoursSentence(open, close)}')),
     );
   }
 
@@ -298,6 +299,14 @@ class _OffersScreenState extends State<OffersScreen> {
         _error = error;
       });
     }
+  }
+
+  /// โหลดไม่สำเร็จตั้งแต่ครั้งแรก ยังไม่มีตัวเลขจริงสักชุด
+  bool get _neverLoaded => _summary == null && _error != null;
+
+  void _retry() {
+    setState(() => _loading = true);
+    unawaited(_refresh());
   }
 
   Future<void> _openChat(Order order) async {
@@ -417,6 +426,11 @@ class _OffersScreenState extends State<OffersScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // เคยโหลดได้แล้วแต่รอบล่าสุดไม่สำเร็จ: ตัวเลขด้านล่างเป็นของเดิม
+                    if (_error != null && _summary != null) ...[
+                      StaleDataBanner(error: _error, onRetry: _retry),
+                      const SizedBox(height: FixGoSpacing.md),
+                    ],
                     if (_accountStatus != null &&
                         _accountStatus != 'VERIFIED') ...[
                       _AccountStatusCard(
@@ -461,14 +475,11 @@ class _OffersScreenState extends State<OffersScreen> {
                                   compact: true,
                                   error: _error,
                                   title: 'โหลดงานใหม่ไม่สำเร็จ',
-                                  onRetry: () {
-                                    setState(() => _loading = true);
-                                    unawaited(_refresh());
-                                  },
+                                  onRetry: _retry,
                                 )
-                          : _offers.isEmpty
-                              ? _EmptyOffers(
-                                  message: (_accountStatus != null &&
+                              : _offers.isEmpty
+                                  ? _EmptyOffers(
+                                      message: (_accountStatus != null &&
                                               _accountStatus != 'VERIFIED'
                                           ? 'รับงานได้หลังทีมงานอนุมัติบัญชี'
                                           : _debt?.blocked == true
@@ -476,32 +487,33 @@ class _OffersScreenState extends State<OffersScreen> {
                                               : isOnline
                                                   ? 'กำลังรองานใกล้คุณ ระบบเช็กงานใหม่ทุก 10 วินาที'
                                                   : 'ตอนนี้ปิดรับงานอยู่ เปิดแล้วงานใกล้คุณจะเด้งขึ้นที่นี่'),
-                                  actionLabel: !isOnline &&
-                                          _accountStatus == 'VERIFIED' &&
-                                          _debt?.blocked != true
-                                      ? 'เปิดรับงานเลย'
-                                      : null,
-                                  onAction: () => _toggleOnline(true),
-                                )
-                              : Column(
-                                  children: [
-                                    if (_ringingIds.isNotEmpty)
-                                      _RingingBanner(onSilence: _silence),
-                                    for (final (index, offer)
-                                        in _offers.indexed) ...[
-                                      if (index > 0) const Divider(height: 32),
-                                      _OfferCard(
-                                        offer: offer,
-                                        ringing: _ringingIds
-                                            .contains(offer.orderId),
-                                        busy: _respondingOfferId ==
-                                            offer.orderId,
-                                        onAccept: () => _accept(offer),
-                                        onReject: () => _reject(offer),
-                                      ),
-                                    ],
-                                  ],
-                                ),
+                                      actionLabel: !isOnline &&
+                                              _accountStatus == 'VERIFIED' &&
+                                              _debt?.blocked != true
+                                          ? 'เปิดรับงานเลย'
+                                          : null,
+                                      onAction: () => _toggleOnline(true),
+                                    )
+                                  : Column(
+                                      children: [
+                                        if (_ringingIds.isNotEmpty)
+                                          _RingingBanner(onSilence: _silence),
+                                        for (final (index, offer)
+                                            in _offers.indexed) ...[
+                                          if (index > 0)
+                                            const Divider(height: 32),
+                                          _OfferCard(
+                                            offer: offer,
+                                            ringing: _ringingIds
+                                                .contains(offer.orderId),
+                                            busy: _respondingOfferId ==
+                                                offer.orderId,
+                                            onAccept: () => _accept(offer),
+                                            onReject: () => _reject(offer),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                     ),
                     const SizedBox(height: FixGoSpacing.md),
                     _SectionCard(
@@ -511,20 +523,28 @@ class _OffersScreenState extends State<OffersScreen> {
                       actionLabel:
                           _activeJob == null ? null : 'ดูรายละเอียดงาน',
                       onAction: () => widget.onOpenTab?.call(1),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _JobProgress(order: _activeJob),
-                          if (_activeJob?.hasChat ?? false) ...[
-                            const SizedBox(height: FixGoSpacing.sm),
-                            ChatBadgeButton(
-                              label: 'แชทกับลูกค้า',
-                              unread: _activeJob!.chatUnread,
-                              onPressed: () => _openChat(_activeJob!),
+                      // ยังไม่เคยโหลดได้: ห้ามบอกว่า "ยังไม่มีงาน" เพราะไม่รู้จริง
+                      child: _neverLoaded
+                          ? ErrorStateView(
+                              compact: true,
+                              error: _error,
+                              title: 'โหลดงานที่กำลังทำไม่สำเร็จ',
+                              onRetry: _retry,
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _JobProgress(order: _activeJob),
+                                if (_activeJob?.hasChat ?? false) ...[
+                                  const SizedBox(height: FixGoSpacing.sm),
+                                  ChatBadgeButton(
+                                    label: 'แชทกับลูกค้า',
+                                    unread: _activeJob!.chatUnread,
+                                    onPressed: () => _openChat(_activeJob!),
+                                  ),
+                                ],
+                              ],
                             ),
-                          ],
-                        ],
-                      ),
                     ),
                     const SizedBox(height: FixGoSpacing.md),
                     _SectionCard(
@@ -533,7 +553,14 @@ class _OffersScreenState extends State<OffersScreen> {
                       title: 'สรุปผลงานวันนี้',
                       actionLabel: 'กระเป๋าเงิน',
                       onAction: () => widget.onOpenTab?.call(2),
-                      child: _SummaryRow(summary: _summary),
+                      child: _neverLoaded
+                          ? ErrorStateView(
+                              compact: true,
+                              error: _error,
+                              title: 'โหลดสรุปผลงานไม่สำเร็จ',
+                              onRetry: _retry,
+                            )
+                          : _SummaryRow(summary: _summary),
                     ),
                     const SizedBox(height: FixGoSpacing.md),
                     _MainMenu(onOpenTab: widget.onOpenTab),
@@ -1200,7 +1227,9 @@ class _OfferCardState extends State<_OfferCard> {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
-      padding: widget.ringing ? const EdgeInsets.all(FixGoSpacing.sm) : EdgeInsets.zero,
+      padding: widget.ringing
+          ? const EdgeInsets.all(FixGoSpacing.sm)
+          : EdgeInsets.zero,
       decoration: BoxDecoration(
         color: flash ? const Color(0x33C7EE77) : null,
         borderRadius: BorderRadius.circular(FixGoRadius.md),

@@ -228,6 +228,54 @@ class ErrorStateView extends StatelessWidget {
   }
 }
 
+/// มีข้อมูลเก่าอยู่แต่โหลดใหม่ไม่สำเร็จ: แถบเตือนเด่นพอให้รู้ว่าตัวเลขอาจไม่ใช่ล่าสุด + ปุ่ม "ลองใหม่"
+/// (ใช้คู่กับข้อมูลเก่าเท่านั้น ถ้ายังไม่เคยโหลดได้ให้ใช้ [ErrorStateView] แทน ห้ามโชว์ ฿0/รายการว่าง)
+class StaleDataBanner extends StatelessWidget {
+  const StaleDataBanner({super.key, this.error, required this.onRetry});
+
+  final Object? error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(
+          FixGoSpacing.md,
+          FixGoSpacing.sm,
+          FixGoSpacing.xs,
+          FixGoSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF4E0),
+          borderRadius: BorderRadius.circular(FixGoRadius.md),
+          border: Border.all(color: const Color(0xFFF5C26B)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.cloud_off_rounded,
+                size: 20, color: FixGoColors.warning),
+            const SizedBox(width: FixGoSpacing.sm),
+            Expanded(
+              child: Text(
+                'ข้อมูลนี้อาจไม่ใช่ล่าสุด: '
+                '${userMessageFor(error, fallback: 'โหลดข้อมูลใหม่ไม่สำเร็จ')}',
+                style: const TextStyle(
+                  color: FixGoColors.warning,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            TextButton(onPressed: onRetry, child: const Text('ลองใหม่')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// โหลดข้อมูลจาก [future] แล้วแสดงครบ 3 สถานะ: กำลังโหลด / ว่าง / ผิดพลาด
 ///
 /// - กำลังโหลดใหม่ (ดึงลงเพื่อรีเฟรช) ขณะมีข้อมูลเดิม: แสดงข้อมูลเดิมต่อ ไม่กระพริบเป็น spinner
