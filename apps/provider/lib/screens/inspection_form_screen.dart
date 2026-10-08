@@ -110,8 +110,8 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         _powertrain = report.powertrain;
         _transmission = report.transmission;
       });
-    } on ApiException catch (error) {
-      if (mounted) setState(() => _loadError = error.message);
+    } catch (error) {
+      if (mounted) setState(() => _loadError = userMessageFor(error));
     }
   }
 
@@ -168,7 +168,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       _dirtySlots.addAll(slots.keys);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('บันทึกไม่สำเร็จ: ${error.message}')),
+          SnackBar(content: Text('บันทึกไม่สำเร็จ: ${userMessageFor(error)}')),
         );
       }
       return false;
@@ -242,7 +242,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+          .showSnackBar(SnackBar(content: Text(userMessageFor(error))));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -315,7 +315,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+          .showSnackBar(SnackBar(content: Text(userMessageFor(error))));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -360,7 +360,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('ยังส่งรายงานไม่ได้'),
-          content: Text(error.message),
+          content: Text(userMessageFor(error)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -401,12 +401,16 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
           ],
         ),
         body: checklist == null || report == null
-            ? Center(
-                child: _loadError != null
-                    ? Text(_loadError!,
-                        style: const TextStyle(color: FixGoColors.error))
-                    : const CircularProgressIndicator(),
-              )
+            ? _loadError != null
+                ? ErrorStateView(
+                    title: 'โหลดแบบฟอร์มตรวจรถไม่สำเร็จ',
+                    error: ApiException(0, _loadError!),
+                    onRetry: () {
+                      setState(() => _loadError = null);
+                      unawaited(_load());
+                    },
+                  )
+                : const LoadingStateView(message: 'กำลังโหลดแบบฟอร์ม')
             : _buildBody(checklist, report),
         bottomNavigationBar: checklist == null || _readOnly
             ? null

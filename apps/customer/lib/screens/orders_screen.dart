@@ -34,26 +34,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
       appBar: AppBar(title: const Text('รายการของฉัน')),
       body: RefreshIndicator(
         onRefresh: _reload,
-        child: FutureBuilder<List<Order>>(
+        child: AsyncStateView<List<Order>>(
           future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final orders = snapshot.data ?? const <Order>[];
-            if (orders.isEmpty) {
-              return ListView(
-                children: [
-                  const SizedBox(height: 120),
-                  Center(
-                    child: Text(
-                      'ยังไม่มีรายการเรียกช่าง',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                ],
-              );
-            }
+          onRetry: _reload,
+          scrollable: true,
+          loading: const SkeletonList(),
+          isEmpty: (orders) => orders.isEmpty,
+          empty: const EmptyStateView(
+            icon: Icons.receipt_long_outlined,
+            title: 'ยังไม่มีงาน',
+            message: 'กดเรียกช่างได้ที่หน้าแรก งานที่เรียกจะแสดงที่นี่',
+          ),
+          builder: (context, orders) {
             return ListView.separated(
               padding: const EdgeInsets.all(FixGoSpacing.md),
               itemCount: orders.length,

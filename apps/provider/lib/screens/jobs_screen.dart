@@ -27,7 +27,10 @@ class _JobsScreenState extends State<JobsScreen> {
   static const _pollInterval = Duration(seconds: 10);
 
   List<Order>? _orders;
-  String? _error;
+  Object? _error;
+
+  /// งานที่กำลังส่งคำสั่งอยู่ (ปุ่มของงานนั้นกดไม่ได้จนกว่าจะเสร็จ)
+  String? _busyOrderId;
   Timer? _poll;
   StreamSubscription<PushEvent>? _pushSub;
   ValueNotifier<int>? _jobsRevision;
@@ -89,21 +92,31 @@ class _JobsScreenState extends State<JobsScreen> {
       if (ProviderAppScope.of(context).trackChatUnread(orders)) {
         unawaited(ChatChime.play());
       }
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
       // มีรายการเดิมอยู่แล้วก็แสดงต่อไป รอบถัดไปจะลองใหม่เอง
-      if (_orders == null) setState(() => _error = error.message);
+      if (_orders == null) setState(() => _error = error);
     }
   }
 
-  Future<void> _run(Future<void> Function() action) async {
+  /// ทำรายการของงานหนึ่งงาน: กันกดซ้ำระหว่างรอ แล้วแจ้งผลเป็นภาษาไทย
+  Future<void> _run(
+    Order order,
+    Future<void> Function() action, {
+    required String success,
+  }) async {
+    if (_busyOrderId != null) return;
+    setState(() => _busyOrderId = order.id);
     try {
       await action();
       await _reload();
-    } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      showResultSnackBar(context, success: success);
+    } catch (error) {
+      if (!mounted) return;
+      showResultSnackBar(context, error: error);
+    } finally {
+      if (mounted) setState(() => _busyOrderId = null);
     }
   }
 
@@ -171,9 +184,11 @@ class _JobsScreenState extends State<JobsScreen> {
     }
 
     await _run(
+      order,
       () => ProviderAppScope.of(context)
           .api
           .proposeQuote(order.id, bahtToSatang(baht), note: quoteNote),
+      success: 'ส่งราคาให้ลูกค้าแล้ว รอลูกค้ายืนยัน',
     );
   }
 
@@ -207,7 +222,9 @@ class _JobsScreenState extends State<JobsScreen> {
     );
     if (confirmed != true || !mounted) return;
     await _run(
+      order,
       () => ProviderAppScope.of(context).api.confirmCashPayment(order.id),
+      success: 'ยืนยันรับเงินสดแล้ว',
     );
   }
 
@@ -231,8 +248,11 @@ class _JobsScreenState extends State<JobsScreen> {
       return FixGoButton(
         label: 'เริ่มเดินทาง',
         icon: Icons.directions_car,
+        loading: _busyOrderId == order.id,
         onPressed: () => _run(
+          order,
           () => ProviderAppScope.of(context).api.markEnRoute(order.id),
+          success: 'บันทึกแล้ว กำลังเดินทางไปหาลูกค้า',
         ),
       );
     }
@@ -246,6 +266,7 @@ class _JobsScreenState extends State<JobsScreen> {
                 ? 'แก้ไขและส่งราคาใหม่'
                 : 'ถึงหน้างาน เสนอราคา',
             icon: Icons.request_quote_outlined,
+            loading: _busyOrderId == order.id,
             onPressed: () => _proposeQuote(order),
           );
         case QuoteStatus.pending:
@@ -258,8 +279,11 @@ class _JobsScreenState extends State<JobsScreen> {
           return FixGoButton(
             label: 'ลูกค้ายืนยันแล้ว เริ่มงาน',
             icon: Icons.build,
+            loading: _busyOrderId == order.id,
             onPressed: () => _run(
+              order,
               () => ProviderAppScope.of(context).api.startJob(order.id),
+              success: 'เริ่มงานแล้ว',
             ),
           );
       }
@@ -323,6 +347,7 @@ class _JobsScreenState extends State<JobsScreen> {
           FixGoButton(
             label: 'ยืนยันว่าได้รับเงินสดแล้ว',
             icon: Icons.payments_outlined,
+            loading: _busyOrderId == order.id,
             onPressed: () => _confirmCash(order),
           ),
         ],
@@ -344,21 +369,21 @@ class _JobsScreenState extends State<JobsScreen> {
             final orders = _orders;
             if (orders == null && _error != null) {
               return ListView(
-                padding: const EdgeInsets.all(FixGoSpacing.lg),
                 children: [
-                  const SizedBox(height: 80),
-                  Text(
-                    _error!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: FixGoColors.error),
+                  const SizedBox(height: 60),
+                  ErrorStateView(
+                    error: _error,
+                    title: 'โหลดงานไม่สำเร็จ',
+                    onRetry: () {
+                      setState(() => _error = null);
+                      unawaited(_reload());
+                    },
                   ),
-                  const SizedBox(height: FixGoSpacing.md),
-                  FixGoSecondaryButton(label: 'ลองใหม่', onPressed: _reload),
                 ],
               );
             }
             if (orders == null) {
-              return const Center(child: CircularProgressIndicator());
+              return const SkeletonList(count: 3, itemHeight: 140);
             }
             if (orders.isEmpty) {
               return ListView(

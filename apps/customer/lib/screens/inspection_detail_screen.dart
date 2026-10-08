@@ -91,9 +91,10 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      error is ApiException
-                          ? error.message
-                          : 'โหลดรายละเอียดไม่สำเร็จ',
+                      userMessageFor(
+                        error,
+                        fallback: 'โหลดรายละเอียดไม่สำเร็จ',
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: FixGoSpacing.sm),

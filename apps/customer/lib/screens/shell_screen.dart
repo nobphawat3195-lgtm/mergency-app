@@ -126,6 +126,14 @@ class _AccountHeaderState extends State<_AccountHeader> {
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           subtitle: Text(subtitle),
+          trailing: snapshot.hasError
+              ? TextButton(
+                  onPressed: () => setState(() {
+                    _account = AppStateScope.of(context).api.getMyAccount();
+                  }),
+                  child: const Text('ลองใหม่'),
+                )
+              : null,
         );
       },
     );

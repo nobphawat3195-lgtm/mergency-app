@@ -37,6 +37,9 @@ class _Api extends FixGoApiClient {
   List<JobOffer> offers = [];
   final rejected = <String>[];
 
+  /// จำลองเซิร์ฟเวอร์ล่ม
+  bool down = false;
+
   @override
   Future<Map<String, dynamic>> getProviderProfile() async => {
         'status': 'VERIFIED',
@@ -49,7 +52,11 @@ class _Api extends FixGoApiClient {
   Future<WalletDebt> getWalletDebt() async =>
       const WalletDebt(balance: 0, owed: 0, limit: 0, blocked: false);
   @override
-  Future<List<JobOffer>> listOffers() async => offers;
+  Future<List<JobOffer>> listOffers() async {
+    if (down) throw ApiException(503, 'Service Unavailable');
+    return offers;
+  }
+
   @override
   Future<List<Order>> listAssignedOrders() async => [];
   @override
@@ -89,11 +96,14 @@ Future<(ProviderAppState, _Api, _Backend)> _pump(
   int open = allDayOpenMinute,
   int close = allDayCloseMinute,
   List<JobOffer> offers = const [],
+  bool down = false,
 }) async {
   tester.view.physicalSize = const Size(800, 3000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final api = _Api(openMinute: open, closeMinute: close)..offers = offers;
+  final api = _Api(openMinute: open, closeMinute: close)
+    ..offers = offers
+    ..down = down;
   final backend = _Backend();
   final state = ProviderAppState(api: api, offerAlarm: OfferAlarm(backend));
   await tester.pumpWidget(
@@ -164,5 +174,28 @@ void main() {
     );
     expect(find.text('รับงาน: ตลอดเวลา'), findsOneWidget);
     state.setOnline(false);
+  });
+
+  testWidgets('a failed first load shows retry instead of empty or zero',
+      (tester) async {
+    final (_, api, _) = await _pump(tester, down: true);
+    expect(find.text('โหลดงานที่กำลังทำไม่สำเร็จ'), findsOneWidget);
+    expect(find.text('โหลดสรุปผลงานไม่สำเร็จ'), findsOneWidget);
+    expect(find.text('ยังไม่มีงานที่กำลังทำ'), findsNothing);
+    expect(find.text('฿0'), findsNothing);
+    expect(find.textContaining('Service'), findsNothing);
+
+    api.down = false;
+    await tester.tap(find.text('ลองใหม่').first);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('ยังไม่มีงานที่กำลังทำ'), findsOneWidget);
+    expect(find.text('โหลดสรุปผลงานไม่สำเร็จ'), findsNothing);
+    expect(find.textContaining('ข้อมูลนี้อาจไม่ใช่ล่าสุด'), findsNothing);
+
+    // โหลดได้แล้วรอบถัดไปล่ม: ตัวเลขเดิมยังอยู่ พร้อมแถบเตือน
+    api.down = true;
+    await tester.pump(const Duration(seconds: 11));
+    expect(find.textContaining('ข้อมูลนี้อาจไม่ใช่ล่าสุด'), findsOneWidget);
+    expect(find.text('งานเสร็จวันนี้'), findsOneWidget);
   });
 }

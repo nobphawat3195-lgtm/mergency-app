@@ -102,7 +102,7 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
     try {
       await action();
     } on ApiException catch (error) {
-      setState(() => _error = error.message);
+      setState(() => _error = userMessageFor(error));
     } catch (_) {
       setState(() => _error = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่');
     } finally {

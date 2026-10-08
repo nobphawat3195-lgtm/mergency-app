@@ -73,7 +73,7 @@ Future<void> showShareSheet(
   } on ApiException catch (error) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(error.message)));
+        .showSnackBar(SnackBar(content: Text(userMessageFor(error))));
     return;
   }
   if (!context.mounted) return;
@@ -152,7 +152,7 @@ Future<void> showShareSheet(
                 } on ApiException catch (error) {
                   if (!sheetContext.mounted) return;
                   ScaffoldMessenger.of(sheetContext)
-                      .showSnackBar(SnackBar(content: Text(error.message)));
+                      .showSnackBar(SnackBar(content: Text(userMessageFor(error))));
                 }
               },
               style: TextButton.styleFrom(foregroundColor: FixGoColors.error),

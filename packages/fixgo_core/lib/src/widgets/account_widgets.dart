@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
 import '../theme.dart';
+import 'async_state.dart';
 
 /// หน้าเว็บที่ backend ให้บริการที่ /api/legal/<slug>
 abstract final class LegalPages {
@@ -147,7 +148,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
         const SnackBar(content: Text('ลบบัญชีเรียบร้อยแล้ว')),
       );
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) setState(() => _error = userMessageFor(error));
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่');

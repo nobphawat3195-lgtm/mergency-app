@@ -263,7 +263,7 @@ class _WorkingHoursSheetState extends State<_WorkingHoursSheet> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = error.message;
+        _error = userMessageFor(error);
       });
     }
   }

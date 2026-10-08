@@ -138,7 +138,7 @@ class _BookingFlowState extends State<BookingFlow> {
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+          .showSnackBar(SnackBar(content: Text(userMessageFor(error))));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -186,8 +186,7 @@ class _BookingFlowState extends State<BookingFlow> {
               .showSnackBar(SnackBar(content: Text(error.message)));
           final picked = await pickCustomerLocationOnMap(
             context,
-            title:
-                _isInspection ? 'ตำแหน่งรถที่จะตรวจ' : 'ปักหมุดจุดนัดหมาย',
+            title: _isInspection ? 'ตำแหน่งรถที่จะตรวจ' : 'ปักหมุดจุดนัดหมาย',
           );
           if (picked == null || !mounted) return;
           setState(() => _pickupLocation = picked);
@@ -224,7 +223,7 @@ class _BookingFlowState extends State<BookingFlow> {
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
+        SnackBar(content: Text(userMessageFor(error))),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -326,16 +325,17 @@ class _CategoryStepState extends State<_CategoryStep> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<ServiceCategory>>(
+    return AsyncStateView<List<ServiceCategory>>(
       future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return const _ErrorView(message: 'โหลดหมวดบริการไม่สำเร็จ');
-        }
-        final categories = snapshot.data ?? const [];
+      errorTitle: 'โหลดหมวดบริการไม่สำเร็จ',
+      onRetry: () => setState(
+          () => _future = AppStateScope.of(context).api.listCategories()),
+      isEmpty: (items) => items.isEmpty,
+      empty: const EmptyStateView(
+          icon: Icons.build_circle_outlined,
+          title: 'ตอนนี้ยังไม่มีบริการที่เปิดรับงาน',
+          message: 'กลับมาลองใหม่อีกครั้งภายหลัง'),
+      builder: (context, categories) {
         return ListView.separated(
           padding: const EdgeInsets.all(FixGoSpacing.md),
           itemCount: categories.length,
@@ -417,16 +417,17 @@ class _SubServiceStepState extends State<_SubServiceStep> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<SubService>>(
+    return AsyncStateView<List<SubService>>(
       future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return const _ErrorView(message: 'โหลดบริการย่อยไม่สำเร็จ');
-        }
-        final subServices = snapshot.data ?? const [];
+      errorTitle: 'โหลดบริการย่อยไม่สำเร็จ',
+      onRetry: () => setState(() => _future =
+          AppStateScope.of(context).api.listSubServices(widget.category.id)),
+      isEmpty: (items) => items.isEmpty,
+      empty: const EmptyStateView(
+          icon: Icons.build_circle_outlined,
+          title: 'หมวดนี้ยังไม่มีบริการที่เปิดรับงาน',
+          message: 'กดย้อนกลับเพื่อเลือกหมวดอื่น'),
+      builder: (context, subServices) {
         return ListView.separated(
           padding: const EdgeInsets.all(FixGoSpacing.md),
           itemCount: subServices.length,
@@ -518,16 +519,17 @@ class _VehicleTypeStepState extends State<_VehicleTypeStep> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<VehicleType>>(
+    return AsyncStateView<List<VehicleType>>(
       future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return const _ErrorView(message: 'โหลดประเภทรถไม่สำเร็จ');
-        }
-        final vehicleTypes = snapshot.data ?? const [];
+      errorTitle: 'โหลดประเภทรถไม่สำเร็จ',
+      onRetry: () => setState(
+          () => _future = AppStateScope.of(context).api.listVehicleTypes()),
+      isEmpty: (items) => items.isEmpty,
+      empty: const EmptyStateView(
+          icon: Icons.directions_car_outlined,
+          title: 'ยังไม่มีประเภทรถให้เลือก',
+          message: 'กลับมาลองใหม่อีกครั้งภายหลัง'),
+      builder: (context, vehicleTypes) {
         return GridView.builder(
           padding: const EdgeInsets.all(FixGoSpacing.md),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -682,9 +684,8 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                       ),
                       const Divider(),
                       InkWell(
-                        onTap: widget.submitting
-                            ? null
-                            : widget.onChangeLocation,
+                        onTap:
+                            widget.submitting ? null : widget.onChangeLocation,
                         child: _SummaryRow(
                           label: widget.pickupLabel,
                           value: widget.pickupLocation?.address ??
@@ -929,26 +930,6 @@ class _SummaryRow extends StatelessWidget {
             trailing!,
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(FixGoSpacing.lg),
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: FixGoColors.error),
-        ),
       ),
     );
   }

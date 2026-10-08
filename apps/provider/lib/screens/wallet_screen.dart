@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 
@@ -21,7 +23,8 @@ class _WalletScreenState extends State<WalletScreen> {
   WalletDebt? _debt;
   List<WalletEntry> _entries = const [];
   bool _loading = true;
-  String? _error;
+  Object? _error;
+  bool _withdrawing = false;
 
   @override
   void didChangeDependencies() {
@@ -56,16 +59,26 @@ class _WalletScreenState extends State<WalletScreen> {
         _loading = false;
         _error = null;
       });
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = error.message;
+        _error = error;
       });
     }
   }
 
   Future<void> _withdraw() async {
+    if (_withdrawing) return;
+    setState(() => _withdrawing = true);
+    try {
+      await _requestWithdrawal();
+    } finally {
+      if (mounted) setState(() => _withdrawing = false);
+    }
+  }
+
+  Future<void> _requestWithdrawal() async {
     final balance = _balance ?? 0;
     if (balance <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -87,10 +100,9 @@ class _WalletScreenState extends State<WalletScreen> {
             await showPayoutInfoForm(context, api: api, profile: profile);
         if (!saved || !mounted) return;
       }
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      showResultSnackBar(context, error: error);
       return;
     }
     if (!mounted) return;
@@ -150,10 +162,9 @@ class _WalletScreenState extends State<WalletScreen> {
         const SnackBar(content: Text('ส่งคำขอแล้ว ทีมงานจะโอนให้เร็วที่สุด')),
       );
       await _reload();
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      showResultSnackBar(context, error: error);
     }
   }
 
@@ -176,111 +187,127 @@ class _WalletScreenState extends State<WalletScreen> {
       backgroundColor: FixGoColors.surface,
       appBar: AppBar(title: const Text('กระเป๋าเงิน')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _reload,
-              child: ListView(
-                padding: const EdgeInsets.all(FixGoSpacing.md),
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(FixGoSpacing.lg),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(FixGoRadius.lg),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color(0xFF1D3F33), FixGoColors.navy],
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // ยอดติดลบ = ค่าบริการที่ค้างจากงานเงินสด แสดงเป็นยอดค้างสีแดง
-                              Text(
-                                (_balance ?? 0) < 0
-                                    ? 'ยอดติดลบ (ค่าบริการค้าง)'
-                                    : 'ยอดคงเหลือ',
-                                style:
-                                    const TextStyle(color: Color(0xFFC9DDD4)),
+          ? const LoadingStateView(message: 'กำลังโหลดกระเป๋าเงิน')
+          // โหลดครั้งแรกไม่สำเร็จ: ห้ามโชว์ยอด ฿0 ให้เข้าใจผิด
+          : _balance == null && _error != null
+              ? ErrorStateView(
+                  error: _error,
+                  title: 'โหลดกระเป๋าเงินไม่สำเร็จ',
+                  onRetry: () {
+                    setState(() {
+                      _loading = true;
+                      _error = null;
+                    });
+                    unawaited(_reload());
+                  },
+                )
+              : RefreshIndicator(
+                  onRefresh: _reload,
+                  child: ListView(
+                    padding: const EdgeInsets.all(FixGoSpacing.md),
+                    children: [
+                      // มีข้อมูลเก่าแต่โหลดใหม่ไม่ได้: แสดงของเดิมพร้อมบอกว่าอาจไม่ใช่ล่าสุด
+                      if (_error != null) ...[
+                        StaleDataBanner(error: _error, onRetry: _reload),
+                        const SizedBox(height: FixGoSpacing.md),
+                      ],
+                      Container(
+                        padding: const EdgeInsets.all(FixGoSpacing.lg),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(FixGoRadius.lg),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF1D3F33), FixGoColors.navy],
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // ยอดติดลบ = ค่าบริการที่ค้างจากงานเงินสด แสดงเป็นยอดค้างสีแดง
+                                  Text(
+                                    (_balance ?? 0) < 0
+                                        ? 'ยอดติดลบ (ค่าบริการค้าง)'
+                                        : 'ยอดคงเหลือ',
+                                    style: const TextStyle(
+                                        color: Color(0xFFC9DDD4)),
+                                  ),
+                                  const SizedBox(height: FixGoSpacing.xs),
+                                  Text(
+                                    (_balance ?? 0) < 0
+                                        ? '-${formatSatang(-_balance!)}'
+                                        : formatSatang(_balance ?? 0),
+                                    style: TextStyle(
+                                      fontSize: 36,
+                                      fontWeight: FontWeight.w800,
+                                      color: (_balance ?? 0) < 0
+                                          ? const Color(0xFFFFB4A8)
+                                          : const Color(0xFFC7EE77),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: FixGoSpacing.xs),
-                              Text(
-                                (_balance ?? 0) < 0
-                                    ? '-${formatSatang(-_balance!)}'
-                                    : formatSatang(_balance ?? 0),
+                            ),
+                            Image.asset(uiIconMoneyBag, width: 64, height: 64),
+                          ],
+                        ),
+                      ),
+                      if ((_debt?.owed ?? 0) > 0) ...[
+                        const SizedBox(height: FixGoSpacing.md),
+                        WalletDebtCard(
+                          debt: _debt!,
+                          api: ProviderAppScope.of(context).api,
+                          onChanged: _reload,
+                        ),
+                      ],
+                      if ((_balance ?? 0) > 0) ...[
+                        const SizedBox(height: FixGoSpacing.md),
+                        FixGoButton(
+                          label: 'ขอเบิกเงิน',
+                          icon: Icons.account_balance_wallet_outlined,
+                          loading: _withdrawing,
+                          onPressed: _withdraw,
+                        ),
+                      ],
+                      const SizedBox(height: FixGoSpacing.lg),
+                      const Text(
+                        'รายการล่าสุด',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: FixGoSpacing.sm),
+                      if (_entries.isEmpty)
+                        Text(
+                          'ยังไม่มีรายการ รายได้จากงานที่ปิดแล้วจะแสดงที่นี่',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        )
+                      else
+                        for (final entry in _entries)
+                          Card(
+                            margin:
+                                const EdgeInsets.only(bottom: FixGoSpacing.sm),
+                            child: ListTile(
+                              title: Text(_entryTitle(entry)),
+                              subtitle: Text(
+                                '${entry.createdAt.day}/${entry.createdAt.month}/${entry.createdAt.year}',
+                              ),
+                              trailing: Text(
+                                '${entry.amount >= 0 ? '+' : '-'}${formatSatang(entry.amount.abs())}',
                                 style: TextStyle(
-                                  fontSize: 36,
                                   fontWeight: FontWeight.w800,
-                                  color: (_balance ?? 0) < 0
-                                      ? const Color(0xFFFFB4A8)
-                                      : const Color(0xFFC7EE77),
+                                  color: entry.amount >= 0
+                                      ? FixGoColors.success
+                                      : FixGoColors.error,
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                        Image.asset(uiIconMoneyBag, width: 64, height: 64),
-                      ],
-                    ),
-                  ),
-                  if ((_debt?.owed ?? 0) > 0) ...[
-                    const SizedBox(height: FixGoSpacing.md),
-                    WalletDebtCard(
-                      debt: _debt!,
-                      api: ProviderAppScope.of(context).api,
-                      onChanged: _reload,
-                    ),
-                  ],
-                  if (_error != null) ...[
-                    const SizedBox(height: FixGoSpacing.md),
-                    Text(_error!,
-                        style: const TextStyle(color: FixGoColors.error)),
-                  ],
-                  if ((_balance ?? 0) > 0) ...[
-                    const SizedBox(height: FixGoSpacing.md),
-                    FixGoButton(
-                      label: 'ขอเบิกเงิน',
-                      icon: Icons.account_balance_wallet_outlined,
-                      onPressed: _withdraw,
-                    ),
-                  ],
-                  const SizedBox(height: FixGoSpacing.lg),
-                  const Text(
-                    'รายการล่าสุด',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: FixGoSpacing.sm),
-                  if (_entries.isEmpty)
-                    Text(
-                      'ยังไม่มีรายการ',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    )
-                  else
-                    for (final entry in _entries)
-                      Card(
-                        margin: const EdgeInsets.only(bottom: FixGoSpacing.sm),
-                        child: ListTile(
-                          title: Text(_entryTitle(entry)),
-                          subtitle: Text(
-                            '${entry.createdAt.day}/${entry.createdAt.month}/${entry.createdAt.year}',
-                          ),
-                          trailing: Text(
-                            '${entry.amount >= 0 ? '+' : '-'}${formatSatang(entry.amount.abs())}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: entry.amount >= 0
-                                  ? FixGoColors.success
-                                  : FixGoColors.error,
                             ),
                           ),
-                        ),
-                      ),
-                ],
-              ),
-            ),
+                    ],
+                  ),
+                ),
     );
   }
 }

@@ -116,7 +116,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         });
       }
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) setState(() => _error = userMessageFor(error));
     } catch (_) {
       if (mounted) setState(() => _error = 'อ่านหรืออัปโหลดรูปไม่สำเร็จ');
     } finally {
@@ -149,7 +149,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     } on ApiException catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.message);
+      setState(() => _error = userMessageFor(error));
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = 'อ่านหรืออัปโหลดรูปไม่สำเร็จ');
@@ -276,7 +276,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         await _handleAlreadyRegistered(error.message);
         return;
       }
-      setState(() => _error = error.message);
+      setState(() => _error = userMessageFor(error));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -288,7 +288,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (await appState.refreshPendingLineSession()) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('บัญชีนี้สมัครไว้แล้ว เข้าสู่บัญชีเดิมให้แล้ว')),
+        const SnackBar(
+            content: Text('บัญชีนี้สมัครไว้แล้ว เข้าสู่บัญชีเดิมให้แล้ว')),
       );
       return;
     }
@@ -471,11 +472,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
             FutureBuilder<List<ServiceCategory>>(
               future: _categoriesFuture,
               builder: (context, snapshot) {
-                final categories = snapshot.data ?? const <ServiceCategory>[];
-                if (categories.isEmpty) {
+                final categories = snapshot.data;
+                if (categories == null && snapshot.hasError) {
+                  return ErrorStateView(
+                    compact: true,
+                    error: snapshot.error,
+                    title: 'โหลดงานบริการไม่สำเร็จ',
+                    onRetry: () => setState(
+                      () => _categoriesFuture =
+                          ProviderAppScope.of(context).api.listCategories(),
+                    ),
+                  );
+                }
+                if (categories == null) {
                   return const Padding(
                     padding: EdgeInsets.all(FixGoSpacing.md),
                     child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (categories.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(FixGoSpacing.md),
+                    child: Text(
+                        'ตอนนี้ยังไม่มีงานบริการที่เปิดรับช่าง กลับมาสมัครอีกครั้งภายหลัง'),
                   );
                 }
                 return _ChoiceGrid(
@@ -497,11 +516,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
             FutureBuilder<List<VehicleType>>(
               future: _vehicleTypesFuture,
               builder: (context, snapshot) {
-                final vehicleTypes = snapshot.data ?? const <VehicleType>[];
-                if (vehicleTypes.isEmpty) {
+                final vehicleTypes = snapshot.data;
+                if (vehicleTypes == null && snapshot.hasError) {
+                  return ErrorStateView(
+                    compact: true,
+                    error: snapshot.error,
+                    title: 'โหลดประเภทรถไม่สำเร็จ',
+                    onRetry: () => setState(
+                      () => _vehicleTypesFuture =
+                          ProviderAppScope.of(context).api.listVehicleTypes(),
+                    ),
+                  );
+                }
+                if (vehicleTypes == null) {
                   return const Padding(
                     padding: EdgeInsets.all(FixGoSpacing.md),
                     child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (vehicleTypes.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(FixGoSpacing.md),
+                    child: Text(
+                        'ยังไม่มีประเภทรถให้เลือก กลับมาลองอีกครั้งภายหลัง'),
                   );
                 }
                 return _ChoiceGrid(

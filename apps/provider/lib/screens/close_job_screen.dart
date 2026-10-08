@@ -67,7 +67,7 @@ class _CloseJobScreenState extends State<CloseJobScreen> {
             () => _error = 'แนบได้สูงสุด $max รูป ระบบใช้ $remaining รูปแรก');
       }
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) setState(() => _error = userMessageFor(error));
     } catch (_) {
       if (mounted) setState(() => _error = 'อ่านหรืออัปโหลดรูปไม่สำเร็จ');
     } finally {
@@ -90,12 +90,16 @@ class _CloseJobScreenState extends State<CloseJobScreen> {
             carPhotoUrls: _carPhotos,
             receiptPhotoUrls: _receipts,
           );
-      if (mounted) Navigator.of(context).pop(true);
-    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ปิดงานเรียบร้อย ส่งรูปให้ลูกค้าแล้ว')),
+      );
+      Navigator.of(context).pop(true);
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = error.message;
+        _error = userMessageFor(error);
       });
     }
   }

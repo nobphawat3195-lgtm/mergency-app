@@ -199,13 +199,28 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
       body: FutureBuilder<Map<String, dynamic>>(
         future: _future,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
           final profile = snapshot.data;
+          // โหลดใหม่หลังแก้ข้อมูล: แสดงข้อมูลเดิมต่อ ไม่กระพริบเป็น spinner
+          if (profile == null &&
+              snapshot.connectionState == ConnectionState.waiting) {
+            return const LoadingStateView();
+          }
           return ListView(
             padding: const EdgeInsets.all(FixGoSpacing.md),
             children: [
+              // โหลดไม่ได้: ยังออกจากระบบ/ลบบัญชีได้ตามปกติ
+              if (snapshot.hasError) ...[
+                ErrorStateView(
+                  compact: true,
+                  error: snapshot.error,
+                  title: 'โหลดข้อมูลโปรไฟล์ไม่สำเร็จ',
+                  onRetry: () => setState(
+                    () => _future =
+                        ProviderAppScope.of(context).api.getProviderProfile(),
+                  ),
+                ),
+                const SizedBox(height: FixGoSpacing.md),
+              ],
               if (profile != null) ...[
                 ListTile(
                   leading: const Icon(Icons.person_outline),
