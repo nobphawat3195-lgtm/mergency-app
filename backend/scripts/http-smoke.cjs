@@ -777,9 +777,18 @@ async function main() {
     await request('POST', '/auth/line/refresh', await login('0800000011', 'PROVIDER'), undefined, 403);
     await request('POST', '/auth/line/refresh', undefined, undefined, 401);
   });
-  await check('Account deletion removes profile access and admin actions leave an audit trail', async () => {
+  await check('Account deletion removes profile access, chat content and close photos; admin actions leave an audit trail', async () => {
     await request('DELETE', '/account', mechanic, undefined, 200);
     await request('GET', '/providers/me', mechanic, undefined, 401);
+    // ข้อความแชทที่ช่างส่งถูกลบเนื้อหา ข้อความของลูกค้ายังอยู่
+    const left = await prisma.orderMessage.findMany({ where: { orderId: order.id } });
+    assert.ok(left.some((m) => m.sender === 'PROVIDER'));
+    assert.ok(left.filter((m) => m.sender === 'PROVIDER').every((m) => m.text === null && m.imageUrl === null));
+    assert.ok(left.some((m) => m.sender === 'CUSTOMER' && m.text));
+    // ลูกค้าลบบัญชี: แชทและรูปปิดงานของงานตัวเองถูกลบทั้งหมด
+    await request('DELETE', '/account', customer, undefined, 200);
+    assert.equal(await prisma.orderMessage.count({ where: { orderId: order.id } }), 0);
+    assert.equal(await prisma.orderClosePhoto.count({ where: { orderId: order.id } }), 0);
     assert.ok((await prisma.adminAuditLog.count()) > 0);
   });
   console.log(`HTTP smoke: ${passed} scenarios passed (no real SMS, LINE, push or money transfer).`);
