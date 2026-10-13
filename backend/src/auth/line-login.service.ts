@@ -18,6 +18,7 @@ import {
   readSecret,
 } from '../config/environment';
 import { JwtPayload } from './auth.service';
+import { readProviderLineConfig } from '../notifications/provider-line.service';
 
 const AUTHORIZE_URL = 'https://access.line.me/oauth2/v2.1/authorize';
 const TOKEN_URL = 'https://api.line.me/oauth2/v2.1/token';
@@ -156,6 +157,10 @@ export class LineLoginService {
       state,
       scope: 'profile openid',
       nonce,
+      // ช่างต้องเป็นเพื่อนกับ OA ถึงจะได้แจ้งเตือนงานใหม่ทาง LINE: ให้ LINE ถามเพิ่มเพื่อนตอนล็อกอิน
+      ...(app === 'provider' && readProviderLineConfig().enabled
+        ? { bot_prompt: 'aggressive' }
+        : {}),
     }).toString();
     return { url: url.toString(), cookie, maxAgeSeconds: STATE_TTL_MS / 1000 };
   }

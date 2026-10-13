@@ -1,4 +1,8 @@
-import { cashDebtLimit, commissionRate } from '../common/constants';
+import {
+  cashDebtLimit,
+  commissionRate,
+  dispatchOfferTimeoutMs,
+} from '../common/constants';
 const PLACEHOLDER_VALUES = new Set([
   'change-me-in-production',
   'dev-jwt-secret',
@@ -64,6 +68,9 @@ export function validateEnvironment(
   commissionRate({ COMMISSION_RATE: String(config.COMMISSION_RATE ?? '') });
   cashDebtLimit({
     CASH_DEBT_LIMIT_BAHT: String(config.CASH_DEBT_LIMIT_BAHT ?? ''),
+  });
+  dispatchOfferTimeoutMs({
+    DISPATCH_OFFER_TIMEOUT_MS: String(config.DISPATCH_OFFER_TIMEOUT_MS ?? ''),
   });
 
   const corsOrigin = String(config.CORS_ORIGIN ?? '').trim();

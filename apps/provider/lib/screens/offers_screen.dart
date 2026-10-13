@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app_state.dart';
 import '../chat_image.dart';
@@ -42,6 +43,10 @@ class _OffersScreenState extends State<OffersScreen> {
   /// สถานะบัญชีจาก backend: PENDING / VERIFIED / REJECTED / SUSPENDED
   String? _accountStatus;
   String? _reviewNote;
+
+  /// ลิงก์เพิ่มเพื่อน LINE OA (backend ส่งมาเฉพาะช่างที่ล็อกอินด้วย LINE และเปิดแจ้งเตือนทาง LINE)
+  String? _lineAddFriendUrl;
+  bool _lineCardHidden = false;
 
   /// ค้างค่าบริการจากงานเงินสด แสดงการ์ดในหน้าหลักเฉพาะตอนเกินเพดาน (เปิดรับงานไม่ได้)
   WalletDebt? _debt;
@@ -90,6 +95,7 @@ class _OffersScreenState extends State<OffersScreen> {
         _reviewNote = profile['reviewNote'] as String?;
         _openMinute = profile['openMinute'] as int?;
         _closeMinute = profile['closeMinute'] as int?;
+        _lineAddFriendUrl = profile['lineAddFriendUrl'] as String?;
       });
       final debt = await state.api.getWalletDebt();
       if (mounted) setState(() => _debt = debt);
@@ -131,12 +137,14 @@ class _OffersScreenState extends State<OffersScreen> {
 
     if (fresh.isNotEmpty) {
       final offer = _offers.firstWhere((o) => o.orderId == fresh.first);
-      unawaited(_alarm.ring(
-        body: [
-          offer.subServiceName ?? offer.categoryName ?? 'งานซ่อมรถ',
-          'ห่าง ${offer.distanceKm.toStringAsFixed(1)} กม.',
-        ].join(' · '),
-      ));
+      unawaited(
+        _alarm.ring(
+          body: [
+            offer.subServiceName ?? offer.categoryName ?? 'งานซ่อมรถ',
+            'ห่าง ${offer.distanceKm.toStringAsFixed(1)} กม.',
+          ].join(' · '),
+        ),
+      );
       widget.onOpenTab?.call(0);
     }
     if (_ringingIds.isEmpty) unawaited(_alarm.stop());
@@ -148,10 +156,12 @@ class _OffersScreenState extends State<OffersScreen> {
       final next = ringing
           .map((o) => o.expiresAt)
           .reduce((a, b) => a.isBefore(b) ? a : b);
-      _expiryTimer =
-          Timer(next.difference(now) + const Duration(seconds: 1), () {
-        if (mounted) setState(_updateAlarm);
-      });
+      _expiryTimer = Timer(
+        next.difference(now) + const Duration(seconds: 1),
+        () {
+          if (mounted) setState(_updateAlarm);
+        },
+      );
     }
   }
 
@@ -184,7 +194,8 @@ class _OffersScreenState extends State<OffersScreen> {
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-          content: Text('บันทึกแล้ว: ${workingHoursSentence(open, close)}')),
+        content: Text('บันทึกแล้ว: ${workingHoursSentence(open, close)}'),
+      ),
     );
   }
 
@@ -197,8 +208,7 @@ class _OffersScreenState extends State<OffersScreen> {
           )
         : (open: allDayOpenMinute, close: allDayCloseMinute);
     try {
-      final saved = await ProviderAppScope.of(context)
-          .api
+      final saved = await ProviderAppScope.of(context).api
           .updateProviderHours(openMinute: next.open, closeMinute: next.close);
       if (!mounted) return;
       _applyHours(saved.openMinute, saved.closeMinute);
@@ -217,8 +227,7 @@ class _OffersScreenState extends State<OffersScreen> {
       // ส่งตำแหน่งปัจจุบันทันทีก่อน ไม่ต้องรอขยับ 50 เมตรตามที่ stream กำหนดไว้
       final initial = await LocationService.getCurrentLocation();
       if (!mounted) return;
-      await ProviderAppScope.of(context)
-          .api
+      await ProviderAppScope.of(context).api
           .updateProviderLocation(initial.latitude, initial.longitude);
     } on LocationException catch (error) {
       if (!mounted) return;
@@ -229,13 +238,12 @@ class _OffersScreenState extends State<OffersScreen> {
     _positionSub?.cancel();
     _positionSub = LocationService.watchPosition().listen((position) {
       if (!mounted) return;
-      ProviderAppScope.of(context)
-          .api
+      ProviderAppScope.of(context).api
           .updateProviderLocation(position.latitude, position.longitude)
           .catchError((_) {
-        // เน็ตหลุดชั่วคราวระหว่างวิ่งงาน ไม่ต้องรบกวนช่างด้วย error ทุกครั้ง
-        // รอบถัดไปของ stream จะพยายามส่งใหม่เอง
-      });
+            // เน็ตหลุดชั่วคราวระหว่างวิ่งงาน ไม่ต้องรบกวนช่างด้วย error ทุกครั้ง
+            // รอบถัดไปของ stream จะพยายามส่งใหม่เอง
+          });
     });
   }
 
@@ -258,8 +266,9 @@ class _OffersScreenState extends State<OffersScreen> {
       final orders = results[1] as List<Order>;
       // ลูกค้าส่งแชทมาระหว่างช่างอยู่หน้าหลัก: เสียงสั้น + แถบแจ้งพร้อมปุ่มเปิดแชท
       if (state.trackChatUnread(orders)) {
-        final chatting =
-            orders.where((order) => order.chatUnread > 0).firstOrNull;
+        final chatting = orders
+            .where((order) => order.chatUnread > 0)
+            .firstOrNull;
         unawaited(ChatChime.play());
         if (chatting != null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -298,6 +307,18 @@ class _OffersScreenState extends State<OffersScreen> {
         _loading = false;
         _error = error;
       });
+    }
+  }
+
+  Future<void> _openLineAddFriend(String url) async {
+    final uri = Uri.tryParse(url);
+    final opened =
+        uri != null &&
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('เปิด LINE ไม่ได้ กรุณาลองใหม่อีกครั้ง')),
+      );
     }
   }
 
@@ -398,7 +419,8 @@ class _OffersScreenState extends State<OffersScreen> {
     final isOnline = ProviderAppScope.of(context).isOnline;
     final open = _openMinute;
     final close = _closeMinute;
-    final outsideHours = isOnline &&
+    final outsideHours =
+        isOnline &&
         open != null &&
         close != null &&
         !isWithinWorkingHours(open, close, bangkokMinuteOfDay());
@@ -440,6 +462,13 @@ class _OffersScreenState extends State<OffersScreen> {
                       ),
                       const SizedBox(height: FixGoSpacing.md),
                     ],
+                    if (_lineAddFriendUrl != null && !_lineCardHidden) ...[
+                      _LineAlertsCard(
+                        onAdd: () => _openLineAddFriend(_lineAddFriendUrl!),
+                        onHide: () => setState(() => _lineCardHidden = true),
+                      ),
+                      const SizedBox(height: FixGoSpacing.md),
+                    ],
                     if (outsideHours) ...[
                       _OutsideHoursCard(
                         hours: workingHoursLabel(open, close),
@@ -461,67 +490,68 @@ class _OffersScreenState extends State<OffersScreen> {
                       icon: Icons.location_on,
                       iconAsset: emergencyIconAsset,
                       title: 'งานเข้ามาใหม่ ใกล้คุณ',
-                      trailing:
-                          _offers.isEmpty ? null : '${_offers.length} งาน',
+                      trailing: _offers.isEmpty
+                          ? null
+                          : '${_offers.length} งาน',
                       child: _loading
                           ? const Padding(
                               padding: EdgeInsets.all(FixGoSpacing.lg),
-                              child: Center(
-                                child: CircularProgressIndicator(),
-                              ),
+                              child: Center(child: CircularProgressIndicator()),
                             )
                           : _offers.isEmpty && _error != null
-                              ? ErrorStateView(
-                                  compact: true,
-                                  error: _error,
-                                  title: 'โหลดงานใหม่ไม่สำเร็จ',
-                                  onRetry: _retry,
-                                )
-                              : _offers.isEmpty
-                                  ? _EmptyOffers(
-                                      message: (_accountStatus != null &&
-                                              _accountStatus != 'VERIFIED'
-                                          ? 'รับงานได้หลังทีมงานอนุมัติบัญชี'
-                                          : _debt?.blocked == true
-                                              ? 'โอนชำระค่าบริการที่ค้างด้านบน แล้วเปิดรับงานต่อได้'
-                                              : isOnline
-                                                  ? 'กำลังรองานใกล้คุณ ระบบเช็กงานใหม่ทุก 10 วินาที'
-                                                  : 'ตอนนี้ปิดรับงานอยู่ เปิดแล้วงานใกล้คุณจะเด้งขึ้นที่นี่'),
-                                      actionLabel: !isOnline &&
-                                              _accountStatus == 'VERIFIED' &&
-                                              _debt?.blocked != true
-                                          ? 'เปิดรับงานเลย'
-                                          : null,
-                                      onAction: () => _toggleOnline(true),
-                                    )
-                                  : Column(
-                                      children: [
-                                        if (_ringingIds.isNotEmpty)
-                                          _RingingBanner(onSilence: _silence),
-                                        for (final (index, offer)
-                                            in _offers.indexed) ...[
-                                          if (index > 0)
-                                            const Divider(height: 32),
-                                          _OfferCard(
-                                            offer: offer,
-                                            ringing: _ringingIds
-                                                .contains(offer.orderId),
-                                            busy: _respondingOfferId ==
-                                                offer.orderId,
-                                            onAccept: () => _accept(offer),
-                                            onReject: () => _reject(offer),
-                                          ),
-                                        ],
-                                      ],
+                          ? ErrorStateView(
+                              compact: true,
+                              error: _error,
+                              title: 'โหลดงานใหม่ไม่สำเร็จ',
+                              onRetry: _retry,
+                            )
+                          : _offers.isEmpty
+                          ? _EmptyOffers(
+                              message:
+                                  (_accountStatus != null &&
+                                      _accountStatus != 'VERIFIED'
+                                  ? 'รับงานได้หลังทีมงานอนุมัติบัญชี'
+                                  : _debt?.blocked == true
+                                  ? 'โอนชำระค่าบริการที่ค้างด้านบน แล้วเปิดรับงานต่อได้'
+                                  : isOnline
+                                  ? 'กำลังรองานใกล้คุณ ระบบเช็กงานใหม่ทุก 10 วินาที'
+                                  : 'ตอนนี้ปิดรับงานอยู่ เปิดแล้วงานใกล้คุณจะเด้งขึ้นที่นี่'),
+                              actionLabel:
+                                  !isOnline &&
+                                      _accountStatus == 'VERIFIED' &&
+                                      _debt?.blocked != true
+                                  ? 'เปิดรับงานเลย'
+                                  : null,
+                              onAction: () => _toggleOnline(true),
+                            )
+                          : Column(
+                              children: [
+                                if (_ringingIds.isNotEmpty)
+                                  _RingingBanner(onSilence: _silence),
+                                for (final (index, offer)
+                                    in _offers.indexed) ...[
+                                  if (index > 0) const Divider(height: 32),
+                                  _OfferCard(
+                                    offer: offer,
+                                    ringing: _ringingIds.contains(
+                                      offer.orderId,
                                     ),
+                                    busy: _respondingOfferId == offer.orderId,
+                                    onAccept: () => _accept(offer),
+                                    onReject: () => _reject(offer),
+                                  ),
+                                ],
+                              ],
+                            ),
                     ),
                     const SizedBox(height: FixGoSpacing.md),
                     _SectionCard(
                       icon: Icons.route_outlined,
                       iconAsset: technicianIconAsset,
                       title: 'ความคืบหน้างาน',
-                      actionLabel:
-                          _activeJob == null ? null : 'ดูรายละเอียดงาน',
+                      actionLabel: _activeJob == null
+                          ? null
+                          : 'ดูรายละเอียดงาน',
                       onAction: () => widget.onOpenTab?.call(1),
                       // ยังไม่เคยโหลดได้: ห้ามบอกว่า "ยังไม่มีงาน" เพราะไม่รู้จริง
                       child: _neverLoaded
@@ -606,8 +636,9 @@ class _TodaySummary {
       case 'ORDER_EARNING':
         return entry.amount;
       case 'COMMISSION_DUE':
-        final order =
-            orders.where((order) => order.id == entry.orderId).firstOrNull;
+        final order = orders
+            .where((order) => order.id == entry.orderId)
+            .firstOrNull;
         if (order == null) return 0;
         return (order.priceFinal ?? order.priceEstimated) + entry.amount;
       default:
@@ -1009,8 +1040,9 @@ class _JobProgress extends StatelessWidget {
                     step.label,
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight:
-                          index == current ? FontWeight.w800 : FontWeight.w500,
+                      fontWeight: index == current
+                          ? FontWeight.w800
+                          : FontWeight.w500,
                       color: index <= current
                           ? FixGoColors.textPrimary
                           : FixGoColors.textSecondary,
@@ -1284,17 +1316,23 @@ class _OfferCardState extends State<_OfferCard> {
           ),
           if (widget.offer.appointmentAt != null) ...[
             const SizedBox(height: FixGoSpacing.sm),
-            Text('นัดตรวจ ${formatThaiDateTime(widget.offer.appointmentAt!)}',
-                style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(
+              'นัดตรวจ ${formatThaiDateTime(widget.offer.appointmentAt!)}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ],
           const SizedBox(height: FixGoSpacing.sm),
           Row(
             children: [
-              const Icon(Icons.near_me_outlined,
-                  size: 18, color: FixGoColors.textSecondary),
+              const Icon(
+                Icons.near_me_outlined,
+                size: 18,
+                color: FixGoColors.textSecondary,
+              ),
               const SizedBox(width: 4),
               Text(
-                  'ห่างจากคุณ ${widget.offer.distanceKm.toStringAsFixed(1)} กม.'),
+                'ห่างจากคุณ ${widget.offer.distanceKm.toStringAsFixed(1)} กม.',
+              ),
             ],
           ),
           if (widget.offer.pickupAddress != null) ...[
@@ -1411,6 +1449,68 @@ class _HoursChip extends StatelessWidget {
 }
 
 /// เปิดพร้อมรับงานอยู่ แต่ตอนนี้นอกเวลารับงานที่ตั้งไว้: dispatch จะข้ามช่างคนนี้
+/// ชวนช่างเพิ่มเพื่อน LINE OA: เว็บแอปเตือนได้เฉพาะตอนเปิดหน้าอยู่ LINE เตือนได้แม้ปิดหน้าไปแล้ว
+class _LineAlertsCard extends StatelessWidget {
+  const _LineAlertsCard({required this.onAdd, required this.onHide});
+
+  final VoidCallback onAdd;
+  final VoidCallback onHide;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(FixGoSpacing.md),
+      decoration: BoxDecoration(
+        color: FixGoColors.background,
+        borderRadius: BorderRadius.circular(FixGoRadius.lg),
+        border: Border.all(color: FixGoColors.jade, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.notifications_active_outlined,
+                color: FixGoColors.accent,
+              ),
+              SizedBox(width: FixGoSpacing.sm),
+              Expanded(
+                child: Text(
+                  'เพิ่มเพื่อน LINE FixGo เพื่อรับแจ้งเตือนงานใหม่',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: FixGoColors.navy,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'งานเข้าเมื่อไหร่ LINE จะเด้งเตือนแม้ปิดหน้านี้ไปแล้ว',
+            style: TextStyle(fontSize: 13, color: FixGoColors.textSecondary),
+          ),
+          const SizedBox(height: FixGoSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onAdd,
+                  icon: const Icon(Icons.person_add_alt_1_outlined),
+                  label: const Text('เพิ่มเพื่อน'),
+                ),
+              ),
+              const SizedBox(width: FixGoSpacing.sm),
+              TextButton(onPressed: onHide, child: const Text('เพิ่มแล้ว')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _OutsideHoursCard extends StatelessWidget {
   const _OutsideHoursCard({
     required this.hours,
@@ -1533,24 +1633,24 @@ class _AccountStatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final (icon, color, title, body) = switch (status) {
       'PENDING' => (
-          Icons.hourglass_top_rounded,
-          FixGoColors.warning,
-          'รอทีมงานตรวจสอบใบสมัคร',
-          'ทีมงานกำลังตรวจรูป เครื่องมือ และบริการที่คุณรับ ปกติไม่เกิน 1-2 วันทำการ '
-              'อนุมัติแล้วจะแจ้งเตือนให้ทราบ',
-        ),
+        Icons.hourglass_top_rounded,
+        FixGoColors.warning,
+        'รอทีมงานตรวจสอบใบสมัคร',
+        'ทีมงานกำลังตรวจรูป เครื่องมือ และบริการที่คุณรับ ปกติไม่เกิน 1-2 วันทำการ '
+            'อนุมัติแล้วจะแจ้งเตือนให้ทราบ',
+      ),
       'REJECTED' => (
-          Icons.error_outline_rounded,
-          FixGoColors.error,
-          'ใบสมัครยังไม่ผ่าน',
-          note ?? 'แก้ไขข้อมูลแล้วส่งใบสมัครใหม่ได้',
-        ),
+        Icons.error_outline_rounded,
+        FixGoColors.error,
+        'ใบสมัครยังไม่ผ่าน',
+        note ?? 'แก้ไขข้อมูลแล้วส่งใบสมัครใหม่ได้',
+      ),
       _ => (
-          Icons.block_rounded,
-          FixGoColors.error,
-          'บัญชีถูกระงับชั่วคราว',
-          note ?? 'ติดต่อทีมงาน FixGo เพื่อสอบถามรายละเอียด',
-        ),
+        Icons.block_rounded,
+        FixGoColors.error,
+        'บัญชีถูกระงับชั่วคราว',
+        note ?? 'ติดต่อทีมงาน FixGo เพื่อสอบถามรายละเอียด',
+      ),
     };
     return Container(
       padding: const EdgeInsets.all(FixGoSpacing.md),
@@ -1583,10 +1683,7 @@ class _AccountStatusCard extends StatelessWidget {
           Text(body),
           if (status == 'REJECTED') ...[
             const SizedBox(height: FixGoSpacing.md),
-            FixGoButton(
-              label: 'แก้ไขและส่งใบสมัครใหม่',
-              onPressed: onResubmit,
-            ),
+            FixGoButton(label: 'แก้ไขและส่งใบสมัครใหม่', onPressed: onResubmit),
           ],
         ],
       ),

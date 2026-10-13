@@ -40,6 +40,9 @@ class _Api extends FixGoApiClient {
   /// จำลองเซิร์ฟเวอร์ล่ม
   bool down = false;
 
+  /// ลิงก์เพิ่มเพื่อน LINE OA ที่ backend ส่งมาในโปรไฟล์
+  String? lineAddFriendUrl;
+
   @override
   Future<Map<String, dynamic>> getProviderProfile() async => {
         'status': 'VERIFIED',
@@ -47,6 +50,7 @@ class _Api extends FixGoApiClient {
         'isOnline': false,
         'openMinute': openMinute,
         'closeMinute': closeMinute,
+        'lineAddFriendUrl': lineAddFriendUrl,
       };
   @override
   Future<WalletDebt> getWalletDebt() async =>
@@ -97,13 +101,15 @@ Future<(ProviderAppState, _Api, _Backend)> _pump(
   int close = allDayCloseMinute,
   List<JobOffer> offers = const [],
   bool down = false,
+  String? lineAddFriendUrl,
 }) async {
   tester.view.physicalSize = const Size(800, 3000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final api = _Api(openMinute: open, closeMinute: close)
     ..offers = offers
-    ..down = down;
+    ..down = down
+    ..lineAddFriendUrl = lineAddFriendUrl;
   final backend = _Backend();
   final state = ProviderAppState(api: api, offerAlarm: OfferAlarm(backend));
   await tester.pumpWidget(
@@ -197,5 +203,24 @@ void main() {
     await tester.pump(const Duration(seconds: 11));
     expect(find.textContaining('ข้อมูลนี้อาจไม่ใช่ล่าสุด'), findsOneWidget);
     expect(find.text('งานเสร็จวันนี้'), findsOneWidget);
+  });
+
+  testWidgets('asks LINE mechanics to add the OA and can be hidden',
+      (tester) async {
+    await _pump(tester, lineAddFriendUrl: 'https://lin.ee/abc');
+    const title = 'เพิ่มเพื่อน LINE FixGo เพื่อรับแจ้งเตือนงานใหม่';
+    expect(find.text(title), findsOneWidget);
+    expect(find.text('เพิ่มเพื่อน'), findsOneWidget);
+    await tester.tap(find.text('เพิ่มแล้ว'));
+    await tester.pump();
+    expect(find.text(title), findsNothing);
+  });
+
+  testWidgets('no LINE card when the server sends no link', (tester) async {
+    await _pump(tester);
+    expect(
+      find.text('เพิ่มเพื่อน LINE FixGo เพื่อรับแจ้งเตือนงานใหม่'),
+      findsNothing,
+    );
   });
 }
