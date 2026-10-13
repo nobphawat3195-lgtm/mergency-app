@@ -112,3 +112,29 @@ describe('PushService order events', () => {
     expect(emit).toHaveBeenCalledWith('order_1', 'EN_ROUTE');
   });
 });
+
+describe('PushService LINE for mechanics', () => {
+  it('also sends quote answers and cancellations to the mechanic on LINE', async () => {
+    const prisma = {
+      deviceToken: {
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn(),
+      },
+    };
+    const line = { orderUpdate: jest.fn().mockResolvedValue(undefined) };
+    const service = new PushService(
+      prisma as unknown as PrismaService,
+      { name: 'fake', send: jest.fn() },
+      new OrderEventsService(),
+      line as never,
+    );
+    const order = { id: 'order_1', orderNo: 'FG1' };
+    await service.quoteAnswered('pro_1', order, true);
+    await service.cancelledByCustomer('pro_1', order);
+    await service.paid('cus_1', 'pro_1', order, 50000, 'PROMPTPAY');
+    expect(line.orderUpdate.mock.calls).toEqual([
+      ['pro_1', 'ลูกค้ายืนยันราคาแล้ว', 'เริ่มงานได้เลย'],
+      ['pro_1', 'ลูกค้ายกเลิกงาน', 'งาน FG1 ถูกยกเลิกแล้ว ไม่ต้องเดินทางต่อ'],
+    ]);
+  });
+});

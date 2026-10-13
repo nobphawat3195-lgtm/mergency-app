@@ -1,10 +1,11 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { DevicePlatform, Role } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { formatBaht } from '../common/money';
 import { PUSH_SENDER, PushMessage, PushSender } from './push-sender';
 import { OrderEventsService } from './order-events.service';
+import { ProviderLineService } from './provider-line.service';
 
 /** ประเภทแจ้งเตือน แอปใช้ตัดสินว่ากดแล้วเปิดหน้าไหน */
 export type PushType =
@@ -23,6 +24,13 @@ export type PushType =
   | 'PAID'
   | 'PAYMENT_REVIEW'
   | 'CHAT';
+
+/** เหตุการณ์ที่ส่ง LINE หาช่างที่รับงานด้วย (งานใหม่ส่งจาก DispatchService) */
+const LINE_PROVIDER_EVENTS = new Set<PushType>([
+  'QUOTE_APPROVED',
+  'QUOTE_REJECTED',
+  'CANCELLED',
+]);
 
 interface OrderRef {
   id: string;
@@ -43,6 +51,7 @@ export class PushService {
     private readonly prisma: PrismaService,
     @Inject(PUSH_SENDER) private readonly sender: PushSender,
     private readonly events: OrderEventsService,
+    @Optional() private readonly line?: ProviderLineService,
   ) {}
 
   async registerDevice(
@@ -200,6 +209,9 @@ export class PushService {
     body: string,
   ) {
     if (!providerId) return Promise.resolve();
+    if (LINE_PROVIDER_EVENTS.has(type)) {
+      void this.line?.orderUpdate(providerId, title, body);
+    }
     return this.sendToUsers(
       Role.PROVIDER,
       [providerId],

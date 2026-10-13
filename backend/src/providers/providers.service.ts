@@ -20,6 +20,7 @@ import {
   UpdatePublicProfileDto,
   UpdateWorkingHoursDto,
 } from './dto/provider.dto';
+import { providerLineAddFriendUrl } from '../notifications/provider-line.service';
 
 @Injectable()
 export class ProvidersService {
@@ -173,7 +174,10 @@ export class ProvidersService {
       },
     });
     if (!provider) throw new NotFoundException('ไม่พบข้อมูลช่าง');
-    return provider;
+    return {
+      ...provider,
+      lineAddFriendUrl: providerLineAddFriendUrl(provider),
+    };
   }
 
   private async requireVerified(providerId: string): Promise<Provider> {

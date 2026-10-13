@@ -1,10 +1,16 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  Optional,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { DispatchStatus, OrderStatus, ProviderStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../notifications/push.service';
 import { OrderEventsService } from '../notifications/order-events.service';
+import { ProviderLineService } from '../notifications/provider-line.service';
 import {
   AdminAlertService,
   coarseArea,
@@ -13,7 +19,7 @@ import { distanceKm } from '../common/geo';
 import {
   DISPATCH_MAX_CANDIDATES,
   DISPATCH_MAX_RADIUS_KM,
-  DISPATCH_OFFER_TIMEOUT_MS,
+  dispatchOfferTimeoutMs,
   DISPATCH_BATCH_SIZE,
   PROVIDER_HEARTBEAT_STALE_MS,
 } from '../common/constants';
@@ -55,6 +61,7 @@ export class DispatchService {
     private readonly adminAlert: AdminAlertService,
     private readonly events: OrderEventsService,
     private readonly wallet: WalletService,
+    @Optional() private readonly providerLine?: ProviderLineService,
   ) {}
 
   /** เริ่มกระจายงาน: หาช่างที่เข้าเงื่อนไข เรียงตามระยะทาง แล้วเสนอให้คนใกล้สุดก่อน */
@@ -169,7 +176,8 @@ export class DispatchService {
       return;
     }
 
-    const expiresAt = new Date(Date.now() + DISPATCH_OFFER_TIMEOUT_MS);
+    const timeoutMs = dispatchOfferTimeoutMs();
+    const expiresAt = new Date(Date.now() + timeoutMs);
     await this.prisma.dispatchAttempt.createMany({
       data: batch.map((entry, index) => ({
         orderId,
@@ -194,7 +202,17 @@ export class DispatchService {
         orderNo: order.orderNo,
         serviceName: order.subService.name,
       },
-      Math.round(DISPATCH_OFFER_TIMEOUT_MS / 1000),
+      Math.round(timeoutMs / 1000),
+    );
+    // เว็บแอปเตือนได้เฉพาะตอนเปิดหน้าอยู่ ส่ง LINE ด้วย (ไม่รอ ไม่ทำให้การเสนองานล้ม)
+    void this.providerLine?.offer(
+      batch.map((entry) => entry.provider.id),
+      {
+        serviceName: order.subService.name,
+        area: coarseArea(order.pickupAddress),
+        priceSatang: order.priceEstimated,
+      },
+      timeoutMs,
     );
   }
 

@@ -174,6 +174,15 @@ describe('LineLoginService', () => {
       return new URL(redirect).searchParams.get('line_ticket')!;
     }
 
+    it('asks mechanics to add the FixGo OA as a friend when LINE alerts are on', () => {
+      const prompt = (app: 'customer' | 'provider') =>
+        new URL(service.start(app, NOW).url).searchParams.get('bot_prompt');
+      expect(prompt('provider')).toBeNull();
+      process.env.PROVIDER_LINE_ALERTS = 'true';
+      expect(prompt('provider')).toBe('aggressive');
+      expect(prompt('customer')).toBeNull();
+    });
+
     it('is disabled when the fixer web address is not configured', () => {
       expect(service.isEnabled('provider')).toBe(true);
       delete process.env.PUBLIC_FIXER_URL;

@@ -35,7 +35,25 @@ export function cashDebtLimit(env: NodeJS.ProcessEnv = process.env): number {
 }
 
 /** เวลาที่ช่างมีให้กดรับงาน ช่วงสั้นเพื่อให้ลูกค้าไม่รอนานในเหตุฉุกเฉิน */
-export const DISPATCH_OFFER_TIMEOUT_MS = 90 * 1000;
+export const DEFAULT_DISPATCH_OFFER_TIMEOUT_MS = 90 * 1000;
+
+/**
+ * ปรับได้ด้วย env DISPATCH_OFFER_TIMEOUT_MS (มิลลิวินาที 15 วินาที - 15 นาที)
+ * เช่น 180000 ให้ช่างที่ได้แจ้งเตือนทาง LINE มีเวลาเปิดเว็บแอปมากดรับ
+ */
+export function dispatchOfferTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env.DISPATCH_OFFER_TIMEOUT_MS?.trim();
+  if (!raw) return DEFAULT_DISPATCH_OFFER_TIMEOUT_MS;
+  const ms = Number(raw);
+  if (!Number.isInteger(ms) || ms < 15_000 || ms > 15 * 60_000) {
+    throw new Error(
+      'DISPATCH_OFFER_TIMEOUT_MS must be milliseconds between 15000 and 900000',
+    );
+  }
+  return ms;
+}
 
 /** ส่งพร้อมกันเป็นกลุ่ม คนแรกที่กดรับได้งาน */
 export const DISPATCH_BATCH_SIZE = 4;

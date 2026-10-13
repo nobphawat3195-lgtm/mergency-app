@@ -1,11 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 
 import { mechanicDisplayName } from '../common/mechanic-name';
-
-type FetchLike = (
-  url: string,
-  init: { method: string; headers: Record<string, string>; body: string },
-) => Promise<{ ok: boolean; status: number }>;
+import { FetchLike, linePush } from './line-push';
 
 export type AdminAlertChannel = 'none' | 'line' | 'webhook';
 
@@ -60,19 +56,11 @@ export class AdminAlertService {
           this.logger.warn('ADMIN_ALERT_CHANNEL=line แต่ตั้งค่า LINE ไม่ครบ');
           return;
         }
-        const response = await this.fetchImpl(
-          'https://api.line.me/v2/bot/message/push',
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${this.config.lineToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: this.config.lineTo,
-              messages: [{ type: 'text', text: message.slice(0, 4900) }],
-            }),
-          },
+        const response = await linePush(
+          this.fetchImpl,
+          this.config.lineToken,
+          this.config.lineTo,
+          [{ type: 'text', text: message.slice(0, 4900) }],
         );
         if (!response.ok) {
           this.logger.warn(`LINE push ไม่สำเร็จ HTTP ${response.status}`);
