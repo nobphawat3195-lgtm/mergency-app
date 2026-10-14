@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/services.dart';
 
 import 'offer_alarm_io.dart' if (dart.library.js_interop) 'offer_alarm_web.dart'
@@ -50,8 +51,8 @@ abstract class OfferAlarmBackend {
   Future<void> notify(String title, String body);
 }
 
-/// เสียงปลุกตอนมีงานใหม่: ต่อรอบเล่นเสียงปลุก ~1.5 วิ แล้วพูด [offerVoiceText]
-/// วนทุก ~4 วิ และสั่นทุก 1.5 วิ จนกว่าจะเรียก [stop]
+/// เสียงปลุกตอนมีงานใหม่ แบบนาฬิกาปลุก: เสียงปลุกทุก ~4 วิ พูด [offerVoiceText] ทุก ~12 วิ
+/// (ทุก [voiceEvery] รอบ) และสั่นทุก 1.5 วิ จนกว่าจะเรียก [stop] หรือถึงเวลาหมดอายุของงาน
 /// แอปอยู่เบื้องหลังจะแสดงแจ้งเตือนของระบบด้วย
 ///
 /// ทุกคำสั่งไม่ throw: เล่นเสียงไม่ได้ (เบราว์เซอร์บล็อก ไม่มีลำโพง) งานยังเด้งในหน้าจอตามปกติ
@@ -68,9 +69,16 @@ class OfferAlarm {
   /// รอเสียงพูดนานสุดเท่านี้ (กันเครื่องที่ไม่ส่งสัญญาณว่าพูดจบ)
   static const maxSpeech = Duration(seconds: 4);
 
+  /// พูดทุกกี่รอบ (รอบละ 4 วิ = พูดทุก ~12 วิ) รอบอื่นดังแค่เสียงปลุก
+  static const voiceEvery = 3;
+
   final OfferAlarmBackend _backend;
   Timer? _vibration;
   bool _ringing = false;
+
+  /// งานที่ปลุกอยู่หมดเวลาตอนไหน (งานล่าสุดที่หมดช้าสุด) เลยเวลานี้แล้วห้ามดังต่อ
+  DateTime? _deadline;
+  Timer? _deadlineTimer;
 
   /// เพิ่มทุกครั้งที่เริ่ม/หยุด รอบที่ค้างจากครั้งก่อนจะรู้ว่าไม่ใช่ของตัวเองแล้วเลิก
   int _generation = 0;
@@ -85,7 +93,18 @@ class OfferAlarm {
   }
 
   /// เริ่มปลุก ถ้าปลุกอยู่แล้วแค่แจ้งเตือนเพิ่ม (กรณีงานใหม่เข้ามาซ้อน)
-  Future<void> ring({String title = 'มีงานใหม่ใกล้คุณ', String? body}) async {
+  ///
+  /// [until] = เวลาหมดอายุของงาน: หยุดเองเมื่อถึงเวลา แม้หน้าจอจะไม่ได้สั่งหยุด
+  /// (เช่น แท็บอยู่เบื้องหลังแล้วเบราว์เซอร์หน่วง timer ของหน้า)
+  Future<void> ring({
+    String title = 'มีงานใหม่ใกล้คุณ',
+    String? body,
+    DateTime? until,
+  }) async {
+    if (until != null) {
+      if (!until.isAfter(clock.now())) return;
+      _extendDeadline(until);
+    }
     if (_backend.isInBackground) {
       await _guardAsync(
         () => _backend.notify(title, body ?? 'เปิดแอปเพื่อกดรับงานก่อนหมดเวลา'),
@@ -97,6 +116,9 @@ class OfferAlarm {
 
   Future<void> stop() async {
     _generation++;
+    _deadline = null;
+    _deadlineTimer?.cancel();
+    _deadlineTimer = null;
     _vibration?.cancel();
     _vibration = null;
     _cancelWaits();
@@ -118,6 +140,21 @@ class OfferAlarm {
     unawaited(stop());
   }
 
+  void _extendDeadline(DateTime until) {
+    final current = _deadline;
+    if (current != null && !until.isAfter(current)) return;
+    _deadline = until;
+    _deadlineTimer?.cancel();
+    _deadlineTimer = Timer(until.difference(clock.now()), () {
+      if (_deadline == until) unawaited(stop());
+    });
+  }
+
+  bool get _pastDeadline {
+    final deadline = _deadline;
+    return deadline != null && !clock.now().isBefore(deadline);
+  }
+
   int _start() {
     _ringing = true;
     _guard(_backend.vibrate);
@@ -128,18 +165,22 @@ class OfferAlarm {
     return ++_generation;
   }
 
-  /// เสียงปลุก -> รอ [chimeLength] -> พูด -> รอให้ครบ [cycle] แล้ววนใหม่
+  /// เสียงปลุก -> (ทุก [voiceEvery] รอบ: รอ [chimeLength] แล้วพูด) -> รอให้ครบ [cycle] แล้ววนใหม่
   Future<void> _play(int generation, {required bool repeat}) async {
-    bool current() => _ringing && generation == _generation;
+    bool current() => _ringing && generation == _generation && !_pastDeadline;
+    var round = 0;
     while (current()) {
       final cycleEnd = _wait(cycle);
       await _guardAsync(_backend.playChime);
-      await _wait(chimeLength);
-      if (!current()) return;
-      await Future.any([
-        _guardAsync(() => _backend.speak(offerVoiceText)),
-        _wait(maxSpeech),
-      ]);
+      if (round % voiceEvery == 0) {
+        await _wait(chimeLength);
+        if (!current()) return;
+        await Future.any([
+          _guardAsync(() => _backend.speak(offerVoiceText)),
+          _wait(maxSpeech),
+        ]);
+      }
+      round++;
       if (!repeat || !current()) return;
       await cycleEnd;
     }

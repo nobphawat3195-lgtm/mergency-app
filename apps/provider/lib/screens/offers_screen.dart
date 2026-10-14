@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import '../app_state.dart';
 import '../chat_image.dart';
 import '../offer_alarm.dart';
 import '../working_hours.dart';
+import 'offer_alarm_overlay.dart';
 import 'wallet_debt_card.dart';
 import 'register_screen.dart';
 
@@ -127,7 +129,7 @@ class _OffersScreenState extends State<OffersScreen> {
   /// งานใหม่ที่ยังไม่เคยเห็น: ปลุก (เสียงวน + สั่น + การ์ดกระพริบ) และพากลับมาหน้าหลัก
   /// หยุดเมื่อช่างรับ/ปฏิเสธ/กดปิดเสียง หรือทุกงานที่ปลุกอยู่หมดเวลา/หายไปจากรายการ
   void _updateAlarm() {
-    final now = DateTime.now();
+    final now = clock.now();
     final live = {
       for (final offer in _offers)
         if (offer.expiresAt.isAfter(now)) offer.orderId,
@@ -140,6 +142,7 @@ class _OffersScreenState extends State<OffersScreen> {
       final offer = _offers.firstWhere((o) => o.orderId == fresh.first);
       unawaited(
         _alarm.ring(
+          until: offer.expiresAt,
           body: [
             offer.subServiceName ?? offer.categoryName ?? 'งานซ่อมรถ',
             'ห่าง ${offer.distanceKm.toStringAsFixed(1)} กม.',
@@ -420,14 +423,54 @@ class _OffersScreenState extends State<OffersScreen> {
     final isOnline = ProviderAppScope.of(context).isOnline;
     final open = _openMinute;
     final close = _closeMinute;
+    final alarming = _alarmingOffer;
+    return Scaffold(
+      backgroundColor: FixGoColors.surface,
+      body: Stack(
+        children: [
+          Positioned.fill(child: _buildHome(context, isOnline, open, close)),
+          if (alarming != null)
+            Positioned.fill(
+              child: OfferAlarmOverlay(
+                offer: alarming,
+                busy: _respondingOfferId == alarming.orderId,
+                onAccept: () => _accept(alarming),
+                onReject: () => _reject(alarming),
+                onSilence: _silence,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// งานที่กำลังปลุก (หมดเวลาเร็วสุดก่อน) แสดงจอเต็มจนกว่าช่างจะตอบ กดปิดเสียง หรือหมดเวลา
+  JobOffer? get _alarmingOffer {
+    final now = clock.now();
+    final ringing =
+        _offers
+            .where(
+              (offer) =>
+                  _ringingIds.contains(offer.orderId) &&
+                  offer.expiresAt.isAfter(now),
+            )
+            .toList()
+          ..sort((a, b) => a.expiresAt.compareTo(b.expiresAt));
+    return ringing.firstOrNull;
+  }
+
+  Widget _buildHome(
+    BuildContext context,
+    bool isOnline,
+    int? open,
+    int? close,
+  ) {
     final outsideHours =
         isOnline &&
         open != null &&
         close != null &&
         !isWithinWorkingHours(open, close, bangkokMinuteOfDay());
-    return Scaffold(
-      backgroundColor: FixGoColors.surface,
-      body: RefreshIndicator(
+    return RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
           padding: const EdgeInsets.only(bottom: FixGoSpacing.xl),
@@ -532,8 +575,6 @@ class _OffersScreenState extends State<OffersScreen> {
                             )
                           : Column(
                               children: [
-                                if (_ringingIds.isNotEmpty)
-                                  _RingingBanner(onSilence: _silence),
                                 for (final (index, offer)
                                     in _offers.indexed) ...[
                                   if (index > 0) const Divider(height: 32),
@@ -606,7 +647,6 @@ class _OffersScreenState extends State<OffersScreen> {
             ),
           ],
         ),
-      ),
     );
   }
 }
@@ -1613,36 +1653,6 @@ class _KeepScreenOnHint extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _RingingBanner extends StatelessWidget {
-  const _RingingBanner({required this.onSilence});
-
-  final VoidCallback onSilence;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: FixGoSpacing.sm),
-      child: Row(
-        children: [
-          const Icon(Icons.notifications_active, color: FixGoColors.error),
-          const SizedBox(width: FixGoSpacing.xs),
-          const Expanded(
-            child: Text(
-              'งานใหม่! กดรับหรือปฏิเสธก่อนหมดเวลา',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-          TextButton.icon(
-            onPressed: onSilence,
-            icon: const Icon(Icons.volume_off, size: 18),
-            label: const Text('ปิดเสียง'),
-          ),
-        ],
-      ),
     );
   }
 }

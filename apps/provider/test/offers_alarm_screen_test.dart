@@ -1,6 +1,7 @@
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:fixgo_provider/app_state.dart';
 import 'package:fixgo_provider/offer_alarm.dart';
+import 'package:fixgo_provider/screens/offer_alarm_overlay.dart';
 import 'package:fixgo_provider/screens/offers_screen.dart';
 import 'package:fixgo_provider/working_hours.dart';
 import 'package:flutter/material.dart';
@@ -69,6 +70,14 @@ class _Api extends FixGoApiClient {
   Future<int> getWalletBalance() async => 0;
   @override
   Future<void> sendProviderHeartbeat() async {}
+  final accepted = <String>[];
+
+  @override
+  Future<void> acceptOffer(String orderId) async {
+    accepted.add(orderId);
+    offers = [];
+  }
+
   @override
   Future<void> rejectOffer(String orderId) async {
     rejected.add(orderId);
@@ -86,11 +95,12 @@ class _Api extends FixGoApiClient {
   }
 }
 
-JobOffer _offer(String id) => JobOffer(
+JobOffer _offer(String id, {Duration left = const Duration(minutes: 2)}) =>
+    JobOffer(
       orderId: id,
       orderNo: 'FG-$id',
       distanceKm: 2.4,
-      expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+      expiresAt: DateTime.now().add(left),
       priceEstimated: 50000,
       subServiceName: 'จั๊มแบต',
     );
@@ -133,7 +143,8 @@ void main() {
     final (_, api, backend) = await _pump(tester, offers: [_offer('1')]);
 
     expect(backend.chimes, 1);
-    expect(find.text('งานใหม่! กดรับหรือปฏิเสธก่อนหมดเวลา'), findsOneWidget);
+    expect(find.byType(OfferAlarmOverlay), findsOneWidget);
+    expect(find.text('งานใหม่!'), findsOneWidget);
 
     // ดังวนทุก 4 วิ (0, 4, 8) รอบดึงข้อมูลถัดไปเห็นงานเดิมไม่เริ่มปลุกซ้อน
     await tester.pump(const Duration(seconds: 10));
@@ -142,7 +153,7 @@ void main() {
     await tester.tap(find.text('ปิดเสียง'));
     await tester.pump();
     expect(backend.stops, 1);
-    expect(find.text('งานใหม่! กดรับหรือปฏิเสธก่อนหมดเวลา'), findsNothing);
+    expect(find.byType(OfferAlarmOverlay), findsNothing);
     await tester.pump(const Duration(seconds: 8));
     expect(backend.chimes, 3);
 
@@ -222,5 +233,38 @@ void main() {
       find.text('เพิ่มเพื่อน LINE FixGo เพื่อรับแจ้งเตือนงานใหม่'),
       findsNothing,
     );
+  });
+
+  testWidgets('full-screen alarm shows the countdown and accepts the job',
+      (tester) async {
+    final (_, api, backend) = await _pump(tester, offers: [_offer('7')]);
+    expect(find.byType(OfferAlarmOverlay), findsOneWidget);
+    expect(find.textContaining('เหลือเวลา 1:5'), findsOneWidget);
+    expect(find.textContaining('ราคาประเมิน ฿500'), findsOneWidget);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(OfferAlarmOverlay),
+        matching: find.text('รับงาน'),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(api.accepted, ['7']);
+    expect(find.byType(OfferAlarmOverlay), findsNothing);
+    expect(backend.stops, greaterThan(0));
+  });
+
+  testWidgets('the alarm stops by itself when the offer expires',
+      (tester) async {
+    final (_, _, backend) = await _pump(
+      tester,
+      offers: [_offer('8', left: const Duration(seconds: 6))],
+    );
+    expect(find.byType(OfferAlarmOverlay), findsOneWidget);
+    await tester.pump(const Duration(seconds: 8));
+    expect(find.byType(OfferAlarmOverlay), findsNothing);
+    final chimes = backend.chimes;
+    await tester.pump(const Duration(seconds: 12));
+    expect(backend.chimes, chimes);
   });
 }
