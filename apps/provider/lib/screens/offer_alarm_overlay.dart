@@ -131,10 +131,6 @@ class _OfferAlarmOverlayState extends State<OfferAlarmOverlay>
                     backgroundColor: Colors.white,
                     foregroundColor: FixGoColors.accent,
                     disabledBackgroundColor: Colors.white70,
-                    textStyle: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                    ),
                   ),
                   onPressed: enabled ? widget.onAccept : null,
                   icon: widget.busy
@@ -143,7 +139,15 @@ class _OfferAlarmOverlayState extends State<OfferAlarmOverlay>
                           child: CircularProgressIndicator(strokeWidth: 3),
                         )
                       : const Icon(Icons.check_circle_rounded, size: 32),
-                  label: const Text('รับงาน'),
+                  // ระบุสีเอง: ธีมปุ่มของแอปกำหนดสีตัวอักษรขาว จะมองไม่เห็นบนพื้นขาว
+                  label: const Text(
+                    'รับงาน',
+                    style: TextStyle(
+                      color: FixGoColors.accent,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: FixGoSpacing.sm),

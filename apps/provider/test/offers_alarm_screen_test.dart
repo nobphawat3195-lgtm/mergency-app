@@ -3,6 +3,8 @@ import 'package:fixgo_provider/app_state.dart';
 import 'package:fixgo_provider/offer_alarm.dart';
 import 'package:fixgo_provider/screens/offer_alarm_overlay.dart';
 import 'package:fixgo_provider/screens/offers_screen.dart';
+import 'package:fixgo_provider/screens/web_alert_card.dart';
+import 'package:fixgo_provider/web_alerts.dart';
 import 'package:fixgo_provider/working_hours.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -71,6 +73,19 @@ class _Api extends FixGoApiClient {
   @override
   Future<void> sendProviderHeartbeat() async {}
   final accepted = <String>[];
+  final webPushRegistered = <String>[];
+
+  @override
+  Future<({bool enabled, String? publicKey})> getWebPushConfig() async =>
+      (enabled: true, publicKey: 'BPublicKey');
+
+  @override
+  Future<void> registerWebPush({
+    required String endpoint,
+    required String p256dh,
+    required String auth,
+  }) async =>
+      webPushRegistered.add(endpoint);
 
   @override
   Future<void> acceptOffer(String orderId) async {
@@ -95,6 +110,38 @@ class _Api extends FixGoApiClient {
   }
 }
 
+class _FakeBrowser implements WebAlertPlatform {
+  _FakeBrowser({
+    required this.standalone,
+    this.isIos = false,
+    this.permission = 'default',
+  });
+
+  @override
+  bool get isWeb => true;
+  @override
+  final bool standalone;
+  @override
+  final bool isIos;
+  @override
+  bool get pushSupported => true;
+  @override
+  String permission;
+  final asked = <bool>[];
+
+  @override
+  Future<WebPushKeys?> subscribe(String publicKey, {required bool ask}) async {
+    asked.add(ask);
+    if (ask && permission == 'default') permission = 'granted';
+    if (permission != 'granted') return null;
+    return const WebPushKeys(
+      endpoint: 'https://push.example/1',
+      p256dh: 'p',
+      auth: 'a',
+    );
+  }
+}
+
 JobOffer _offer(String id, {Duration left = const Duration(minutes: 2)}) =>
     JobOffer(
       orderId: id,
@@ -112,6 +159,7 @@ Future<(ProviderAppState, _Api, _Backend)> _pump(
   List<JobOffer> offers = const [],
   bool down = false,
   String? lineAddFriendUrl,
+  WebAlertPlatform? webPlatform,
 }) async {
   tester.view.physicalSize = const Size(800, 3000);
   tester.view.devicePixelRatio = 1;
@@ -121,7 +169,11 @@ Future<(ProviderAppState, _Api, _Backend)> _pump(
     ..down = down
     ..lineAddFriendUrl = lineAddFriendUrl;
   final backend = _Backend();
-  final state = ProviderAppState(api: api, offerAlarm: OfferAlarm(backend));
+  final state = ProviderAppState(
+    api: api,
+    offerAlarm: OfferAlarm(backend),
+    webAlertPlatform: webPlatform,
+  );
   await tester.pumpWidget(
     ProviderAppScope(
       state: state,
@@ -266,5 +318,70 @@ void main() {
     final chimes = backend.chimes;
     await tester.pump(const Duration(seconds: 12));
     expect(backend.chimes, chimes);
+  });
+
+  group('web alerts card', () {
+    testWidgets('iPhone in a Safari tab is told how to add to Home Screen',
+        (tester) async {
+      await _pump(
+        tester,
+        webPlatform: _FakeBrowser(standalone: false, isIos: true),
+      );
+      expect(
+        find.text('ติดตั้งแอปลงหน้าจอหลักเพื่อให้เตือนงานดังขึ้น'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('เพิ่มไปยังหน้าจอโฮม'), findsOneWidget);
+      await tester.tap(find.text('ไว้ทีหลัง'));
+      await tester.pump();
+      expect(
+        find.text('ติดตั้งแอปลงหน้าจอหลักเพื่อให้เตือนงานดังขึ้น'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('installed app asks for notifications only from a tap',
+        (tester) async {
+      final browser = _FakeBrowser(standalone: true);
+      final (_, api, _) = await _pump(tester, webPlatform: browser);
+      // เปิดหน้าแล้วไม่ถามสิทธิ์เอง
+      expect(browser.asked, isEmpty);
+      expect(find.text('เปิดการแจ้งเตือนงานใหม่'), findsOneWidget);
+
+      await tester.tap(find.text('เปิดการแจ้งเตือน'));
+      await tester.pump();
+      await tester.pump();
+      expect(browser.asked, [true]);
+      expect(api.webPushRegistered, ['https://push.example/1']);
+      expect(find.text('เปิดการแจ้งเตือนงานใหม่'), findsNothing);
+    });
+
+    testWidgets('already allowed: re-registers quietly and shows no card',
+        (tester) async {
+      final browser = _FakeBrowser(standalone: true, permission: 'granted');
+      final (_, api, _) = await _pump(tester, webPlatform: browser);
+      expect(browser.asked, [false]);
+      expect(api.webPushRegistered, ['https://push.example/1']);
+      expect(find.byType(WebAlertCard), findsNothing);
+    });
+
+    testWidgets('blocked notifications explain where to turn them on',
+        (tester) async {
+      await _pump(
+        tester,
+        webPlatform: _FakeBrowser(
+          standalone: true,
+          isIos: true,
+          permission: 'denied',
+        ),
+      );
+      expect(find.text('การแจ้งเตือนถูกปิดอยู่'), findsOneWidget);
+      expect(find.textContaining('การตั้งค่า > การแจ้งเตือน'), findsOneWidget);
+    });
+
+    testWidgets('the mobile app never shows the web card', (tester) async {
+      await _pump(tester);
+      expect(find.byType(WebAlertCard), findsNothing);
+    });
   });
 }

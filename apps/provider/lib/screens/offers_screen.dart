@@ -11,7 +11,9 @@ import '../app_state.dart';
 import '../chat_image.dart';
 import '../offer_alarm.dart';
 import '../working_hours.dart';
+import '../web_alerts.dart';
 import 'offer_alarm_overlay.dart';
+import 'web_alert_card.dart';
 import 'wallet_debt_card.dart';
 import 'register_screen.dart';
 
@@ -51,6 +53,11 @@ class _OffersScreenState extends State<OffersScreen> {
   String? _lineAddFriendUrl;
   bool _lineCardHidden = false;
 
+  /// เว็บ: ชวนติดตั้งลงหน้าจอหลัก/เปิดการแจ้งเตือน (แอปมือถือเป็น ready เสมอ)
+  WebAlertStatus _webAlertStatus = WebAlertStatus.ready;
+  bool _webAlertCardHidden = false;
+  bool _enablingWebAlerts = false;
+
   /// ค้างค่าบริการจากงานเงินสด แสดงการ์ดในหน้าหลักเฉพาะตอนเกินเพดาน (เปิดรับงานไม่ได้)
   WalletDebt? _debt;
   StreamSubscription<PushEvent>? _pushSub;
@@ -68,6 +75,7 @@ class _OffersScreenState extends State<OffersScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _alarm = ProviderAppScope.of(context).offerAlarm;
+    _webAlertStatus = ProviderAppScope.of(context).webAlerts.status;
     if (_timer != null) return;
     unawaited(_syncOnlineStatus());
     // มีงานใหม่หรือสถานะงานเปลี่ยน: ดึงทันทีไม่ต้องรอรอบ 10 วิ
@@ -100,6 +108,8 @@ class _OffersScreenState extends State<OffersScreen> {
         _closeMinute = profile['closeMinute'] as int?;
         _lineAddFriendUrl = profile['lineAddFriendUrl'] as String?;
       });
+      await state.webAlerts.refresh(state.api);
+      if (mounted) setState(() => _webAlertStatus = state.webAlerts.status);
       final debt = await state.api.getWalletDebt();
       if (mounted) setState(() => _debt = debt);
     } on ApiException {
@@ -314,6 +324,28 @@ class _OffersScreenState extends State<OffersScreen> {
     }
   }
 
+  /// เรียกจากการแตะปุ่มเท่านั้น (เบราว์เซอร์ไม่ให้ขอสิทธิ์แจ้งเตือนตอนเปิดหน้า)
+  Future<void> _enableWebAlerts() async {
+    if (_enablingWebAlerts) return;
+    final state = ProviderAppScope.of(context);
+    setState(() => _enablingWebAlerts = true);
+    final enabled = await state.webAlerts.enable(state.api);
+    if (!mounted) return;
+    setState(() {
+      _enablingWebAlerts = false;
+      _webAlertStatus = state.webAlerts.status;
+    });
+    showResultSnackBar(
+      context,
+      success: enabled
+          ? 'เปิดการแจ้งเตือนแล้ว งานใหม่จะเด้งเตือนแม้ล็อกจอ'
+          : null,
+      error: enabled
+          ? null
+          : ApiException(0, 'ยังเปิดการแจ้งเตือนไม่ได้ ลองอนุญาตการแจ้งเตือนในตั้งค่าแล้วลองใหม่'),
+    );
+  }
+
   Future<void> _openLineAddFriend(String url) async {
     final uri = Uri.tryParse(url);
     final opened =
@@ -510,6 +542,22 @@ class _OffersScreenState extends State<OffersScreen> {
                       _LineAlertsCard(
                         onAdd: () => _openLineAddFriend(_lineAddFriendUrl!),
                         onHide: () => setState(() => _lineCardHidden = true),
+                      ),
+                      const SizedBox(height: FixGoSpacing.md),
+                    ],
+                    if (_webAlertStatus != WebAlertStatus.ready &&
+                        !_webAlertCardHidden) ...[
+                      WebAlertCard(
+                        status: _webAlertStatus,
+                        isIos: ProviderAppScope.of(
+                          context,
+                        ).webAlerts.platform.isIos,
+                        canAskPermission: ProviderAppScope.of(
+                          context,
+                        ).webAlerts.canAskPermission,
+                        busy: _enablingWebAlerts,
+                        onEnable: _enableWebAlerts,
+                        onHide: () => setState(() => _webAlertCardHidden = true),
                       ),
                       const SizedBox(height: FixGoSpacing.md),
                     ],
