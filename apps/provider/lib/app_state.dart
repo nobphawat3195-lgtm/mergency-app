@@ -5,6 +5,7 @@ import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/widgets.dart';
 
 import 'offer_alarm.dart';
+import 'wake_lock.dart';
 
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
@@ -14,13 +15,20 @@ abstract final class AppConfig {
 }
 
 class ProviderAppState extends ChangeNotifier {
-  ProviderAppState({required this.api, OfferAlarm? offerAlarm})
-      : offerAlarm = offerAlarm ?? OfferAlarm();
+  ProviderAppState({
+    required this.api,
+    OfferAlarm? offerAlarm,
+    ScreenWakeLock? wakeLock,
+  })  : offerAlarm = offerAlarm ?? OfferAlarm(),
+        wakeLock = wakeLock ?? createScreenWakeLock();
 
   final FixGoApiClient api;
 
   /// เสียงปลุกตอนมีงานใหม่ ใช้ร่วมกันทั้งหน้าหลักและปุ่มทดสอบในโปรไฟล์
   final OfferAlarm offerAlarm;
+
+  /// เว็บ: จอเปิดค้างตลอดที่ช่างเปิด "พร้อมรับงาน" งานเข้าจะเห็นและได้ยินทันที
+  final ScreenWakeLock wakeLock;
   final SecureTokenStore _tokenStore =
       const SecureTokenStore('fixgo_provider_access_token');
 
@@ -173,6 +181,13 @@ class ProviderAppState extends ChangeNotifier {
   void setOnline(bool value) {
     _isOnline = value;
     notifyListeners();
+  }
+
+  @override
+  void notifyListeners() {
+    // ทุกที่ที่สถานะออนไลน์/ล็อกอินเปลี่ยนจะแจ้งผ่านตรงนี้ จึงคุม wake lock ที่เดียว
+    wakeLock.setEnabled(isSignedIn && _isOnline);
+    super.notifyListeners();
   }
 
   void signOut() {

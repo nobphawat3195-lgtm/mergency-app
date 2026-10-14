@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fixgo_core/fixgo_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -485,6 +486,11 @@ class _OffersScreenState extends State<OffersScreen> {
                         onChanged: () => unawaited(_syncOnlineStatus()),
                       ),
                       const SizedBox(height: FixGoSpacing.md),
+                    ],
+                    // เว็บเตือนได้เฉพาะตอนหน้านี้เปิดอยู่ (จอเปิดค้างให้อัตโนมัติเมื่อเบราว์เซอร์รองรับ)
+                    if (kIsWeb && isOnline) ...[
+                      const _KeepScreenOnHint(),
+                      const SizedBox(height: FixGoSpacing.sm),
                     ],
                     _SectionCard(
                       icon: Icons.location_on,
@@ -1587,6 +1593,30 @@ class _OutsideHoursCard extends StatelessWidget {
 }
 
 /// แถบบนรายการงานตอนกำลังปลุก: ปิดเสียงได้โดยไม่ต้องรับ/ปฏิเสธทันที
+class _KeepScreenOnHint extends StatelessWidget {
+  const _KeepScreenOnHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        Icon(
+          Icons.screen_lock_portrait_outlined,
+          size: 18,
+          color: FixGoColors.textSecondary,
+        ),
+        SizedBox(width: FixGoSpacing.xs),
+        Expanded(
+          child: Text(
+            'เปิดจอค้างไว้เพื่อรับงานได้ทันที',
+            style: TextStyle(fontSize: 13, color: FixGoColors.textSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _RingingBanner extends StatelessWidget {
   const _RingingBanner({required this.onSilence});
 
