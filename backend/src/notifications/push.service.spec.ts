@@ -178,3 +178,66 @@ describe('PushService Web Push', () => {
     ]);
   });
 });
+
+describe('PushService new-job alarm', () => {
+  function build() {
+    const prisma = {
+      deviceToken: {
+        findMany: jest.fn().mockResolvedValue([{ token: 't1' }]),
+        deleteMany: jest.fn(),
+      },
+    };
+    const sender = { name: 'fake', send: jest.fn().mockResolvedValue('sent') };
+    const webPush = { send: jest.fn().mockResolvedValue(undefined) };
+    const service = new PushService(
+      prisma as unknown as PrismaService,
+      sender,
+      new OrderEventsService(),
+      undefined,
+      webPush as never,
+    );
+    return { service, sender, webPush };
+  }
+
+  it('rings until the offer expires', async () => {
+    const { service, sender } = build();
+    const before = Date.now();
+    await service.offerToProviders(
+      [{ id: 'pro_1', distanceKm: 1 }],
+      { id: 'order_1', orderNo: 'FG1', serviceName: 'จั๊มแบต' },
+      180,
+    );
+    const sent = sender.send.mock.calls[0][1];
+    expect(sent.delivery.kind).toBe('alarm');
+    expect(sent.delivery.collapseKey).toBe('order_1');
+    const left = sent.delivery.expiresAt.getTime() - before;
+    expect(left).toBeGreaterThanOrEqual(180_000);
+    expect(left).toBeLessThan(185_000);
+  });
+
+  it('tells other mechanics to stop ringing, without a web push', async () => {
+    const { service, sender, webPush } = build();
+    await service.offerClosed(
+      ['pro_2', 'pro_3', 'pro_2'],
+      { id: 'order_1', orderNo: 'FG1' },
+      'TAKEN',
+    );
+    const sent = sender.send.mock.calls[0][1];
+    expect(sent.data.type).toBe('OFFER_CANCELLED');
+    expect(sent.title).toBe('งานนี้มีช่างรับแล้ว');
+    expect(sent.delivery).toEqual({ kind: 'close', collapseKey: 'order_1' });
+    expect(webPush.send).not.toHaveBeenCalled();
+
+    sender.send.mockClear();
+    await service.offerClosed(
+      ['pro_2'],
+      { id: 'order_1', orderNo: 'FG1' },
+      'EXPIRED',
+    );
+    expect(sender.send.mock.calls[0][1].data.type).toBe('OFFER_EXPIRED');
+
+    sender.send.mockClear();
+    await service.offerClosed([], { id: 'order_1', orderNo: 'FG1' }, 'EXPIRED');
+    expect(sender.send).not.toHaveBeenCalled();
+  });
+});

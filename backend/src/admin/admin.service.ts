@@ -368,12 +368,16 @@ export class AdminService {
           cancelReason: reason,
         },
       });
-      if (updated.count !== 1) return false;
+      if (updated.count !== 1) return null;
+      const offered = await tx.dispatchAttempt.findMany({
+        where: { orderId, status: DispatchStatus.OFFERED },
+        select: { providerId: true },
+      });
       await tx.dispatchAttempt.updateMany({
         where: { orderId, status: DispatchStatus.OFFERED },
         data: { status: DispatchStatus.EXPIRED },
       });
-      return true;
+      return offered.map((attempt) => attempt.providerId);
     });
     if (!cancelled) {
       throw new BadRequestException(
@@ -386,6 +390,7 @@ export class AdminService {
       order,
       reason,
     );
+    void this.push.offerClosed(cancelled, order, 'CANCELLED');
     return {
       id: order.id,
       orderNo: order.orderNo,

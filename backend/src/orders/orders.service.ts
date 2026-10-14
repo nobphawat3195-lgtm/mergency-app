@@ -285,14 +285,23 @@ export class OrdersService {
       });
       if (changed.count !== 1)
         throw new ConflictException('สถานะงานเปลี่ยนแล้ว กรุณาโหลดใหม่');
+      const offered = await tx.dispatchAttempt.findMany({
+        where: { orderId, status: DispatchStatus.OFFERED },
+        select: { providerId: true },
+      });
       await tx.dispatchAttempt.updateMany({
         where: { orderId, status: DispatchStatus.OFFERED },
         data: { status: DispatchStatus.EXPIRED },
       });
-      return tx.order.findUniqueOrThrow({ where: { id: orderId } });
+      return {
+        order: await tx.order.findUniqueOrThrow({ where: { id: orderId } }),
+        offeredTo: offered.map((attempt) => attempt.providerId),
+      };
     });
     void this.push.cancelledByCustomer(order.providerId, order);
-    return cancelled;
+    // ช่างที่กำลังถูกปลุกด้วยงานนี้: หยุดเสียงและลบแจ้งเตือน
+    void this.push.offerClosed(cancelled.offeredTo, order, 'CANCELLED');
+    return cancelled.order;
   }
 
   async updateStatusByProvider(

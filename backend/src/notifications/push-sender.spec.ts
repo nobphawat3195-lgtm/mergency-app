@@ -1,6 +1,11 @@
 import { createVerify, generateKeyPairSync } from 'node:crypto';
 
-import { createPushSender, FcmPushSender, PushMessage } from './push-sender';
+import {
+  buildFcmMessage,
+  createPushSender,
+  FcmPushSender,
+  PushMessage,
+} from './push-sender';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
   modulusLength: 2048,
@@ -131,5 +136,102 @@ describe('createPushSender', () => {
       FCM_PRIVATE_KEY: privateKey.replace(/\n/g, '\\n'),
     });
     expect(sender.name).toBe('fcm');
+  });
+});
+
+describe('buildFcmMessage', () => {
+  const NOW = Date.parse('2026-10-14T10:00:00Z');
+  const expiresAt = new Date(NOW + 180_000);
+
+  it('sends a new job as a data-only high-priority alarm on Android and time-sensitive on iOS', () => {
+    const built = buildFcmMessage(
+      'tok',
+      {
+        ...message,
+        delivery: { kind: 'alarm', expiresAt, collapseKey: 'order_1' },
+      },
+      NOW,
+    );
+    // ไม่มี notification: แอปช่างแสดงแจ้งเตือนแบบนาฬิกาปลุกเองแม้ถูกปิดอยู่
+    expect(built.notification).toBeUndefined();
+    expect(built.data).toEqual({
+      type: 'OFFER',
+      orderId: 'order_1',
+      orderNo: 'FG1',
+      title: message.title,
+      body: message.body,
+      expiresAt: expiresAt.toISOString(),
+      channelId: 'fixgo_offer_alarm',
+    });
+    expect(built.android).toEqual({
+      priority: 'HIGH',
+      ttl: '180s',
+      collapse_key: 'order_1',
+    });
+    expect(built.apns).toEqual({
+      headers: {
+        'apns-push-type': 'alert',
+        'apns-priority': '10',
+        'apns-expiration': String(Math.floor(expiresAt.getTime() / 1000)),
+        'apns-collapse-id': 'order_1',
+      },
+      payload: {
+        aps: {
+          alert: { title: message.title, body: message.body },
+          sound: 'offer_alarm.caf',
+          'interruption-level': 'time-sensitive',
+          'thread-id': 'order_1',
+        },
+      },
+    });
+    // ค่า data ของ FCM ต้องเป็น string ทุกตัว
+    for (const value of Object.values(built.data as object)) {
+      expect(typeof value).toBe('string');
+    }
+  });
+
+  it('never asks FCM to keep an offer that already expired', () => {
+    const built = buildFcmMessage(
+      'tok',
+      {
+        ...message,
+        delivery: {
+          kind: 'alarm',
+          expiresAt: new Date(NOW - 5000),
+          collapseKey: 'order_1',
+        },
+      },
+      NOW,
+    );
+    expect((built.android as { ttl: string }).ttl).toBe('1s');
+  });
+
+  it('closes the alarm quietly: data-only on Android, a passive replacement on iOS', () => {
+    const built = buildFcmMessage('tok', {
+      title: 'งานนี้มีช่างรับแล้ว',
+      body: 'งาน FG1 ไม่ต้องตอบรับแล้ว',
+      data: { type: 'OFFER_CANCELLED', orderId: 'order_1', orderNo: 'FG1' },
+      delivery: { kind: 'close', collapseKey: 'order_1' },
+    });
+    expect(built.notification).toBeUndefined();
+    const apns = built.apns as {
+      headers: Record<string, string>;
+      payload: { aps: Record<string, unknown> };
+    };
+    expect(apns.headers['apns-collapse-id']).toBe('order_1');
+    expect(apns.payload.aps['interruption-level']).toBe('passive');
+    expect(apns.payload.aps.sound).toBeUndefined();
+  });
+
+  it('keeps ordinary updates on the normal channel', () => {
+    const built = buildFcmMessage('tok', message);
+    expect(built.notification).toEqual({
+      title: message.title,
+      body: message.body,
+    });
+    expect(
+      (built.android as { notification: { channel_id: string } }).notification
+        .channel_id,
+    ).toBe('fixgo_updates');
   });
 });

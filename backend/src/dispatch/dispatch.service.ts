@@ -283,7 +283,7 @@ export class DispatchService {
     if (attempt.order.status !== OrderStatus.SEARCHING) {
       throw new BadRequestException('งานนี้ถูกรับไปแล้ว');
     }
-    await serializable(this.prisma, async (tx) => {
+    const others = await serializable(this.prisma, async (tx) => {
       const provider = await tx.provider.findUnique({
         where: { id: providerId },
       });
@@ -335,6 +335,14 @@ export class DispatchService {
       }
 
       // ปิดข้อเสนอที่ค้างอยู่ของช่างคนอื่น ไม่ให้เห็นงานที่ถูกรับไปแล้ว
+      const pending = await tx.dispatchAttempt.findMany({
+        where: {
+          orderId,
+          status: DispatchStatus.OFFERED,
+          id: { not: attempt.id },
+        },
+        select: { providerId: true },
+      });
       await tx.dispatchAttempt.updateMany({
         where: {
           orderId,
@@ -343,7 +351,10 @@ export class DispatchService {
         },
         data: { status: DispatchStatus.EXPIRED },
       });
+      return pending.map((other) => other.providerId);
     });
+    // เครื่องของช่างคนอื่นยังปลุกอยู่: หยุดเสียงและลบแจ้งเตือน
+    void this.push.offerClosed(others, attempt.order, 'TAKEN');
 
     const provider = await this.prisma.provider.findUnique({
       where: { id: providerId },
@@ -407,6 +418,36 @@ export class DispatchService {
     });
   }
 
+  /**
+   * หยุดเสียงปลุกในเครื่องช่างที่ปล่อยให้งานหมดเวลา (แอปตั้งเวลาหมดอายุเองด้วย นี่เป็นตัวสำรอง)
+   * อ่านสถานะซ้ำหลังอัปเดต: ข้อเสนอที่เพิ่งถูกกดรับทันเวลาจะไม่ถูกปิด
+   */
+  private async closeExpiredOfferAlerts(attemptIds: string[]): Promise<void> {
+    if (attemptIds.length === 0) return;
+    const closed = await this.prisma.dispatchAttempt.findMany({
+      where: { id: { in: attemptIds }, status: DispatchStatus.EXPIRED },
+      select: {
+        providerId: true,
+        order: { select: { id: true, orderNo: true } },
+      },
+    });
+    const byOrder = new Map<
+      string,
+      { order: { id: string; orderNo: string }; providerIds: string[] }
+    >();
+    for (const attempt of closed) {
+      const entry = byOrder.get(attempt.order.id) ?? {
+        order: attempt.order,
+        providerIds: [],
+      };
+      entry.providerIds.push(attempt.providerId);
+      byOrder.set(attempt.order.id, entry);
+    }
+    for (const { order, providerIds } of byOrder.values()) {
+      void this.push.offerClosed(providerIds, order, 'EXPIRED');
+    }
+  }
+
   /** ตรวจข้อเสนอที่หมดเวลาทุก 30 วินาที แล้วส่งงานต่อให้ช่างคนถัดไป */
   @Cron(CronExpression.EVERY_30_SECONDS)
   async expireStaleOffers(): Promise<void> {
@@ -447,6 +488,7 @@ export class DispatchService {
       },
       data: { status: DispatchStatus.EXPIRED },
     });
+    await this.closeExpiredOfferAlerts(expired.map((attempt) => attempt.id));
 
     const searching = await this.prisma.order.findMany({
       where: {
