@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import 'offer_alarm.dart';
 import 'wake_lock.dart';
+import 'web_alerts.dart';
 
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
@@ -19,8 +20,10 @@ class ProviderAppState extends ChangeNotifier {
     required this.api,
     OfferAlarm? offerAlarm,
     ScreenWakeLock? wakeLock,
+    WebAlertPlatform? webAlertPlatform,
   })  : offerAlarm = offerAlarm ?? OfferAlarm(),
-        wakeLock = wakeLock ?? createScreenWakeLock();
+        wakeLock = wakeLock ?? createScreenWakeLock(),
+        webAlerts = WebAlerts(webAlertPlatform ?? createWebAlertPlatform());
 
   final FixGoApiClient api;
 
@@ -29,6 +32,9 @@ class ProviderAppState extends ChangeNotifier {
 
   /// เว็บ: จอเปิดค้างตลอดที่ช่างเปิด "พร้อมรับงาน" งานเข้าจะเห็นและได้ยินทันที
   final ScreenWakeLock wakeLock;
+
+  /// Web Push ของเว็บแอปที่ติดตั้งลงหน้าจอหลัก (เด้งเตือนแม้ปิดหน้าเว็บ)
+  final WebAlerts webAlerts;
   final SecureTokenStore _tokenStore =
       const SecureTokenStore('fixgo_provider_access_token');
 
@@ -194,6 +200,7 @@ class ProviderAppState extends ChangeNotifier {
     unawaited(offerAlarm.stop());
     // ต้องถอนโทเคน push ก่อนล้าง accessToken
     unawaited(PushNotifications.instance.detach(api));
+    unawaited(webAlerts.detach(api));
     api.accessToken = null;
     _hasProfile = false;
     _isOnline = false;

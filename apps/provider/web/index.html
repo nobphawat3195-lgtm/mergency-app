@@ -98,6 +98,14 @@
       });
     })();
   </script>
+  <script>
+    // service worker ของแอปช่าง: รับ Web Push และแทนที่ service worker เดิมของ Flutter
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('fixer_sw.js').catch(function () {});
+      });
+    }
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

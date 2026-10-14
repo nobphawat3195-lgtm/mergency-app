@@ -138,3 +138,43 @@ describe('PushService LINE for mechanics', () => {
     ]);
   });
 });
+
+describe('PushService Web Push', () => {
+  it('sends new jobs as urgent web pushes that expire with the offer', async () => {
+    const prisma = {
+      deviceToken: {
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn(),
+      },
+    };
+    const webPush = { send: jest.fn().mockResolvedValue(undefined) };
+    const service = new PushService(
+      prisma as unknown as PrismaService,
+      { name: 'fake', send: jest.fn() },
+      new OrderEventsService(),
+      undefined,
+      webPush as never,
+    );
+    const order = { id: 'order_1', orderNo: 'FG1' };
+    await service.offerToProviders(
+      [{ id: 'pro_1', distanceKm: 2.4 }],
+      { ...order, serviceName: 'จั๊มแบต' },
+      180,
+    );
+    await service.quoteAnswered('pro_1', order, true);
+    expect(webPush.send.mock.calls).toEqual([
+      [
+        Role.PROVIDER,
+        ['pro_1'],
+        expect.objectContaining({ type: 'OFFER', orderId: 'order_1' }),
+        { ttlSeconds: 180, urgent: true },
+      ],
+      [
+        Role.PROVIDER,
+        ['pro_1'],
+        expect.objectContaining({ type: 'QUOTE_APPROVED' }),
+        { ttlSeconds: undefined, urgent: false },
+      ],
+    ]);
+  });
+});
