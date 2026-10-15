@@ -5,5 +5,9 @@
 	<!-- Push Notifications: ตอน Archive เพื่อส่ง App Store Xcode เปลี่ยนเป็น production ตาม provisioning profile ให้เอง -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- แจ้งงานใหม่แบบ Time Sensitive: ทะลุโหมดโฟกัส/สรุปแจ้งเตือน (ไม่ต้องขออนุมัติจาก Apple)
+	     ไม่ใส่ Critical Alerts (ดังแม้ปิดเสียง) เพราะต้องได้รับอนุมัติจาก Apple ก่อน ดู docs/PUSH.md -->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
 </dict>
 </plist>

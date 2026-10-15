@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- เสียงปลุกงานใหม่ถูกเรียกจาก Dart ด้วยชื่อ ห้ามให้ resource shrinking ตัดทิ้งตอน build release -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/offer_alarm" />

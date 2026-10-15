@@ -24,7 +24,11 @@ export type PushType =
   | 'WALLET'
   | 'PAID'
   | 'PAYMENT_REVIEW'
-  | 'CHAT';
+  | 'CHAT'
+  /** ปิดแจ้งเตือนงานใหม่ในเครื่องช่าง: ช่างคนอื่นรับไปแล้ว / งานถูกยกเลิก */
+  | 'OFFER_CANCELLED'
+  /** ปิดแจ้งเตือนงานใหม่ในเครื่องช่าง: หมดเวลากดรับ */
+  | 'OFFER_EXPIRED';
 
 /** เหตุการณ์ที่ส่ง LINE หาช่างที่รับงานด้วย (งานใหม่ส่งจาก DispatchService) */
 const LINE_PROVIDER_EVENTS = new Set<PushType>([
@@ -32,6 +36,14 @@ const LINE_PROVIDER_EVENTS = new Set<PushType>([
   'QUOTE_REJECTED',
   'CANCELLED',
 ]);
+
+interface SendOptions {
+  /** วินาทีที่ข้อความ Web Push ยังมีความหมาย (งานใหม่ = เวลาที่เหลือให้กดรับ) */
+  ttlSeconds?: number;
+  delivery?: PushMessage['delivery'];
+  /** false = ไม่ส่ง Web Push (เช่น ข้อความปิดแจ้งเตือน ซึ่งเว็บต้องแสดงทุกข้อความ) */
+  webPush?: boolean;
+}
 
 interface OrderRef {
   id: string;
@@ -148,18 +160,20 @@ export class PushService {
     order: OrderRef,
     title: string,
     body: string,
-    ttlSeconds?: number,
+    { ttlSeconds, delivery, webPush = true }: SendOptions = {},
   ): Promise<void> {
     // หน้าติดตามงานที่เปิดอยู่ (SSE) ดึงข้อมูลใหม่ทันที แม้ผู้ใช้จะไม่มีโทเคน push
     this.events.emit(order.id, type);
     if (userIds.length === 0) return;
     // เว็บแอปที่ติดตั้งลงหน้าจอหลัก (ไม่รอ ไม่ทำให้ FCM ล้ม)
-    void this.webPush?.send(
-      role,
-      userIds,
-      { title, body, type, orderId: order.id, orderNo: order.orderNo },
-      { ttlSeconds, urgent: type === 'OFFER' },
-    );
+    if (webPush) {
+      void this.webPush?.send(
+        role,
+        userIds,
+        { title, body, type, orderId: order.id, orderNo: order.orderNo },
+        { ttlSeconds, urgent: type === 'OFFER' },
+      );
+    }
     try {
       const devices = await this.prisma.deviceToken.findMany({
         where: { role, userId: { in: userIds } },
@@ -169,6 +183,7 @@ export class PushService {
         title,
         body,
         data: { type, orderId: order.id, orderNo: order.orderNo },
+        delivery,
       };
       const invalid: string[] = [];
       await Promise.all(
@@ -249,11 +264,45 @@ export class PushService {
           order,
           'มีงานใหม่ใกล้คุณ',
           `${order.serviceName} · ห่าง ${provider.distanceKm.toFixed(1)} กม. กดรับภายใน ${timeoutSeconds} วินาที`,
-          // งานหมดเวลาแล้วไม่ต้องส่งถึงเครื่องที่เพิ่งกลับมาออนไลน์
-          timeoutSeconds,
+          {
+            // งานหมดเวลาแล้วไม่ต้องส่งถึงเครื่องที่เพิ่งกลับมาออนไลน์
+            ttlSeconds: timeoutSeconds,
+            // แอปมือถือ: แจ้งเตือนแบบนาฬิกาปลุก (เต็มจอ เสียงวน) จนรับ/ปฏิเสธ/หมดเวลา
+            delivery: {
+              kind: 'alarm',
+              expiresAt: new Date(Date.now() + timeoutSeconds * 1000),
+              collapseKey: order.id,
+            },
+          },
         ),
       ),
     ).then(() => undefined);
+  }
+
+  /**
+   * ปิดแจ้งเตือนงานใหม่ในเครื่องช่างที่ไม่ได้งานนี้แล้ว (แอปมือถือ: หยุดเสียงปลุก ลบแจ้งเตือน)
+   * ไม่ส่ง Web Push: เว็บต้องแสดงแจ้งเตือนทุกข้อความ (iPhone ตัดสิทธิ์ push ของเว็บที่ส่งแบบเงียบ)
+   */
+  offerClosed(
+    providerIds: string[],
+    order: OrderRef,
+    reason: 'TAKEN' | 'EXPIRED' | 'CANCELLED',
+  ) {
+    const unique = [...new Set(providerIds)];
+    if (unique.length === 0) return Promise.resolve();
+    return this.sendToUsers(
+      Role.PROVIDER,
+      unique,
+      reason === 'EXPIRED' ? 'OFFER_EXPIRED' : 'OFFER_CANCELLED',
+      order,
+      reason === 'TAKEN'
+        ? 'งานนี้มีช่างรับแล้ว'
+        : reason === 'EXPIRED'
+          ? 'หมดเวลารับงานนี้แล้ว'
+          : 'งานนี้ถูกยกเลิกแล้ว',
+      `งาน ${order.orderNo} ไม่ต้องตอบรับแล้ว`,
+      { delivery: { kind: 'close', collapseKey: order.id }, webPush: false },
+    );
   }
 
   noMatch(customerId: string, order: OrderRef) {

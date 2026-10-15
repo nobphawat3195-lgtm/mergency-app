@@ -13,6 +13,8 @@ Future<void> main() async {
     final appState = ProviderAppState(
       api: FixGoApiClient(baseUrl: AppConfig.apiBaseUrl),
     );
+    // แจ้งเตือนงานใหม่แบบนาฬิกาปลุก (แอปมือถือ) ต้องลงทะเบียนก่อน runApp
+    await appState.nativeAlerts.init();
     await appState.restoreSession();
     runApp(FixGoProviderApp(appState: appState));
   });

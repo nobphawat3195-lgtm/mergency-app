@@ -5,20 +5,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 import 'offer_alarm.dart';
+import 'offer_alarm_channel.dart';
 
 OfferAlarmBackend createOfferAlarmBackend() => _NativeOfferAlarm();
 
-/// ช่องแจ้งเตือนเสียงดังสำหรับงานใหม่ (Android ตั้งความสำคัญสูงสุด แสดงทับจอ)
-const _channel = AndroidNotificationChannel(
-  'fixgo_offer_alarm',
-  'งานใหม่',
-  description: 'แจ้งเตือนเมื่อมีงานใหม่ใกล้คุณ',
-  importance: Importance.max,
-  audioAttributesUsage: AudioAttributesUsage.alarm,
-);
+const _channel = offerAlarmChannel;
 
 class _NativeOfferAlarm implements OfferAlarmBackend {
   // สร้างตอนใช้ครั้งแรก: เทสต์ที่ไม่มี plugin จะไม่แตะ platform channel
@@ -151,9 +146,10 @@ class _NativeOfferAlarm implements OfferAlarmBackend {
   }
 
   /// แจ้งเตือนในเครื่องตอนแอปยังทำงานอยู่เบื้องหลัง
-  /// (แอปถูกปิดสนิทต้องใช้ push จาก Firebase ซึ่งยังไม่ได้ตั้งค่า)
+  /// ถ้ามี push จาก Firebase แล้ว push แสดงแจ้งเตือนแบบนาฬิกาปลุกให้เอง ไม่ต้องซ้อนอีกอัน
   @override
   Future<void> notify(String title, String body) async {
+    if (PushNotifications.instance.isEnabled) return;
     final plugin = await _plugin();
     await plugin.show(
       7001,
@@ -168,11 +164,13 @@ class _NativeOfferAlarm implements OfferAlarmBackend {
           priority: Priority.max,
           category: AndroidNotificationCategory.alarm,
           audioAttributesUsage: AudioAttributesUsage.alarm,
+          sound: _channel.sound,
           ticker: title,
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,
           presentSound: true,
+          sound: iosOfferSound,
           interruptionLevel: InterruptionLevel.timeSensitive,
         ),
       ),

@@ -8,6 +8,9 @@ import 'package:fixgo_provider/web_alerts.dart';
 import 'package:fixgo_provider/working_hours.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fixgo_provider/native_offer_alerts.dart';
+
+import 'fake_native_alerts.dart';
 
 class _Backend implements OfferAlarmBackend {
   int chimes = 0;
@@ -160,6 +163,7 @@ Future<(ProviderAppState, _Api, _Backend)> _pump(
   bool down = false,
   String? lineAddFriendUrl,
   WebAlertPlatform? webPlatform,
+  FakeNativeAlerts? nativeAlerts,
 }) async {
   tester.view.physicalSize = const Size(800, 3000);
   tester.view.devicePixelRatio = 1;
@@ -173,6 +177,7 @@ Future<(ProviderAppState, _Api, _Backend)> _pump(
     api: api,
     offerAlarm: OfferAlarm(backend),
     webAlertPlatform: webPlatform,
+    nativeAlerts: nativeAlerts ?? FakeNativeAlerts(),
   );
   await tester.pumpWidget(
     ProviderAppScope(
@@ -382,6 +387,69 @@ void main() {
     testWidgets('the mobile app never shows the web card', (tester) async {
       await _pump(tester);
       expect(find.byType(WebAlertCard), findsNothing);
+    });
+  });
+
+  group('system alarm notification', () {
+    testWidgets('"รับงาน" on the notification accepts the job', (tester) async {
+      final alerts = FakeNativeAlerts();
+      final (_, api, _) = await _pump(
+        tester,
+        offers: [_offer('9')],
+        nativeAlerts: alerts,
+      );
+      // เปิดหน้าแล้วหยุดเสียงแจ้งเตือนระบบ ให้เสียงในแอปดังแทน
+      expect(alerts.calls, contains('cancelAll'));
+      alerts.controller.add(
+        const OfferAlertAction(orderId: '9', kind: OfferAlertActionKind.accept),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(api.accepted, ['9']);
+      expect(alerts.calls, contains('cancel:9'));
+    });
+
+    testWidgets('app opened by "รับงาน" while closed accepts on launch',
+        (tester) async {
+      final alerts = FakeNativeAlerts(
+        launch: const OfferAlertAction(
+          orderId: '5',
+          kind: OfferAlertActionKind.accept,
+        ),
+      );
+      final (_, api, _) = await _pump(
+        tester,
+        offers: [_offer('5')],
+        nativeAlerts: alerts,
+      );
+      expect(api.accepted, ['5']);
+    });
+
+    testWidgets('asks to finish alarm setup when something is not allowed',
+        (tester) async {
+      await _pump(
+        tester,
+        nativeAlerts: FakeNativeAlerts(
+          status: const AlarmReadiness(notifications: true, fullScreen: false),
+        ),
+      );
+      expect(find.text('ตั้งค่าให้เตือนงานดังตอนล็อกจอ'), findsOneWidget);
+      await tester.tap(find.text('ไว้ทีหลัง').last);
+      await tester.pump();
+      expect(find.text('ตั้งค่าให้เตือนงานดังตอนล็อกจอ'), findsNothing);
+    });
+
+    testWidgets('no setup card when everything is allowed', (tester) async {
+      await _pump(
+        tester,
+        nativeAlerts: FakeNativeAlerts(
+          status: const AlarmReadiness(
+            notifications: true,
+            fullScreen: true,
+            batteryUnrestricted: true,
+          ),
+        ),
+      );
+      expect(find.text('ตั้งค่าให้เตือนงานดังตอนล็อกจอ'), findsNothing);
     });
   });
 }

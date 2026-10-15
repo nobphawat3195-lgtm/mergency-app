@@ -4,9 +4,13 @@ import 'dart:convert';
 import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/widgets.dart';
 
+import 'native_offer_alerts.dart';
 import 'offer_alarm.dart';
 import 'wake_lock.dart';
 import 'web_alerts.dart';
+
+/// คีย์โทเคนของช่างใน secure storage (แจ้งเตือนเบื้องหลังใช้ส่งปฏิเสธงานด้วย)
+const providerTokenStoreKey = 'fixgo_provider_access_token';
 
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
@@ -21,7 +25,9 @@ class ProviderAppState extends ChangeNotifier {
     OfferAlarm? offerAlarm,
     ScreenWakeLock? wakeLock,
     WebAlertPlatform? webAlertPlatform,
+    NativeOfferAlerts? nativeAlerts,
   })  : offerAlarm = offerAlarm ?? OfferAlarm(),
+        nativeAlerts = nativeAlerts ?? NativeOfferAlerts.create(),
         wakeLock = wakeLock ?? createScreenWakeLock(),
         webAlerts = WebAlerts(webAlertPlatform ?? createWebAlertPlatform());
 
@@ -35,8 +41,11 @@ class ProviderAppState extends ChangeNotifier {
 
   /// Web Push ของเว็บแอปที่ติดตั้งลงหน้าจอหลัก (เด้งเตือนแม้ปิดหน้าเว็บ)
   final WebAlerts webAlerts;
+
+  /// แจ้งเตือนงานใหม่แบบนาฬิกาปลุกของระบบ (แอป Android/iOS)
+  final NativeOfferAlerts nativeAlerts;
   final SecureTokenStore _tokenStore =
-      const SecureTokenStore('fixgo_provider_access_token');
+      const SecureTokenStore(providerTokenStoreKey);
 
   bool _hasProfile = false;
   bool _isOnline = false;
