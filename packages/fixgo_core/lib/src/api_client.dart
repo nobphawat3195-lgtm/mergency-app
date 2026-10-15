@@ -248,6 +248,35 @@ class FixGoApiClient {
     await _send('DELETE', '/account');
   }
 
+  /// Web Push ของเว็บแอปช่าง: เปิดอยู่ไหม และ VAPID public key ที่ใช้สมัคร
+  Future<({bool enabled, String? publicKey})> getWebPushConfig() async {
+    final result =
+        await _send('GET', '/web-push/config') as Map<String, dynamic>;
+    return (
+      enabled: result['enabled'] as bool? ?? false,
+      publicKey: result['publicKey'] as String?,
+    );
+  }
+
+  /// ผูก Web Push subscription ของเบราว์เซอร์นี้กับบัญชีที่ล็อกอินอยู่
+  Future<void> registerWebPush({
+    required String endpoint,
+    required String p256dh,
+    required String auth,
+  }) async {
+    await _send('POST', '/web-push/subscriptions', body: {
+      'endpoint': endpoint,
+      'keys': {'p256dh': p256dh, 'auth': auth},
+    });
+  }
+
+  /// เรียกก่อนล็อกเอาต์ (ส่วนหัว Authorization ยังเป็นของบัญชีเดิม)
+  Future<void> unregisterWebPush(String endpoint) async {
+    await _send('DELETE', '/web-push/subscriptions', body: {
+      'endpoint': endpoint,
+    });
+  }
+
   /// ลงทะเบียนโทเคน push ของเครื่องนี้ให้ผู้ที่ล็อกอินอยู่ (platform: IOS / ANDROID)
   Future<void> registerDevice(String token, String platform) async {
     await _send('POST', '/devices', body: {

@@ -653,3 +653,19 @@ model DeviceToken {
 
   @@index([role, userId])
 }
+
+/// Web Push (VAPID) ของเว็บแอปที่ติดตั้งลงหน้าจอหลัก (Android Chrome, iPhone iOS 16.4+)
+/// endpoint เป็นของเบราว์เซอร์เครื่องนั้น ล็อกอินบัญชีใหม่บนเครื่องเดิมจะย้ายเจ้าของมาเป็นบัญชีล่าสุด
+model WebPushSubscription {
+  id         String   @id @default(uuid())
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  role       Role
+  /// id ของ Customer หรือ Provider ตาม role
+  userId     String
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  @@index([role, userId])
+}

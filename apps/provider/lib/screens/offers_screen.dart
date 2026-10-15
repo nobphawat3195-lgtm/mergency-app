@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:fixgo_core/fixgo_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -9,6 +11,9 @@ import '../app_state.dart';
 import '../chat_image.dart';
 import '../offer_alarm.dart';
 import '../working_hours.dart';
+import '../web_alerts.dart';
+import 'offer_alarm_overlay.dart';
+import 'web_alert_card.dart';
 import 'wallet_debt_card.dart';
 import 'register_screen.dart';
 
@@ -48,6 +53,11 @@ class _OffersScreenState extends State<OffersScreen> {
   String? _lineAddFriendUrl;
   bool _lineCardHidden = false;
 
+  /// เว็บ: ชวนติดตั้งลงหน้าจอหลัก/เปิดการแจ้งเตือน (แอปมือถือเป็น ready เสมอ)
+  WebAlertStatus _webAlertStatus = WebAlertStatus.ready;
+  bool _webAlertCardHidden = false;
+  bool _enablingWebAlerts = false;
+
   /// ค้างค่าบริการจากงานเงินสด แสดงการ์ดในหน้าหลักเฉพาะตอนเกินเพดาน (เปิดรับงานไม่ได้)
   WalletDebt? _debt;
   StreamSubscription<PushEvent>? _pushSub;
@@ -65,6 +75,7 @@ class _OffersScreenState extends State<OffersScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _alarm = ProviderAppScope.of(context).offerAlarm;
+    _webAlertStatus = ProviderAppScope.of(context).webAlerts.status;
     if (_timer != null) return;
     unawaited(_syncOnlineStatus());
     // มีงานใหม่หรือสถานะงานเปลี่ยน: ดึงทันทีไม่ต้องรอรอบ 10 วิ
@@ -97,6 +108,8 @@ class _OffersScreenState extends State<OffersScreen> {
         _closeMinute = profile['closeMinute'] as int?;
         _lineAddFriendUrl = profile['lineAddFriendUrl'] as String?;
       });
+      await state.webAlerts.refresh(state.api);
+      if (mounted) setState(() => _webAlertStatus = state.webAlerts.status);
       final debt = await state.api.getWalletDebt();
       if (mounted) setState(() => _debt = debt);
     } on ApiException {
@@ -126,7 +139,7 @@ class _OffersScreenState extends State<OffersScreen> {
   /// งานใหม่ที่ยังไม่เคยเห็น: ปลุก (เสียงวน + สั่น + การ์ดกระพริบ) และพากลับมาหน้าหลัก
   /// หยุดเมื่อช่างรับ/ปฏิเสธ/กดปิดเสียง หรือทุกงานที่ปลุกอยู่หมดเวลา/หายไปจากรายการ
   void _updateAlarm() {
-    final now = DateTime.now();
+    final now = clock.now();
     final live = {
       for (final offer in _offers)
         if (offer.expiresAt.isAfter(now)) offer.orderId,
@@ -139,6 +152,7 @@ class _OffersScreenState extends State<OffersScreen> {
       final offer = _offers.firstWhere((o) => o.orderId == fresh.first);
       unawaited(
         _alarm.ring(
+          until: offer.expiresAt,
           body: [
             offer.subServiceName ?? offer.categoryName ?? 'งานซ่อมรถ',
             'ห่าง ${offer.distanceKm.toStringAsFixed(1)} กม.',
@@ -310,6 +324,28 @@ class _OffersScreenState extends State<OffersScreen> {
     }
   }
 
+  /// เรียกจากการแตะปุ่มเท่านั้น (เบราว์เซอร์ไม่ให้ขอสิทธิ์แจ้งเตือนตอนเปิดหน้า)
+  Future<void> _enableWebAlerts() async {
+    if (_enablingWebAlerts) return;
+    final state = ProviderAppScope.of(context);
+    setState(() => _enablingWebAlerts = true);
+    final enabled = await state.webAlerts.enable(state.api);
+    if (!mounted) return;
+    setState(() {
+      _enablingWebAlerts = false;
+      _webAlertStatus = state.webAlerts.status;
+    });
+    showResultSnackBar(
+      context,
+      success: enabled
+          ? 'เปิดการแจ้งเตือนแล้ว งานใหม่จะเด้งเตือนแม้ล็อกจอ'
+          : null,
+      error: enabled
+          ? null
+          : ApiException(0, 'ยังเปิดการแจ้งเตือนไม่ได้ ลองอนุญาตการแจ้งเตือนในตั้งค่าแล้วลองใหม่'),
+    );
+  }
+
   Future<void> _openLineAddFriend(String url) async {
     final uri = Uri.tryParse(url);
     final opened =
@@ -419,14 +455,54 @@ class _OffersScreenState extends State<OffersScreen> {
     final isOnline = ProviderAppScope.of(context).isOnline;
     final open = _openMinute;
     final close = _closeMinute;
+    final alarming = _alarmingOffer;
+    return Scaffold(
+      backgroundColor: FixGoColors.surface,
+      body: Stack(
+        children: [
+          Positioned.fill(child: _buildHome(context, isOnline, open, close)),
+          if (alarming != null)
+            Positioned.fill(
+              child: OfferAlarmOverlay(
+                offer: alarming,
+                busy: _respondingOfferId == alarming.orderId,
+                onAccept: () => _accept(alarming),
+                onReject: () => _reject(alarming),
+                onSilence: _silence,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// งานที่กำลังปลุก (หมดเวลาเร็วสุดก่อน) แสดงจอเต็มจนกว่าช่างจะตอบ กดปิดเสียง หรือหมดเวลา
+  JobOffer? get _alarmingOffer {
+    final now = clock.now();
+    final ringing =
+        _offers
+            .where(
+              (offer) =>
+                  _ringingIds.contains(offer.orderId) &&
+                  offer.expiresAt.isAfter(now),
+            )
+            .toList()
+          ..sort((a, b) => a.expiresAt.compareTo(b.expiresAt));
+    return ringing.firstOrNull;
+  }
+
+  Widget _buildHome(
+    BuildContext context,
+    bool isOnline,
+    int? open,
+    int? close,
+  ) {
     final outsideHours =
         isOnline &&
         open != null &&
         close != null &&
         !isWithinWorkingHours(open, close, bangkokMinuteOfDay());
-    return Scaffold(
-      backgroundColor: FixGoColors.surface,
-      body: RefreshIndicator(
+    return RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
           padding: const EdgeInsets.only(bottom: FixGoSpacing.xl),
@@ -469,6 +545,22 @@ class _OffersScreenState extends State<OffersScreen> {
                       ),
                       const SizedBox(height: FixGoSpacing.md),
                     ],
+                    if (_webAlertStatus != WebAlertStatus.ready &&
+                        !_webAlertCardHidden) ...[
+                      WebAlertCard(
+                        status: _webAlertStatus,
+                        isIos: ProviderAppScope.of(
+                          context,
+                        ).webAlerts.platform.isIos,
+                        canAskPermission: ProviderAppScope.of(
+                          context,
+                        ).webAlerts.canAskPermission,
+                        busy: _enablingWebAlerts,
+                        onEnable: _enableWebAlerts,
+                        onHide: () => setState(() => _webAlertCardHidden = true),
+                      ),
+                      const SizedBox(height: FixGoSpacing.md),
+                    ],
                     if (outsideHours) ...[
                       _OutsideHoursCard(
                         hours: workingHoursLabel(open, close),
@@ -485,6 +577,11 @@ class _OffersScreenState extends State<OffersScreen> {
                         onChanged: () => unawaited(_syncOnlineStatus()),
                       ),
                       const SizedBox(height: FixGoSpacing.md),
+                    ],
+                    // เว็บเตือนได้เฉพาะตอนหน้านี้เปิดอยู่ (จอเปิดค้างให้อัตโนมัติเมื่อเบราว์เซอร์รองรับ)
+                    if (kIsWeb && isOnline) ...[
+                      const _KeepScreenOnHint(),
+                      const SizedBox(height: FixGoSpacing.sm),
                     ],
                     _SectionCard(
                       icon: Icons.location_on,
@@ -526,8 +623,6 @@ class _OffersScreenState extends State<OffersScreen> {
                             )
                           : Column(
                               children: [
-                                if (_ringingIds.isNotEmpty)
-                                  _RingingBanner(onSilence: _silence),
                                 for (final (index, offer)
                                     in _offers.indexed) ...[
                                   if (index > 0) const Divider(height: 32),
@@ -600,7 +695,6 @@ class _OffersScreenState extends State<OffersScreen> {
             ),
           ],
         ),
-      ),
     );
   }
 }
@@ -1587,32 +1681,26 @@ class _OutsideHoursCard extends StatelessWidget {
 }
 
 /// แถบบนรายการงานตอนกำลังปลุก: ปิดเสียงได้โดยไม่ต้องรับ/ปฏิเสธทันที
-class _RingingBanner extends StatelessWidget {
-  const _RingingBanner({required this.onSilence});
-
-  final VoidCallback onSilence;
+class _KeepScreenOnHint extends StatelessWidget {
+  const _KeepScreenOnHint();
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: FixGoSpacing.sm),
-      child: Row(
-        children: [
-          const Icon(Icons.notifications_active, color: FixGoColors.error),
-          const SizedBox(width: FixGoSpacing.xs),
-          const Expanded(
-            child: Text(
-              'งานใหม่! กดรับหรือปฏิเสธก่อนหมดเวลา',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
+    return const Row(
+      children: [
+        Icon(
+          Icons.screen_lock_portrait_outlined,
+          size: 18,
+          color: FixGoColors.textSecondary,
+        ),
+        SizedBox(width: FixGoSpacing.xs),
+        Expanded(
+          child: Text(
+            'เปิดจอค้างไว้เพื่อรับงานได้ทันที',
+            style: TextStyle(fontSize: 13, color: FixGoColors.textSecondary),
           ),
-          TextButton.icon(
-            onPressed: onSilence,
-            icon: const Icon(Icons.volume_off, size: 18),
-            label: const Text('ปิดเสียง'),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

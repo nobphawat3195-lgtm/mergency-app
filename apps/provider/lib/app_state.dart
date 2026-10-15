@@ -5,6 +5,8 @@ import 'package:fixgo_core/fixgo_core.dart';
 import 'package:flutter/widgets.dart';
 
 import 'offer_alarm.dart';
+import 'wake_lock.dart';
+import 'web_alerts.dart';
 
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
@@ -14,13 +16,25 @@ abstract final class AppConfig {
 }
 
 class ProviderAppState extends ChangeNotifier {
-  ProviderAppState({required this.api, OfferAlarm? offerAlarm})
-      : offerAlarm = offerAlarm ?? OfferAlarm();
+  ProviderAppState({
+    required this.api,
+    OfferAlarm? offerAlarm,
+    ScreenWakeLock? wakeLock,
+    WebAlertPlatform? webAlertPlatform,
+  })  : offerAlarm = offerAlarm ?? OfferAlarm(),
+        wakeLock = wakeLock ?? createScreenWakeLock(),
+        webAlerts = WebAlerts(webAlertPlatform ?? createWebAlertPlatform());
 
   final FixGoApiClient api;
 
   /// เสียงปลุกตอนมีงานใหม่ ใช้ร่วมกันทั้งหน้าหลักและปุ่มทดสอบในโปรไฟล์
   final OfferAlarm offerAlarm;
+
+  /// เว็บ: จอเปิดค้างตลอดที่ช่างเปิด "พร้อมรับงาน" งานเข้าจะเห็นและได้ยินทันที
+  final ScreenWakeLock wakeLock;
+
+  /// Web Push ของเว็บแอปที่ติดตั้งลงหน้าจอหลัก (เด้งเตือนแม้ปิดหน้าเว็บ)
+  final WebAlerts webAlerts;
   final SecureTokenStore _tokenStore =
       const SecureTokenStore('fixgo_provider_access_token');
 
@@ -175,10 +189,18 @@ class ProviderAppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
+  void notifyListeners() {
+    // ทุกที่ที่สถานะออนไลน์/ล็อกอินเปลี่ยนจะแจ้งผ่านตรงนี้ จึงคุม wake lock ที่เดียว
+    wakeLock.setEnabled(isSignedIn && _isOnline);
+    super.notifyListeners();
+  }
+
   void signOut() {
     unawaited(offerAlarm.stop());
     // ต้องถอนโทเคน push ก่อนล้าง accessToken
     unawaited(PushNotifications.instance.detach(api));
+    unawaited(webAlerts.detach(api));
     api.accessToken = null;
     _hasProfile = false;
     _isOnline = false;

@@ -743,6 +743,17 @@ async function main() {
     // กลับเป็นตลอดเวลา
     await request('PATCH', '/providers/me/hours', mechanic, { openMinute: 0, closeMinute: 1439 }, 200);
   });
+  await check('Web Push is off by default and only mechanics can subscribe', async () => {
+    const config = (await request('GET', '/web-push/config', mechanic, undefined, 200)).body;
+    assert.deepEqual(config, { enabled: false, publicKey: null });
+    const subscription = { endpoint: 'https://push.example/abc', keys: { p256dh: 'p', auth: 'a' } };
+    await request('POST', '/web-push/subscriptions', mechanic, subscription, 204);
+    // ปิดอยู่จึงไม่เก็บ
+    assert.equal(await prisma.webPushSubscription.count(), 0);
+    await request('POST', '/web-push/subscriptions', customer, subscription, 403);
+    await request('POST', '/web-push/subscriptions', mechanic, { endpoint: 'http://insecure.example', keys: { p256dh: 'p', auth: 'a' } }, 400);
+    await request('DELETE', '/web-push/subscriptions', mechanic, { endpoint: subscription.endpoint }, 204);
+  });
   await check('A stale pending LINE session switches to the account registered elsewhere', async () => {
     const stale = pendingLineToken('Usmoke-refresh');
     await request('POST', '/auth/line/refresh', stale, undefined, 404);

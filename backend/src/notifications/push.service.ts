@@ -6,6 +6,7 @@ import { formatBaht } from '../common/money';
 import { PUSH_SENDER, PushMessage, PushSender } from './push-sender';
 import { OrderEventsService } from './order-events.service';
 import { ProviderLineService } from './provider-line.service';
+import { WebPushService } from './web-push.service';
 
 /** ประเภทแจ้งเตือน แอปใช้ตัดสินว่ากดแล้วเปิดหน้าไหน */
 export type PushType =
@@ -52,6 +53,7 @@ export class PushService {
     @Inject(PUSH_SENDER) private readonly sender: PushSender,
     private readonly events: OrderEventsService,
     @Optional() private readonly line?: ProviderLineService,
+    @Optional() private readonly webPush?: WebPushService,
   ) {}
 
   async registerDevice(
@@ -146,10 +148,18 @@ export class PushService {
     order: OrderRef,
     title: string,
     body: string,
+    ttlSeconds?: number,
   ): Promise<void> {
     // หน้าติดตามงานที่เปิดอยู่ (SSE) ดึงข้อมูลใหม่ทันที แม้ผู้ใช้จะไม่มีโทเคน push
     this.events.emit(order.id, type);
     if (userIds.length === 0) return;
+    // เว็บแอปที่ติดตั้งลงหน้าจอหลัก (ไม่รอ ไม่ทำให้ FCM ล้ม)
+    void this.webPush?.send(
+      role,
+      userIds,
+      { title, body, type, orderId: order.id, orderNo: order.orderNo },
+      { ttlSeconds, urgent: type === 'OFFER' },
+    );
     try {
       const devices = await this.prisma.deviceToken.findMany({
         where: { role, userId: { in: userIds } },
@@ -239,6 +249,8 @@ export class PushService {
           order,
           'มีงานใหม่ใกล้คุณ',
           `${order.serviceName} · ห่าง ${provider.distanceKm.toFixed(1)} กม. กดรับภายใน ${timeoutSeconds} วินาที`,
+          // งานหมดเวลาแล้วไม่ต้องส่งถึงเครื่องที่เพิ่งกลับมาออนไลน์
+          timeoutSeconds,
         ),
       ),
     ).then(() => undefined);

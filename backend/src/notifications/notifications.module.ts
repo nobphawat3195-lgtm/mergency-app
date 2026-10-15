@@ -6,6 +6,8 @@ import { OrderEventsService } from './order-events.service';
 import { createPushSender, PUSH_SENDER } from './push-sender';
 import { ProviderLineService } from './provider-line.service';
 import { PushService } from './push.service';
+import { WebPushController } from './web-push.controller';
+import { WebPushService } from './web-push.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from './sms.service';
 
@@ -22,14 +24,20 @@ import { SmsService } from './sms.service';
       useFactory: (prisma: PrismaService) => new ProviderLineService(prisma),
       inject: [PrismaService],
     },
+    {
+      provide: WebPushService,
+      useFactory: (prisma: PrismaService) => new WebPushService(prisma),
+      inject: [PrismaService],
+    },
   ],
-  controllers: [DevicesController],
+  controllers: [DevicesController, WebPushController],
   exports: [
     SmsService,
     PushService,
     AdminAlertService,
     OrderEventsService,
     ProviderLineService,
+    WebPushService,
   ],
 })
 export class NotificationsModule {}

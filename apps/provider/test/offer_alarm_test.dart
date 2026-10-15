@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:fixgo_provider/offer_alarm.dart';
 import 'package:flutter/services.dart';
@@ -49,7 +50,7 @@ class FakeAlarmBackend implements OfferAlarmBackend {
 const _speak = 'speak:$offerVoiceText';
 
 void main() {
-  test('each cycle plays the chime then the Thai voice, every 4 seconds', () {
+  test('chimes every 4 seconds and speaks the Thai voice every 3rd round', () {
     fakeAsync((async) {
       final backend = FakeAlarmBackend();
       final alarm = OfferAlarm(backend);
@@ -64,17 +65,62 @@ void main() {
       async.elapse(const Duration(milliseconds: 200));
       expect(backend.sounds, ['chime', _speak]);
 
-      // รอบใหม่เริ่มที่ 4 วิ
-      async.elapse(const Duration(milliseconds: 2300));
-      expect(backend.sounds, ['chime', _speak]);
-      async.elapse(const Duration(milliseconds: 200));
+      // รอบ 2 และ 3 (4 วิ, 8 วิ) ดังแค่เสียงปลุก
+      async.elapse(const Duration(milliseconds: 2500));
       expect(backend.sounds, ['chime', _speak, 'chime']);
-
       async.elapse(const Duration(seconds: 4));
-      expect(backend.sounds, ['chime', _speak, 'chime', _speak, 'chime']);
+      expect(backend.sounds, ['chime', _speak, 'chime', 'chime']);
+
+      // รอบ 4 (12 วิ) พูดอีกครั้ง
+      async.elapse(const Duration(seconds: 4));
+      async.elapse(const Duration(milliseconds: 1600));
+      expect(
+        backend.sounds,
+        ['chime', _speak, 'chime', 'chime', 'chime', _speak],
+      );
       expect(alarm.isRinging, true);
-      expect(backend.calls.where((c) => c == 'vibrate').length, 6);
       alarm.stop();
+    });
+  });
+
+  test('never rings past the offer expiry, even if nobody calls stop', () {
+    fakeAsync((async) {
+      final backend = FakeAlarmBackend();
+      final alarm = OfferAlarm(backend);
+      alarm.ring(until: clock.now().add(const Duration(seconds: 10)));
+      async.elapse(const Duration(seconds: 9));
+      expect(alarm.isRinging, true);
+      async.elapse(const Duration(seconds: 2));
+      expect(alarm.isRinging, false);
+      expect(backend.calls.last, 'stop');
+      final before = backend.sounds.length;
+      async.elapse(const Duration(seconds: 20));
+      expect(backend.sounds.length, before);
+      expect(async.pendingTimers, isEmpty);
+    });
+  });
+
+  test('a second offer extends the alarm to its own expiry', () {
+    fakeAsync((async) {
+      final backend = FakeAlarmBackend();
+      final alarm = OfferAlarm(backend);
+      alarm.ring(until: clock.now().add(const Duration(seconds: 5)));
+      alarm.ring(until: clock.now().add(const Duration(seconds: 20)));
+      async.elapse(const Duration(seconds: 10));
+      expect(alarm.isRinging, true);
+      async.elapse(const Duration(seconds: 11));
+      expect(alarm.isRinging, false);
+    });
+  });
+
+  test('an offer that already expired does not ring at all', () {
+    fakeAsync((async) {
+      final backend = FakeAlarmBackend();
+      final alarm = OfferAlarm(backend);
+      alarm.ring(until: clock.now().subtract(const Duration(seconds: 1)));
+      async.elapse(const Duration(seconds: 5));
+      expect(alarm.isRinging, false);
+      expect(backend.sounds, isEmpty);
     });
   });
 
