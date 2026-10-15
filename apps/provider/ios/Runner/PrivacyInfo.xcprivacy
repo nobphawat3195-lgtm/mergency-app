@@ -4,6 +4,8 @@
   Privacy manifest ของแอป (Apple บังคับตั้งแต่ปี 2024) ต้องตรงกับหน้า App Privacy ใน App Store Connect
   และนโยบายที่ /api/legal/privacy: ไม่มีการติดตามข้ามแอป ข้อมูลใช้เพื่อให้บริการเท่านั้น
   API ที่ต้องระบุเหตุผล (required reason API) ประกาศไว้ใน manifest ของ Flutter และแต่ละ plugin แล้ว
+  (เช่น UserDefaults ที่ Firebase/Sentry ใช้) โค้ดของแอปเองไม่ได้ใช้ UserDefaults หรือ shared_preferences
+  (โทเคนเก็บใน Keychain ผ่าน flutter_secure_storage) จึงไม่ต้องประกาศ CA92.1 ที่นี่
 -->
 <plist version="1.0">
 <dict>
@@ -100,6 +102,44 @@
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeOtherFinancialInfo</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- Sentry: crash/app hang ไม่ส่งข้อมูลส่วนตัว (sendDefaultPii=false) จึงไม่ผูกกับตัวผู้ใช้ -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCrashData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePerformanceData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- push token ของ FCM เก็บในตาราง DeviceToken คู่กับ userId จึงผูกกับตัวผู้ใช้ -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
