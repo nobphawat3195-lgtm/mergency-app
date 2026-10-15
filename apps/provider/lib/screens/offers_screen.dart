@@ -12,6 +12,8 @@ import '../chat_image.dart';
 import '../offer_alarm.dart';
 import '../working_hours.dart';
 import '../web_alerts.dart';
+import '../native_offer_alerts.dart';
+import 'alarm_settings_screen.dart';
 import 'offer_alarm_overlay.dart';
 import 'web_alert_card.dart';
 import 'wallet_debt_card.dart';
@@ -31,7 +33,8 @@ class OffersScreen extends StatefulWidget {
   State<OffersScreen> createState() => _OffersScreenState();
 }
 
-class _OffersScreenState extends State<OffersScreen> {
+class _OffersScreenState extends State<OffersScreen>
+    with WidgetsBindingObserver {
   List<JobOffer> _offers = const [];
   bool _loading = true;
   Object? _error;
@@ -91,6 +94,56 @@ class _OffersScreenState extends State<OffersScreen> {
     _timer = Timer.periodic(const Duration(seconds: 10), (_) {
       unawaited(_refresh());
     });
+    // แอปมือถือ: ปุ่มบนแจ้งเตือนงานใหม่ และแจ้งเตือนที่ทำให้แอปเปิดขึ้นมา
+    final nativeAlerts = ProviderAppScope.of(context).nativeAlerts;
+    _nativeAlerts = nativeAlerts;
+    _alertSub = nativeAlerts.actions.listen(_onAlertAction);
+    final launch = nativeAlerts.takeLaunchAction();
+    if (launch != null) _onAlertAction(launch);
+    // เปิดแอปอยู่แล้ว: เสียงปลุกในแอปทำงานแทน หยุดเสียงของแจ้งเตือนระบบ
+    unawaited(nativeAlerts.cancelAll());
+    unawaited(_checkAlarmSetup());
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  late NativeOfferAlerts _nativeAlerts;
+  StreamSubscription<OfferAlertAction>? _alertSub;
+
+  /// แอป Android ยังไม่ได้อนุญาตสิ่งที่ทำให้แจ้งเตือนงานดังตอนล็อกจอ
+  bool _alarmSetupNeeded = false;
+  bool _alarmSetupHidden = false;
+
+  Future<void> _checkAlarmSetup() async {
+    final readiness = await _nativeAlerts.readiness();
+    if (mounted) setState(() => _alarmSetupNeeded = readiness.needsAttention);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(_nativeAlerts.cancelAll());
+    unawaited(_checkAlarmSetup());
+    unawaited(_refresh());
+  }
+
+  void _onAlertAction(OfferAlertAction action) {
+    widget.onOpenTab?.call(0);
+    unawaited(_nativeAlerts.cancel(action.orderId));
+    switch (action.kind) {
+      case OfferAlertActionKind.accept:
+        unawaited(_acceptOrder(action.orderId));
+      case OfferAlertActionKind.reject:
+        unawaited(_rejectOrder(action.orderId));
+      case OfferAlertActionKind.open:
+        unawaited(_refresh());
+    }
+  }
+
+  Future<void> _openAlarmSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const AlarmSettingsScreen()),
+    );
+    if (mounted) unawaited(_checkAlarmSetup());
   }
 
   /// หลังล็อกอินใหม่ สถานะในแอปเริ่มที่ออฟไลน์ ต้องอ่านค่าจริงจาก backend ก่อน
@@ -125,6 +178,8 @@ class _OffersScreenState extends State<OffersScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _alertSub?.cancel();
     _timer?.cancel();
     _expiryTimer?.cancel();
     _positionSub?.cancel();
@@ -412,12 +467,17 @@ class _OffersScreenState extends State<OffersScreen> {
     }
   }
 
-  Future<void> _accept(JobOffer offer) async {
+  Future<void> _accept(JobOffer offer) => _acceptOrder(offer.orderId);
+
+  Future<void> _reject(JobOffer offer) => _rejectOrder(offer.orderId);
+
+  /// รับงานด้วยรหัสงาน (จากการ์ด จอปลุก หรือปุ่ม "รับงาน" บนแจ้งเตือนของระบบ)
+  Future<void> _acceptOrder(String orderId) async {
     if (_respondingOfferId != null) return;
-    _silence(offer.orderId);
-    setState(() => _respondingOfferId = offer.orderId);
+    _silence(orderId);
+    setState(() => _respondingOfferId = orderId);
     try {
-      await ProviderAppScope.of(context).api.acceptOffer(offer.orderId);
+      await ProviderAppScope.of(context).api.acceptOffer(orderId);
       if (!mounted) return;
       ProviderAppScope.of(context).notifyJobsChanged();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -433,12 +493,12 @@ class _OffersScreenState extends State<OffersScreen> {
     }
   }
 
-  Future<void> _reject(JobOffer offer) async {
+  Future<void> _rejectOrder(String orderId) async {
     if (_respondingOfferId != null) return;
-    _silence(offer.orderId);
-    setState(() => _respondingOfferId = offer.orderId);
+    _silence(orderId);
+    setState(() => _respondingOfferId = orderId);
     try {
-      await ProviderAppScope.of(context).api.rejectOffer(offer.orderId);
+      await ProviderAppScope.of(context).api.rejectOffer(orderId);
       await _refresh();
       if (!mounted) return;
       showResultSnackBar(context, success: 'ปฏิเสธงานแล้ว');
@@ -542,6 +602,13 @@ class _OffersScreenState extends State<OffersScreen> {
                       _LineAlertsCard(
                         onAdd: () => _openLineAddFriend(_lineAddFriendUrl!),
                         onHide: () => setState(() => _lineCardHidden = true),
+                      ),
+                      const SizedBox(height: FixGoSpacing.md),
+                    ],
+                    if (_alarmSetupNeeded && !_alarmSetupHidden) ...[
+                      _AlarmSetupCard(
+                        onOpen: _openAlarmSettings,
+                        onHide: () => setState(() => _alarmSetupHidden = true),
                       ),
                       const SizedBox(height: FixGoSpacing.md),
                     ],
@@ -1681,6 +1748,64 @@ class _OutsideHoursCard extends StatelessWidget {
 }
 
 /// แถบบนรายการงานตอนกำลังปลุก: ปิดเสียงได้โดยไม่ต้องรับ/ปฏิเสธทันที
+/// แอป Android: ยังไม่ได้อนุญาตแจ้งเตือน/เต็มจอ/ไม่ประหยัดแบต งานเข้าตอนล็อกจออาจไม่ดัง
+class _AlarmSetupCard extends StatelessWidget {
+  const _AlarmSetupCard({required this.onOpen, required this.onHide});
+
+  final VoidCallback onOpen;
+  final VoidCallback onHide;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(FixGoSpacing.md),
+      decoration: BoxDecoration(
+        color: FixGoColors.warning.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(FixGoRadius.lg),
+        border: Border.all(color: FixGoColors.warning, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.alarm_off, color: FixGoColors.warning),
+              SizedBox(width: FixGoSpacing.sm),
+              Expanded(
+                child: Text(
+                  'ตั้งค่าให้เตือนงานดังตอนล็อกจอ',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: FixGoColors.navy,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'ยังมีสิทธิ์ที่ต้องอนุญาต ไม่อย่างนั้นงานเข้าตอนล็อกจออาจไม่ดังหรือไม่เด้งเต็มจอ',
+            style: TextStyle(fontSize: 13, color: FixGoColors.textSecondary),
+          ),
+          const SizedBox(height: FixGoSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  onPressed: onOpen,
+                  child: const Text('ตั้งค่าตอนนี้'),
+                ),
+              ),
+              const SizedBox(width: FixGoSpacing.sm),
+              TextButton(onPressed: onHide, child: const Text('ไว้ทีหลัง')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _KeepScreenOnHint extends StatelessWidget {
   const _KeepScreenOnHint();
 

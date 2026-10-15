@@ -2,6 +2,8 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Android 13+: ต้องขอสิทธิ์ก่อนแสดงแจ้งเตือน (แอปขอผ่าน firebase_messaging.requestPermission) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- งานใหม่เด้งเต็มจอบนจอล็อกเหมือนนาฬิกาปลุก (Android 14+ ช่างเปิดสิทธิ์เองในหน้าตั้งค่าเสียงเตือนงาน) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
@@ -34,6 +36,10 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- ปุ่ม "รับงาน"/"ปฏิเสธ" บนแจ้งเตือนงานใหม่ (flutter_local_notifications) -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
         <!-- LINE Login ในแอป: Custom Tabs พากลับ fixgofixer://auth/line?line_ticket=... (flutter_web_auth_2) -->
         <activity
             android:name="com.linusu.flutter_web_auth_2.CallbackActivity"

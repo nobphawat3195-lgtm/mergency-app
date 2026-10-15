@@ -18,6 +18,8 @@ dependencies:
   url_launcher: ^6.3.1
   audioplayers: ^6.5.0
   flutter_local_notifications: ^19.5.0
+  # รับ push งานใหม่ตอนแอปถูกปิด (background handler) แสดงแจ้งเตือนนาฬิกาปลุกเอง
+  firebase_messaging: ^16.7.0
   web: ^1.1.1
   # เวลาปัจจุบันที่เทสต์ควบคุมได้ (fake_async) ใช้ตัดเสียงปลุกตอนงานหมดเวลา
   clock: ^1.1.1

@@ -10,6 +10,7 @@ import 'jobs_screen.dart';
 import 'offers_screen.dart';
 import 'payout_info_form.dart';
 import 'wallet_screen.dart';
+import 'alarm_settings_screen.dart';
 
 class ProviderShellScreen extends StatefulWidget {
   const ProviderShellScreen({super.key});
@@ -277,6 +278,19 @@ class _ProviderProfileTabState extends State<_ProviderProfileTab> {
                 subtitle:
                     const Text('เสียงปลุกและเสียงพูดที่ดังตอนมีงานใหม่เข้ามา'),
                 onTap: _testAlarm,
+              ),
+              ListTile(
+                leading: const Icon(Icons.alarm_on_outlined),
+                title: const Text('ตั้งค่าเสียงเตือนงาน'),
+                subtitle: const Text(
+                  'อนุญาตแจ้งเตือน เต็มจอ แบตเตอรี่ และทดสอบตอนล็อกจอ',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AlarmSettingsScreen(),
+                  ),
+                ),
               ),
               const Divider(),
               AccountSettingsTiles(
