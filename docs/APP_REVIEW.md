@@ -53,20 +53,25 @@ LEGAL_UPDATED_AT="..."
 
 ## 4. App Privacy (หน้า "App Privacy" ใน App Store Connect)
 
-ต้องตรงกับ `ios/Runner/PrivacyInfo.xcprivacy` ของแต่ละแอป: ไม่มี tracking ทุกข้อใช้เพื่อ App Functionality และผูกกับตัวผู้ใช้
+ต้องตรงกับ `ios/Runner/PrivacyInfo.xcprivacy` ของแต่ละแอป: ไม่มี tracking (Used for Tracking = No ทุกข้อ) ทุกข้อใช้เพื่อ App Functionality
 
-| ข้อมูล | FixGo | FixGo Fixer |
-|---|:-:|:-:|
-| Phone Number | ✓ | ✓ |
-| Precise Location | ✓ | ✓ |
-| Photos (รูปอาการรถ รูปในแชท รูปรถหลังซ่อม/ใบเสร็จตอนปิดงาน สลิป รูปเครื่องมือของช่าง) | ✓ | ✓ |
-| Other User Content (ข้อความแชทระหว่างลูกค้ากับช่าง หมายเหตุ ความเห็นหลังรับบริการ แบบสอบถาม) | ✓ | ✓ |
-| Purchase History (ประวัติงานและการชำระ) | ✓ | ✓ |
-| User ID | ✓ | ✓ |
-| Crash Data (Sentry: stack trace และรุ่นอุปกรณ์ ไม่มีข้อมูลผู้ใช้ ใช้แก้บั๊ก, App Functionality, ไม่ผูกกับตัวตน) | ✓ | ✓ |
-| Device ID (push token ของ FCM ใช้ส่งแจ้งเตือนสถานะงาน, App Functionality, ไม่ใช้ติดตาม) | ✓ | ✓ |
-| Name (ช่าง: ชื่อจริง / ลูกค้า: ชื่อที่แสดงใน LINE เมื่อเข้าสู่ระบบด้วย LINE) | ✓ | ✓ |
-| Other Financial Info (บัญชีรับเงิน) | | ✓ |
+| ข้อมูล | FixGo | FixGo Fixer | Linked to User |
+|---|:-:|:-:|:-:|
+| Name (ช่าง: ชื่อจริง / ลูกค้า: ชื่อที่แสดงใน LINE เมื่อเข้าสู่ระบบด้วย LINE) | ✓ | ✓ | Yes |
+| Phone Number | ✓ | ✓ | Yes |
+| Precise Location | ✓ | ✓ | Yes |
+| Photos or Videos (รูปอาการรถ รูปในแชท รูปรถหลังซ่อม/ใบเสร็จตอนปิดงาน สลิป รูปเครื่องมือของช่าง) | ✓ | ✓ | Yes |
+| Other User Content (ข้อความแชทระหว่างลูกค้ากับช่าง หมายเหตุ ความเห็นหลังรับบริการ แบบสอบถาม) | ✓ | ✓ | Yes |
+| Purchase History (ประวัติงานและการชำระ) | ✓ | ✓ | Yes |
+| User ID | ✓ | ✓ | Yes |
+| Other Financial Info (บัญชีรับเงิน) | | ✓ | Yes |
+| Device ID (push token ของ FCM ใช้ส่งแจ้งเตือนสถานะงาน เก็บคู่กับบัญชีในตาราง `DeviceToken`) | ✓ | ✓ | Yes |
+| Crash Data (Sentry: stack trace และรุ่นอุปกรณ์ ไม่ส่งข้อมูลส่วนตัว `sendDefaultPii=false`) | ✓ | ✓ | No |
+| Performance Data (Sentry: app hang/ความช้าของแอป ไม่ส่งข้อมูลส่วนตัว) | ✓ | ✓ | No |
+
+ใน App Store Connect ให้เลือกตรงตามตารางนี้ทุกข้อ: Purpose = App Functionality, Linked to User ตามคอลัมน์ขวา, Used for Tracking = No
+
+`NSPrivacyAccessedAPITypes` ของแอปว่างไว้: โค้ดของแอปไม่ได้ใช้ UserDefaults/shared_preferences (โทเคนอยู่ใน Keychain) ส่วน API ที่ต้องระบุเหตุผลซึ่ง Flutter, Firebase, Sentry และ plugin อื่นใช้ ประกาศไว้ใน manifest ของแต่ละตัวแล้ว
 
 แชทกับรูปในแชทและรูปปิดงานอยู่ในหมวด Photos และ Other User Content เดิม (ใน `PrivacyInfo.xcprivacy` ประกาศ `PhotosorVideos` และ `OtherUserContent` ไว้แล้วทั้งสองแอป ไม่ต้องเพิ่มประเภทใหม่)
 ทีมงานเปิดอ่านแชทได้จากหน้าแอดมินเพื่อตรวจสอบเรื่องร้องเรียน ทุกครั้งที่เปิดจะบันทึกใน audit log (`ORDER_CHAT_READ`)
