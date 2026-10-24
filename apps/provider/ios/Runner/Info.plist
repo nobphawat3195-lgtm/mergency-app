@@ -28,6 +28,9 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<!-- ใช้เข้ารหัสแค่ HTTPS/TLS มาตรฐานของ iOS จึงได้รับยกเว้น export compliance: ไม่ต้องตอบคำถามทุกครั้งที่อัปโหลด build -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>

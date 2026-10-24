@@ -69,6 +69,22 @@ keytool -genkey -v -keystore fixgo-customer-upload.jks -keyalg RSA -keysize 2048
    ครั้งแรกให้เปิด `ios/Runner.xcworkspace` ใน Xcode แล้วเลือก Team ที่ Signing & Capabilities (Automatic signing)
 4. อัปโหลด `build/ios/ipa/*.ipa` ผ่านแอป **Transporter** หรือ `xcrun altool` แล้วเพิ่มผู้ทดสอบใน TestFlight
 
+### ส่ง TestFlight จาก GitHub Actions (ไม่ต้องใช้ Mac)
+
+Workflow `iOS TestFlight` (`.github/workflows/ios-testflight.yml`) กดรันเองที่ Actions > iOS TestFlight > Run workflow เลือกแอปและใส่เลข build
+Firebase ฝั่ง iOS ตั้งผ่าน `--dart-define` ไม่ต้องใช้ไฟล์ `GoogleService-Info.plist` แต่ต้องอัปโหลด **APNs Auth Key (.p8)** ที่ Firebase > Project settings > Cloud Messaging ไม่งั้น push ไม่ทำงานบน iPhone
+
+| ชนิด | ชื่อ | ค่า |
+|---|---|---|
+| Variable | `IOS_TEAM_ID` | Team ID 10 ตัวอักษรจาก Apple Developer > Membership |
+| Variable | `FIREBASE_CUSTOMER_IOS_APP_ID`, `FIREBASE_PROVIDER_IOS_APP_ID` | App ID ของแอป iOS แต่ละตัวใน Firebase (`1:...:ios:...`) |
+| Secret | `IOS_DISTRIBUTION_CERT_BASE64`, `IOS_DISTRIBUTION_CERT_PASSWORD` | ใบรับรอง Apple Distribution (.p12) แปลงด้วย `base64 -i cert.p12` |
+| Secret | `IOS_CUSTOMER_PROFILE_BASE64`, `IOS_PROVIDER_PROFILE_BASE64` | Provisioning profile แบบ App Store ของแต่ละ Bundle ID (`base64 -i x.mobileprovision`) |
+| Secret | `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_KEY_BASE64` | App Store Connect API key (Users and Access > Integrations) และไฟล์ `.p8` แบบ base64 |
+
+ตัวแปร `API_BASE_URL`, `FIREBASE_PROJECT_ID`, `FIREBASE_SENDER_ID`, `FIREBASE_API_KEY`, `SENTRY_*_DSN` ใช้ชุดเดียวกับ Android
+Profile ของแอปช่างต้องเปิด Push Notifications และ Time Sensitive Notifications ใน App ID
+
 เลข build ต้องเพิ่มขึ้นทุกครั้งที่อัปโหลด ใช้ `--build-number=<เลข>` หรือแก้ `version:` ใน `pubspec.yaml`
 
 ## ก่อนส่งรีวิว

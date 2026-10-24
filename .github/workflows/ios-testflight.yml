@@ -1,0 +1,122 @@
+name: iOS TestFlight
+
+# สร้าง .ipa แบบเซ็นแล้วและอัปโหลดเข้า TestFlight (กดรันเองเท่านั้น เพื่อไม่เปลืองนาที macOS)
+# ต้องตั้ง Secrets/Variables ก่อน ดูหัวข้อ "iOS: เซ็นและส่ง TestFlight" ใน docs/BUILD.md
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'แอปที่จะส่ง'
+        type: choice
+        options: [customer, provider]
+        required: true
+      build_number:
+        description: 'เลข build (ต้องมากกว่าที่เคยอัปโหลดของแอปนี้)'
+        required: true
+
+jobs:
+  testflight:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/${{ inputs.app }}
+    env:
+      APP: ${{ inputs.app }}
+      BUILD_NUMBER: ${{ inputs.build_number }}
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      FIREBASE_SENDER_ID: ${{ vars.FIREBASE_SENDER_ID }}
+      FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+      FIREBASE_CUSTOMER_IOS_APP_ID: ${{ vars.FIREBASE_CUSTOMER_IOS_APP_ID }}
+      FIREBASE_PROVIDER_IOS_APP_ID: ${{ vars.FIREBASE_PROVIDER_IOS_APP_ID }}
+      SENTRY_CUSTOMER_DSN: ${{ vars.SENTRY_CUSTOMER_DSN }}
+      SENTRY_PROVIDER_DSN: ${{ vars.SENTRY_PROVIDER_DSN }}
+      IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+      IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+      IOS_CUSTOMER_PROFILE_BASE64: ${{ secrets.IOS_CUSTOMER_PROFILE_BASE64 }}
+      IOS_PROVIDER_PROFILE_BASE64: ${{ secrets.IOS_PROVIDER_PROFILE_BASE64 }}
+      ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      ASC_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Check required settings
+        run: |
+          missing=0
+          for v in API_BASE_URL IOS_TEAM_ID IOS_CERTIFICATE_BASE64 IOS_CERTIFICATE_PASSWORD \
+                   ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_BASE64; do
+            if [ -z "${!v//[[:space:]]/}" ]; then echo "::error::missing $v"; missing=1; fi
+          done
+          profile_var="IOS_$(echo "$APP" | tr a-z A-Z)_PROFILE_BASE64"
+          if [ -z "${!profile_var//[[:space:]]/}" ]; then echo "::error::missing $profile_var"; missing=1; fi
+          [ "$missing" = 0 ] || exit 1
+          case "$(echo "$API_BASE_URL" | tr -d '[:space:]')" in https://*) ;; *) echo "::error::API_BASE_URL must start with https://"; exit 1;; esac
+
+      - name: Install signing certificate and provisioning profile
+        run: |
+          kc="$RUNNER_TEMP/build.keychain-db"
+          kcpass="$(uuidgen)"
+          security create-keychain -p "$kcpass" "$kc"
+          security set-keychain-settings -lut 21600 "$kc"
+          security unlock-keychain -p "$kcpass" "$kc"
+          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$IOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$kc"
+          security set-key-partition-list -S apple-tool:,apple: -k "$kcpass" "$kc"
+          security list-keychains -d user -s "$kc" login.keychain-db
+          profile_var="IOS_$(echo "$APP" | tr a-z A-Z)_PROFILE_BASE64"
+          echo "${!profile_var}" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          profile_uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin <<< "$(security cms -D -i "$RUNNER_TEMP/app.mobileprovision")")"
+          profile_name="$(/usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin <<< "$(security cms -D -i "$RUNNER_TEMP/app.mobileprovision")")"
+          cp "$RUNNER_TEMP/app.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$profile_uuid.mobileprovision"
+          echo "PROFILE_NAME=$profile_name" >> "$GITHUB_ENV"
+
+      - run: flutter pub get
+
+      - name: Build signed IPA
+        run: |
+          trim() { local s="${1//$'\r'/}"; s="${s//$'\n'/}"; s="${s#"${s%%[![:space:]]*}"}"; printf '%s' "${s%"${s##*[![:space:]]}"}"; }
+          if [ "$APP" = customer ]; then
+            bundle=com.fixgo.fixgoCustomer; fb_app="$FIREBASE_CUSTOMER_IOS_APP_ID"; dsn="$SENTRY_CUSTOMER_DSN"
+          else
+            bundle=com.fixgo.fixgoProvider; fb_app="$FIREBASE_PROVIDER_IOS_APP_ID"; dsn="$SENTRY_PROVIDER_DSN"
+          fi
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>$(trim "$IOS_TEAM_ID")</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key><dict><key>$bundle</key><string>$PROFILE_NAME</string></dict>
+          </dict></plist>
+          PLIST
+          defines=( "--dart-define=API_BASE_URL=$(trim "$API_BASE_URL")" )
+          [ -n "$(trim "$FIREBASE_PROJECT_ID")" ] && defines+=( "--dart-define=FIREBASE_PROJECT_ID=$(trim "$FIREBASE_PROJECT_ID")" )
+          [ -n "$(trim "$FIREBASE_SENDER_ID")" ] && defines+=( "--dart-define=FIREBASE_SENDER_ID=$(trim "$FIREBASE_SENDER_ID")" )
+          [ -n "$(trim "$FIREBASE_API_KEY")" ] && defines+=( "--dart-define=FIREBASE_API_KEY=$(trim "$FIREBASE_API_KEY")" )
+          [ -n "$(trim "$fb_app")" ] && defines+=( "--dart-define=FIREBASE_IOS_APP_ID=$(trim "$fb_app")" )
+          [ -n "$(trim "$dsn")" ] && defines+=( "--dart-define=SENTRY_DSN=$(trim "$dsn")" )
+          if [ -z "$(trim "$fb_app")" ]; then echo "::warning::ไม่มี FIREBASE iOS APP ID: build นี้จะไม่มีแจ้งเตือน push"; fi
+          flutter build ipa --release --build-number="$(trim "$BUILD_NUMBER")" \
+            --export-options-plist="$RUNNER_TEMP/ExportOptions.plist" "${defines[@]}"
+
+      - name: Upload to TestFlight
+        run: |
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          echo "$ASC_KEY_BASE64" | base64 --decode > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          xcrun altool --upload-app --type ios --file build/ios/ipa/*.ipa \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Cleanup signing material
+        if: always()
+        run: |
+          rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" "$RUNNER_TEMP/cert.p12"
+          security delete-keychain "$RUNNER_TEMP/build.keychain-db" || true
