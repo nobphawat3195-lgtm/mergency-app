@@ -82,4 +82,5 @@ LEGAL_UPDATED_AT="..."
 - สมัคร Apple Developer Program และลงทะเบียน Bundle ID `com.fixgo.fixgoCustomer`, `com.fixgo.fixgoProvider`
 - Build และเซ็นแอปบน Mac ที่มี Xcode (หรือบริการ build บนคลาวด์) แล้วทดสอบผ่าน TestFlight บน iPhone จริง
 - เซิร์ฟเวอร์จริงพร้อม HTTPS, SMS จริง, ที่เก็บรูป และระบบรับชำระเงินจริง
+- แอปทั้งสองตั้งเป็น iPhone อย่างเดียว (`TARGETED_DEVICE_FAMILY = 1`) จึงใช้แค่ภาพหน้าจอ iPhone 6.9 นิ้ว ไม่ต้องมีภาพ iPad (บน iPad แอปยังติดตั้งได้ในโหมดแสดงผลแบบ iPhone)
 - ภาพหน้าจอ คำอธิบายแอป หมวดหมู่ และคำค้น เตรียมไว้แล้วใน `docs/STORE_LISTING.md` และ `docs/store/`
