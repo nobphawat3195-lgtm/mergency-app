@@ -28,10 +28,16 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<!-- ใช้เข้ารหัสแค่ HTTPS/TLS มาตรฐานของ iOS จึงได้รับยกเว้น export compliance: ไม่ต้องตอบคำถามทุกครั้งที่อัปโหลด build -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>FixGo Fixer ใช้ตำแหน่งของคุณเพื่อส่งงานที่อยู่ใกล้คุณที่สุด กรุณาเปิดแอปทิ้งไว้ระหว่างออนไลน์รับงาน</string>
+	<!-- เมนูแชร์ > บันทึกรูปภาพ (QR พร้อมเพย์) ไม่มีคีย์นี้ iOS จะปิดแอปทันที -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>FixGo Fixer บันทึกรูป QR พร้อมเพย์ลงคลังรูปเมื่อคุณกดบันทึก เพื่อเปิดสแกนจ่ายในแอปธนาคาร</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>FixGo Fixer ใช้รูปที่คุณเลือกจากคลังรูปเพื่อยืนยันเครื่องมือของช่าง และแนบเป็นหลักฐานในรายงานตรวจรถ</string>
 	<key>UIApplicationSceneManifest</key>

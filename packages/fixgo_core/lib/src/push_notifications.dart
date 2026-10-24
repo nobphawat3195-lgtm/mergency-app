@@ -162,11 +162,7 @@ class PushNotifications {
       final settings = await messaging.requestPermission();
       if (settings.authorizationStatus == AuthorizationStatus.denied) return;
 
-      final token = await messaging.getToken();
-      if (token == null) return;
-      await api.registerDevice(token, _platform);
-      _registeredToken = token;
-
+      // ฟังก่อนขอโทเคน: บน iOS ถ้า APNs token มาช้า FCM จะส่งโทเคนมาทางนี้ทีหลัง
       await _tokenRefresh?.cancel();
       _tokenRefresh = messaging.onTokenRefresh.listen((fresh) async {
         if (api.accessToken == null) return;
@@ -177,9 +173,29 @@ class PushNotifications {
           // ครั้งหน้าที่เปิดแอป attach จะลงทะเบียนใหม่อีกครั้ง
         }
       });
+
+      // iOS: getToken โยน apns-token-not-set ถ้ายังไม่ได้ APNs token (มักเกิดตอนเปิดแอปครั้งแรก)
+      if (defaultTargetPlatform == TargetPlatform.iOS &&
+          !await _waitForApnsToken(messaging)) {
+        return;
+      }
+
+      final token = await messaging.getToken();
+      if (token == null) return;
+      await api.registerDevice(token, _platform);
+      _registeredToken = token;
     } catch (error) {
       debugPrint('ลงทะเบียน push ไม่สำเร็จ: $error');
     }
+  }
+
+  /// รอ APNs token สูงสุด ~10 วินาที ไม่ได้ก็ปล่อยให้ onTokenRefresh ลงทะเบียนทีหลัง
+  static Future<bool> _waitForApnsToken(FirebaseMessaging messaging) async {
+    for (var attempt = 0; attempt < 20; attempt++) {
+      if (await messaging.getAPNSToken() != null) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    return false;
   }
 
   /// เรียกก่อนล้าง accessToken: คำขอถอนโทเคนต้องใช้ token ของบัญชีเดิม
