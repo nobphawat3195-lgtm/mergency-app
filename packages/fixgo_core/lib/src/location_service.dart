@@ -44,6 +44,13 @@ class LocationService {
   /// Nominatim ห้ามรอนาน ปุ่มต้องไม่หมุนค้าง
   static const _geocodeTimeout = Duration(seconds: 8);
 
+  /// นโยบาย Nominatim ต้องระบุตัวแอปใน User-Agent ไม่งั้นตอบ 403
+  /// (ค่าเริ่มต้นของ Dart "Dart/3.x" ถูกบล็อก) เบราว์เซอร์ห้ามตั้งเอง จึงใส่เฉพาะแอปมือถือ
+  @visibleForTesting
+  static Map<String, String>? get nominatimHeaders => kIsWeb
+      ? null
+      : const {'User-Agent': 'FixGo/1.0 (https://fixgothai24.tech)'};
+
   /// เปิดพิกัดใน Google Maps ให้ผู้ใช้เช็กเองว่าหมุดตรงจุดไหม
   static Future<bool> openInMaps(double latitude, double longitude) =>
       launchUrl(
@@ -157,7 +164,9 @@ class LocationService {
       'accept-language': 'th',
     });
     try {
-      final response = await http.get(uri).timeout(_geocodeTimeout);
+      final response = await http
+          .get(uri, headers: nominatimHeaders)
+          .timeout(_geocodeTimeout);
       if (response.statusCode != 200) return const [];
       final json = jsonDecode(utf8.decode(response.bodyBytes));
       if (json is! List) return const [];
@@ -190,7 +199,8 @@ class LocationService {
       'zoom': '18',
       'accept-language': 'th',
     });
-    final response = await http.get(uri).timeout(_geocodeTimeout);
+    final response =
+        await http.get(uri, headers: nominatimHeaders).timeout(_geocodeTimeout);
     if (response.statusCode != 200) return null;
     final json = jsonDecode(utf8.decode(response.bodyBytes));
     if (json is! Map<String, dynamic>) return null;

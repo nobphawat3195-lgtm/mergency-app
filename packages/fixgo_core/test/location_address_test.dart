@@ -32,4 +32,12 @@ void main() {
     expect(LocationService.formatNominatimAddress(null), isNull);
     expect(LocationService.formatNominatimAddress({'country': 'ไทย'}), isNull);
   });
+
+  test('identifies the app to Nominatim on mobile (default Dart UA gets 403)',
+      () {
+    expect(
+      LocationService.nominatimHeaders?['User-Agent'],
+      startsWith('FixGo/'),
+    );
+  });
 }
