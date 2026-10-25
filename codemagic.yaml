@@ -1,0 +1,107 @@
+# Codemagic: build แอป iPhone แล้วส่ง TestFlight โดยไม่ต้องมี Mac (ทางเลือกแทน GitHub Actions iOS TestFlight)
+# Codemagic เซ็นแอปให้เองจาก App Store Connect API key ไม่ต้องทำใบรับรอง/profile เอง
+# ตั้งค่าครั้งแรก ดู docs/BUILD.md หัวข้อ "Codemagic"
+#
+# ต้องมีใน Codemagic (Team settings):
+#   - Integrations > Developer Portal: App Store Connect API key ชื่อ "FixGo ASC"
+#   - Environment variables กลุ่ม "fixgo_build":
+#       API_BASE_URL (บังคับ เช่น https://api.fixgothai24.tech)
+#       FIREBASE_PROJECT_ID, FIREBASE_SENDER_ID, FIREBASE_API_KEY,
+#       FIREBASE_CUSTOMER_IOS_APP_ID, FIREBASE_PROVIDER_IOS_APP_ID (ไม่ตั้ง = ไม่มี push)
+#       SENTRY_CUSTOMER_DSN, SENTRY_PROVIDER_DSN (ไม่ตั้ง = ไม่ส่ง crash report)
+# กดรันเองที่หน้า Codemagic (ไม่มี trigger อัตโนมัติ ประหยัดนาที build)
+
+definitions:
+  environment: &ios_environment
+    flutter: stable
+    xcode: latest
+    cocoapods: default
+    groups:
+      - fixgo_build
+  scripts:
+    - &pub_get
+      name: Flutter packages
+      script: flutter pub get
+    - &use_profiles
+      name: ตั้ง provisioning profile ที่ Codemagic สร้างให้
+      script: xcode-project use-profiles
+    - &build_ipa
+      name: Build IPA
+      script: |
+        set -eu
+        trim() { local s="${1//$'\r'/}"; s="${s//$'\n'/}"; s="${s#"${s%%[![:space:]]*}"}"; printf '%s' "${s%"${s##*[![:space:]]}"}"; }
+        api="$(trim "${API_BASE_URL:-}")"
+        case "$api" in
+          https://*) ;;
+          *) echo "ตั้ง API_BASE_URL (https://...) ในกลุ่ม fixgo_build ก่อน"; exit 1 ;;
+        esac
+        if [ "$FIXGO_APP" = customer ]; then
+          fb_app="${FIREBASE_CUSTOMER_IOS_APP_ID:-}"; dsn="${SENTRY_CUSTOMER_DSN:-}"
+        else
+          fb_app="${FIREBASE_PROVIDER_IOS_APP_ID:-}"; dsn="${SENTRY_PROVIDER_DSN:-}"
+        fi
+        defines=( "--dart-define=API_BASE_URL=$api" )
+        for pair in "FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-}" \
+                    "FIREBASE_SENDER_ID=${FIREBASE_SENDER_ID:-}" \
+                    "FIREBASE_API_KEY=${FIREBASE_API_KEY:-}" \
+                    "FIREBASE_IOS_APP_ID=$fb_app" \
+                    "SENTRY_DSN=$dsn"; do
+          value="$(trim "${pair#*=}")"
+          if [ -n "$value" ]; then defines+=( "--dart-define=${pair%%=*}=$value" ); fi
+        done
+        [ -n "$(trim "$fb_app")" ] || echo "คำเตือน: ไม่มี Firebase iOS App ID build นี้จะไม่มีแจ้งเตือน push"
+        flutter build ipa --release \
+          --build-number="$BUILD_NUMBER" \
+          --export-options-plist=/Users/builder/export_options.plist \
+          "${defines[@]}"
+
+workflows:
+  ios-customer:
+    name: FixGo (ลูกค้า) iOS → TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    working_directory: apps/customer
+    integrations:
+      app_store_connect: FixGo ASC
+    environment:
+      <<: *ios_environment
+      vars:
+        FIXGO_APP: customer
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.fixgo.fixgoCustomer
+    scripts:
+      - *pub_get
+      - *use_profiles
+      - *build_ipa
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+
+  ios-provider:
+    name: FixGo Fixer (ช่าง) iOS → TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    working_directory: apps/provider
+    integrations:
+      app_store_connect: FixGo ASC
+    environment:
+      <<: *ios_environment
+      vars:
+        FIXGO_APP: provider
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.fixgo.fixgoProvider
+    scripts:
+      - *pub_get
+      - *use_profiles
+      - *build_ipa
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

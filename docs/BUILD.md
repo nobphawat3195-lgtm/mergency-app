@@ -55,7 +55,8 @@ keytool -genkey -v -keystore fixgo-customer-upload.jks -keyalg RSA -keysize 2048
 
 ต้องมีบัญชี Apple Developer และ Mac ที่ติดตั้ง Xcode (หรือใช้บริการ CI ที่มี macOS เช่น Codemagic)
 
-1. Apple Developer > Identifiers: สร้าง App ID ของทั้งสองแอป และเปิด **Push Notifications**
+1. Apple Developer > Identifiers: สร้าง App ID ของทั้งสองแอป เปิด **Push Notifications** และ **Sign in with Apple**
+   (แอปช่างเปิด **Time Sensitive Notifications** เพิ่ม) capability ต้องตรงกับ `ios/Runner/Runner.entitlements` ไม่งั้นเซ็นไม่ผ่าน
 2. App Store Connect > My Apps: สร้างแอปทั้งสองตัวด้วย bundle id เดียวกับข้อ 1
 3. บน Mac:
    ```bash
@@ -68,6 +69,21 @@ keytool -genkey -v -keystore fixgo-customer-upload.jks -keyalg RSA -keysize 2048
    ```
    ครั้งแรกให้เปิด `ios/Runner.xcworkspace` ใน Xcode แล้วเลือก Team ที่ Signing & Capabilities (Automatic signing)
 4. อัปโหลด `build/ios/ipa/*.ipa` ผ่านแอป **Transporter** หรือ `xcrun altool` แล้วเพิ่มผู้ทดสอบใน TestFlight
+
+### ส่ง TestFlight ด้วย Codemagic (ง่ายที่สุด ไม่ต้องใช้ Mac ไม่ต้องทำใบรับรองเอง)
+
+`codemagic.yaml` ที่ root ของ repo มี workflow `ios-customer` และ `ios-provider` Codemagic สร้างใบรับรองและ profile ให้เองจาก API key
+แพ็กเกจฟรีมีนาที build macOS ให้ทุกเดือน พอสำหรับส่ง TestFlight เป็นครั้งคราว
+
+1. App Store Connect > Users and Access > Integrations > App Store Connect API > + (สิทธิ์ **App Manager**) ดาวน์โหลด `.p8` จด Key ID และ Issuer ID
+2. codemagic.io สมัครด้วย GitHub แล้ว Add application > เลือก repo นี้ > ประเภท Flutter App (codemagic.yaml)
+3. Team settings > Integrations > **Developer Portal** > Connect: ตั้งชื่อ key ว่า `FixGo ASC` ใส่ Issuer ID, Key ID และไฟล์ `.p8`
+4. Codemagic UI > Code signing identities > iOS certificates > **Generate certificate** (ใช้ key จากข้อ 3) แล้วที่ iOS provisioning profiles กด **Fetch profiles** หรือปล่อยให้ build สร้างให้
+5. แอป > Environment variables: สร้างกลุ่ม `fixgo_build` ใส่ `API_BASE_URL`, `FIREBASE_PROJECT_ID`, `FIREBASE_SENDER_ID`, `FIREBASE_API_KEY`,
+   `FIREBASE_CUSTOMER_IOS_APP_ID`, `FIREBASE_PROVIDER_IOS_APP_ID`, `SENTRY_CUSTOMER_DSN`, `SENTRY_PROVIDER_DSN` (ติ๊ก Secure ให้ค่าที่เป็นความลับ)
+6. Start new build > เลือก workflow `ios-customer` หรือ `ios-provider` > Start build ราว 15-25 นาทีแอปจะขึ้นใน TestFlight
+
+เลข build ใช้ `$BUILD_NUMBER` ของ Codemagic (เพิ่มเองทุกครั้งที่ build workflow นั้น) ถ้าเคยอัปโหลดเลขสูงกว่าด้วยวิธีอื่น ให้ตั้ง Build number ที่หน้า Codemagic ให้มากกว่าเดิม
 
 ### ส่ง TestFlight จาก GitHub Actions (ไม่ต้องใช้ Mac)
 

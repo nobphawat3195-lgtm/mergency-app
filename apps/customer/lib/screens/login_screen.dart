@@ -77,6 +77,43 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// iPhone: Sign in with Apple (Apple ไม่ส่งเบอร์โทร บัญชีผูกกับ Apple ID เหมือน LINE)
+  Future<void> _loginWithApple() async {
+    final appState = AppStateScope.of(context);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final result = await runAppleLogin();
+    if (!mounted) return;
+    try {
+      switch (result) {
+        case AppleCredential():
+          final session = await appState.api.signInWithApple(
+            role: ApiRole.customer,
+            identityToken: result.identityToken,
+            nonce: result.nonce,
+            authorizationCode: result.authorizationCode,
+            fullName: result.fullName,
+          );
+          appState.signIn(session.accessToken);
+          return;
+        case AppleLoginCancelled():
+          break;
+        case AppleLoginFailed():
+          setState(() => _error = appleLoginFailedMessage);
+      }
+    } on ApiException catch (_) {
+      if (mounted) setState(() => _error = appleLoginFailedMessage);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   @override
   void dispose() {
     _phoneController.dispose();
@@ -146,13 +183,21 @@ class _LoginScreenState extends State<LoginScreen> {
             FutureBuilder<bool>(
               future: _lineEnabled,
               builder: (context, snapshot) {
-                if (snapshot.data != true) return const SizedBox.shrink();
+                final line = snapshot.data == true;
+                if (!line && !showAppleLogin) return const SizedBox.shrink();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    LineLoginButton(
-                      onPressed: _loading ? null : _loginWithLine,
-                    ),
+                    if (showAppleLogin)
+                      AppleLoginButton(
+                        onPressed: _loading ? null : _loginWithApple,
+                      ),
+                    if (showAppleLogin && line)
+                      const SizedBox(height: FixGoSpacing.sm),
+                    if (line)
+                      LineLoginButton(
+                        onPressed: _loading ? null : _loginWithLine,
+                      ),
                     const SizedBox(height: FixGoSpacing.md),
                     const LoginOrDivider(),
                     const SizedBox(height: FixGoSpacing.md),

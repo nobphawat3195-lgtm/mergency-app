@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { serializable } from '../common/transaction';
 import { UploadsService } from '../uploads/uploads.service';
+import { AppleTokenService } from '../auth/apple-token.service';
 
 /** งานที่ยังไม่จบ ลบบัญชีระหว่างนี้ไม่ได้ อีกฝ่ายยังต้องติดต่อกันอยู่ */
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
@@ -42,16 +43,24 @@ export class AccountService {
     private readonly prisma: PrismaService,
     private readonly wallet: WalletService,
     private readonly uploads: UploadsService,
+    private readonly appleTokens: AppleTokenService,
   ) {}
 
   async customerProfile(customerId: string): Promise<{
     name: string | null;
     phone: string | null;
     viaLine: boolean;
+    viaApple: boolean;
   }> {
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
-      select: { name: true, phone: true, lineUserId: true, deletedAt: true },
+      select: {
+        name: true,
+        phone: true,
+        lineUserId: true,
+        appleUserId: true,
+        deletedAt: true,
+      },
     });
     if (!customer || customer.deletedAt) {
       throw new NotFoundException('ไม่พบบัญชีนี้');
@@ -60,6 +69,7 @@ export class AccountService {
       name: customer.name,
       phone: customer.phone,
       viaLine: customer.lineUserId !== null,
+      viaApple: customer.appleUserId !== null,
     };
   }
 
@@ -71,6 +81,7 @@ export class AccountService {
   }
 
   private async deleteCustomer(customerId: string) {
+    let appleUserId: string | null = null;
     const photos = await serializable(this.prisma, async (tx) => {
       const customer = await tx.customer.findUnique({
         where: { id: customerId },
@@ -78,6 +89,7 @@ export class AccountService {
       if (!customer || customer.deletedAt) {
         throw new NotFoundException('ไม่พบบัญชีนี้');
       }
+      appleUserId = customer.appleUserId;
 
       const active = await tx.order.count({
         where: { customerId, status: { in: ACTIVE_ORDER_STATUSES } },
@@ -170,6 +182,7 @@ export class AccountService {
         data: {
           phone: `deleted:${customerId}`,
           lineUserId: null,
+          appleUserId: null,
           name: null,
           deletedAt: new Date(),
         },
@@ -183,9 +196,11 @@ export class AccountService {
     });
     // ลบไฟล์หลัง commit แล้วเท่านั้น ถ้า transaction ล้มรูปต้องยังอยู่ครบ
     await this.uploads.deleteUploads(photos);
+    if (appleUserId) await this.appleTokens.revoke(appleUserId);
   }
 
   private async deleteProvider(providerId: string) {
+    let appleUserId: string | null = null;
     const photoUrls = await serializable(this.prisma, async (tx) => {
       const provider = await tx.provider.findUnique({
         where: { id: providerId },
@@ -193,6 +208,7 @@ export class AccountService {
       if (!provider || provider.deletedAt) {
         throw new NotFoundException('ไม่พบบัญชีนี้');
       }
+      appleUserId = provider.appleUserId;
 
       const active = await tx.order.count({
         where: { providerId, status: { in: ACTIVE_ORDER_STATUSES } },
@@ -276,6 +292,7 @@ export class AccountService {
         data: {
           phone: `deleted:${providerId}`,
           lineUserId: null,
+          appleUserId: null,
           realName: 'บัญชีที่ลบแล้ว',
           nickname: '',
           shopName: null,
@@ -298,6 +315,7 @@ export class AccountService {
       return photoUrls;
     });
     await this.uploads.deleteUploads(photoUrls);
+    if (appleUserId) await this.appleTokens.revoke(appleUserId);
   }
 
   /** ใช้ตรวจโทเคนทุกคำขอ: บัญชีที่ลบแล้วใช้โทเคนเก่าต่อไม่ได้ */

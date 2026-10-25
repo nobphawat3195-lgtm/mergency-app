@@ -5,5 +5,10 @@
 	<!-- Push Notifications: ตอน Archive เพื่อส่ง App Store Xcode เปลี่ยนเป็น production ตาม provisioning profile ให้เอง -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Sign in with Apple: เปิด capability นี้ใน App ID ด้วย ไม่งั้น provisioning profile ไม่ผ่าน -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>

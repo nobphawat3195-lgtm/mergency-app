@@ -280,6 +280,13 @@
       </tr></thead><tbody id="settlements-body"></tbody></table></div>
     </div>
 
+    <div class="card" id="chat-reports-card">
+      <h2>รายงานแชทไม่เหมาะสม <span class="muted">(ลูกค้า/ช่างกดรายงานในแอป เปิดอ่านแชท ถ้าช่างผิดให้ระงับช่าง แล้วกดปิดรายงาน)</span></h2>
+      <div class="table-wrap"><table><thead><tr>
+        <th>รายงานเมื่อ</th><th>งาน</th><th>ผู้รายงาน</th><th>เหตุผล</th><th>ช่างของงาน</th><th></th>
+      </tr></thead><tbody id="chat-reports-body"></tbody></table></div>
+    </div>
+
     <div class="card">
       <h2>ช่างรออนุมัติ <span class="muted">(ตรวจรูปหน้า เครื่องมือ และบริการที่รับ ก่อนกดอนุมัติ)</span></h2>
       <div id="providers-body" class="applicants"></div>
@@ -528,7 +535,8 @@ async function showDashboard() {
 // แต่ละส่วนโหลดแยกกัน: ส่วนไหนพังแสดง "โหลดไม่สำเร็จ" + ปุ่มลองใหม่เฉพาะส่วนนั้น ส่วนอื่นใช้ได้ตามปกติ
 const SECTIONS = [
   [loadSummary, 'stats'], [loadNoMatch, 'nomatch-body'], [loadSlips, 'slips-body'],
-  [loadSettlements, 'settlements-body'], [loadProviders, 'providers-body'], [loadCatalog, 'catalog-body'],
+  [loadSettlements, 'settlements-body'], [loadChatReports, 'chat-reports-body'],
+  [loadProviders, 'providers-body'], [loadCatalog, 'catalog-body'],
   [loadFeedback, 'feedback-body'], [loadWithdrawals, 'withdrawals-body'], [loadOrders, 'orders-body'],
 ];
 const OWNER_SECTIONS = [[loadFinance, 'fin-orders-body'], [loadTeam, 'team-body'], [loadAudit, 'audit-body']];
@@ -957,6 +965,7 @@ async function loadSummary() {
     { label: 'รายได้ค่าธรรมเนียม', value: summary.commissionRevenue === undefined ? undefined : formatSatang(summary.commissionRevenue) },
     { label: 'ค่าคอมที่ช่างค้าง (งานเงินสด)', value: summary.outstandingDebt === undefined ? undefined : formatSatang(summary.outstandingDebt) },
     { label: 'สลิปค่าคอมรอตรวจ', value: summary.pendingSettlements ?? 0, alert: (summary.pendingSettlements ?? 0) > 0 },
+    { label: 'รายงานแชทรอจัดการ', value: summary.openChatReports ?? 0, alert: (summary.openChatReports ?? 0) > 0 },
     { label: 'ช่างรออนุมัติ', value: summary.pendingProviders },
     { label: 'คำขอเบิกค้าง', value: summary.pendingWithdrawals },
   ].filter((stat) => !String(stat.value).includes('NaN') && stat.value !== undefined)
@@ -987,7 +996,7 @@ async function loadProviders() {
             <span class="muted">${escapeHtml(provider.phone)} · ประสบการณ์ ${escapeHtml(provider.experienceYears)} ปี · สมัครเมื่อ ${escapeHtml(new Date(provider.createdAt).toLocaleString('th-TH'))}</span>
           </div>
         </div>
-        ${provider.lineUserId ? `<p class="line-note">สมัครผ่าน LINE: เบอร์นี้ช่างกรอกเอง ยังไม่ได้ยืนยันด้วย OTP ควรโทรเช็กก่อนกดอนุมัติ</p>` : ''}
+        ${provider.lineUserId || provider.appleUserId ? `<p class="line-note">สมัครผ่าน ${provider.lineUserId ? 'LINE' : 'Apple'}: เบอร์นี้ช่างกรอกเอง ยังไม่ได้ยืนยันด้วย OTP ควรโทรเช็กก่อนกดอนุมัติ</p>` : ''}
         <dl>
           <dt>ร้าน/อู่</dt><dd>${escapeHtml(provider.shopName || '-')}</dd>
           <dt>เฟซบุ๊ก</dt><dd>${escapeHtml(provider.facebookPage || '-')}</dd>
@@ -1019,6 +1028,42 @@ async function setProviderStatus(id, status) {
     body: JSON.stringify(note ? { status, note: note.trim() } : { status }),
   }));
   await Promise.all([loadSection(loadProviders, 'providers-body'), loadSection(loadSummary, 'stats')]);
+}
+
+// ---------- รายงานแชทไม่เหมาะสม ----------
+async function loadChatReports() {
+  const reports = await api('/admin/chat-reports');
+  el('chat-reports-body').innerHTML = reports.length === 0
+    ? '<tr><td colspan="6" class="muted">ไม่มีรายงานค้าง</td></tr>'
+    : reports.map((report) => `
+    <tr>
+      <td>${escapeHtml(new Date(report.createdAt).toLocaleString('th-TH'))}</td>
+      <td>${escapeHtml(report.orderNo)}</td>
+      <td>${report.reporter === 'CUSTOMER' ? 'ลูกค้า' : 'ช่าง'}</td>
+      <td style="white-space:pre-wrap">${escapeHtml(report.reason)}</td>
+      <td>${report.provider ? `${escapeHtml(report.provider.nickname)}<br><small>${escapeHtml(report.provider.phone)}</small>` : '-'}</td>
+      <td>
+        <button onclick="openOrderChat('${report.orderId}')">เปิดอ่านแชท</button>
+        ${report.provider ? `<button class="danger" onclick="suspendReportedProvider('${report.provider.id}')">ระงับช่าง</button>` : ''}
+        <button onclick="resolveChatReport('${report.id}')">ปิดรายงาน</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function suspendReportedProvider(providerId) {
+  const note = prompt('เหตุผลที่ระงับ (ช่างจะเห็นในแอป) เช่น "ใช้ถ้อยคำไม่เหมาะสมกับลูกค้า"');
+  if (!note || note.trim().length < 3) return;
+  await once('provider:' + providerId, null, () => api('/admin/providers/' + providerId + '/status', {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'SUSPENDED', note: note.trim() }),
+  }));
+  alert('ระงับช่างแล้ว ช่างรับงานใหม่ไม่ได้จนกว่าจะอนุมัติอีกครั้ง');
+}
+
+async function resolveChatReport(id) {
+  if (!confirm('ปิดรายงานนี้? (จัดการเรียบร้อยแล้ว หรือตรวจแล้วไม่พบปัญหา)')) return;
+  await once('chat-report:' + id, null, () => api('/admin/chat-reports/' + id + '/resolve', { method: 'POST' }));
+  await Promise.all([loadSection(loadChatReports, 'chat-reports-body'), loadSection(loadSummary, 'stats')]);
 }
 
 // ---------- ข้อเสนอแนะจากลูกค้า ----------

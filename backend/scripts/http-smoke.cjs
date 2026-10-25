@@ -433,6 +433,35 @@ async function main() {
     const closed = await request('POST', `/orders/${order.id}/messages`, customer, { text: 'ขอบคุณครับ' }, 400);
     assert.equal(closed.body.message, 'งานนี้จบแล้ว แชทอ่านย้อนหลังได้อย่างเดียว');
   });
+  await check('Chat can be reported (also after the job); admin sees and resolves it', async () => {
+    const path = `/orders/${order.id}/messages/report`;
+    await request('POST', path, customer, { reason: '   ' }, 400);
+    await request('POST', path, customer, { reason: 'x'.repeat(501) }, 400);
+    await request('POST', path, stranger, { reason: 'สแปม' }, 404);
+    await request('POST', path, customer, { reason: 'ใช้คำหยาบ' }, 201);
+    // รายงานซ้ำก่อนทีมงานปิด: ต่อท้ายรายงานเดิม ไม่สร้างใหม่
+    await request('POST', path, customer, { reason: 'ส่งรูปไม่เหมาะสม' }, 201);
+    await request('POST', path, mechanic, { reason: 'ลูกค้าข่มขู่' }, 201);
+    assert.equal(await prisma.chatReport.count({ where: { orderId: order.id } }), 2);
+
+    await request('GET', '/admin/chat-reports', customer, undefined, 403);
+    const reports = (await request('GET', '/admin/chat-reports', staff, undefined, 200)).body;
+    const fromCustomer = reports.find((r) => r.orderId === order.id && r.reporter === 'CUSTOMER');
+    assert.ok(fromCustomer.reason.includes('ใช้คำหยาบ') && fromCustomer.reason.includes('ส่งรูปไม่เหมาะสม'));
+    assert.equal(fromCustomer.provider.id, provider.id);
+    assert.ok((await request('GET', '/admin/summary', staff, undefined, 200)).body.openChatReports >= 2);
+
+    await request('POST', `/admin/chat-reports/${fromCustomer.id}/resolve`, staff, undefined, 201);
+    assert.equal(await auditCount({ action: 'CHAT_REPORT_RESOLVE', targetId: fromCustomer.id }, 1), 1);
+    const left = (await request('GET', '/admin/chat-reports', staff, undefined, 200)).body;
+    assert.equal(left.some((r) => r.id === fromCustomer.id), false);
+  });
+  await check('Sign in with Apple rejects a malformed identity token without calling Apple', async () => {
+    const body = { app: 'customer', identityToken: 'not-a-jwt', nonce: 'n' };
+    await request('POST', '/auth/apple', undefined, body, 401);
+    await request('POST', '/auth/apple', undefined, { ...body, app: 'admin' }, 400);
+    await request('POST', '/auth/apple', undefined, { app: 'customer', nonce: 'n' }, 400);
+  });
   await check('Rating is recorded once and customer cannot read wallet', async () => {
     await request('POST', `/orders/${order.id}/rate`, customer, { score: 5 }, 201);
     await request('POST', `/orders/${order.id}/rate`, customer, { score: 5 }, 400);

@@ -9,5 +9,10 @@
 	     ไม่ใส่ Critical Alerts (ดังแม้ปิดเสียง) เพราะต้องได้รับอนุมัติจาก Apple ก่อน ดู docs/PUSH.md -->
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
+	<!-- Sign in with Apple: เปิด capability นี้ใน App ID ด้วย ไม่งั้น provisioning profile ไม่ผ่าน -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>

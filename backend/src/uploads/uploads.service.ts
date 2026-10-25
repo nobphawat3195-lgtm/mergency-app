@@ -253,7 +253,7 @@ export class UploadsService {
 
   /**
    * โฟลเดอร์เจ้าของไฟล์ใน URL รูป
-   * ช่างที่ยังไม่ส่งใบสมัครมี sub เป็น pending:<เบอร์> หรือ pending:line:<LINE userId>
+   * ช่างที่ยังไม่ส่งใบสมัครมี sub เป็น pending:<เบอร์>, pending:line:<LINE userId> หรือ pending:apple:<Apple userId>
    * รูปหน้าตรงจากช่วงนี้ไปแสดงในการ์ดช่างและลิงก์ติดตามสาธารณะ จึงต้องแปลงเป็นค่าที่เดาย้อนกลับไม่ได้
    */
   private ownerSegment(userId: string): string {

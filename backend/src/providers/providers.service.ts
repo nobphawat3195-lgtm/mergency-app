@@ -34,11 +34,11 @@ export class ProvidersService {
 
   /**
    * ยื่นใบสมัคร รูปต้องอัปโหลดด้วยโทเคนเดียวกัน (sub ของช่างที่ยังไม่สมัครคือ pending:<เบอร์>
-   * หรือ pending:line:<LINE userId>)
+   * หรือ pending:line:<LINE userId> / pending:apple:<Apple userId>)
    * ใบสมัครที่ถูกปฏิเสธ (REJECTED) ส่งใหม่ได้ ข้อมูลเดิมถูกแทนที่และกลับไปรอตรวจ
    *
    * เบอร์โทร: ล็อกอินด้วย OTP ใช้เบอร์จากโทเคน (ยืนยันแล้ว) ห้ามรับจาก body กันการสมัครแทนคนอื่น
-   * สมัครผ่าน LINE ไม่มีเบอร์ที่ยืนยัน จึงใช้เบอร์ที่กรอกในใบสมัคร แอดมินโทรยืนยันก่อนอนุมัติ
+   * สมัครผ่าน LINE หรือ Apple ไม่มีเบอร์ที่ยืนยัน จึงใช้เบอร์ที่กรอกในใบสมัคร แอดมินโทรยืนยันก่อนอนุมัติ
    */
   async register(
     user: JwtPayload,
@@ -54,11 +54,15 @@ export class ProvidersService {
       ? await this.prisma.provider.findUnique({
           where: { lineUserId: user.lineUserId },
         })
-      : !user.sub.startsWith('pending:')
-        ? await this.prisma.provider.findUnique({ where: { id: user.sub } })
-        : await this.prisma.provider.findUnique({
-            where: { phone: user.phone },
-          });
+      : user.appleUserId
+        ? await this.prisma.provider.findUnique({
+            where: { appleUserId: user.appleUserId },
+          })
+        : !user.sub.startsWith('pending:')
+          ? await this.prisma.provider.findUnique({ where: { id: user.sub } })
+          : await this.prisma.provider.findUnique({
+              where: { phone: user.phone },
+            });
     if (existing && existing.status !== ProviderStatus.REJECTED) {
       // 409: แอปรู้ว่าต้องขอโทเคนของบัญชีที่สมัครไว้ (POST /auth/line/refresh) หรือให้ล็อกอินใหม่
       throw new ConflictException('บัญชีนี้สมัครแล้ว กรุณาเข้าสู่ระบบใหม่');
@@ -74,7 +78,12 @@ export class ProvidersService {
       );
     }
 
-    const selfDeclaredPhone = Boolean(user.lineUserId || existing?.lineUserId);
+    const selfDeclaredPhone = Boolean(
+      user.lineUserId ||
+      user.appleUserId ||
+      existing?.lineUserId ||
+      existing?.appleUserId,
+    );
     const phone = selfDeclaredPhone
       ? (dto.phone ?? existing?.phone ?? '')
       : user.phone;
@@ -153,6 +162,7 @@ export class ProvidersService {
       : await this.prisma.provider.create({
           data: {
             lineUserId: user.lineUserId ?? null,
+            appleUserId: user.appleUserId ?? null,
             ...data,
             ...relations,
           },

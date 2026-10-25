@@ -4,7 +4,10 @@ import { Role } from '@prisma/client';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
 import { JwtPayload } from '../auth/auth.service';
 import { OrderChatService } from './order-chat.service';
-import { SendOrderMessageDto } from './dto/order-chat.dto';
+import {
+  ReportOrderChatDto,
+  SendOrderMessageDto,
+} from './dto/order-chat.dto';
 
 @Controller('orders/:id/messages')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -25,5 +28,15 @@ export class OrderChatController {
     @Body() dto: SendOrderMessageDto,
   ) {
     return this.chat.send(id, user, dto);
+  }
+
+  /** รายงานแชทไม่เหมาะสม ทีมงานได้แจ้งเตือนและเปิดอ่านแชทของงานนี้ได้ */
+  @Post('report')
+  report(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: ReportOrderChatDto,
+  ) {
+    return this.chat.report(id, user, dto.reason);
   }
 }
