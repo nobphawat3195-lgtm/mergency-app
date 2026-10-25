@@ -3,6 +3,7 @@ import { ChatSender, OrderStatus, Role } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../notifications/push.service';
+import { AdminAlertService } from '../notifications/admin-alert.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { OrdersService } from './orders.service';
 import { SendOrderMessageDto } from './dto/order-chat.dto';
@@ -53,6 +54,7 @@ export class OrderChatService {
     private readonly orders: OrdersService,
     private readonly uploads: UploadsService,
     private readonly push: PushService,
+    private readonly adminAlert: AdminAlertService,
   ) {}
 
   isOpen(order: Pick<ChatOrder, 'status' | 'providerId'>): boolean {
@@ -165,6 +167,39 @@ export class OrderChatService {
       ? this.push.chatMessage(Role.CUSTOMER, order.customerId, ref, 'ช่าง')
       : this.push.chatMessage(Role.PROVIDER, order.providerId!, ref, 'ลูกค้า'));
     return message;
+  }
+
+  /**
+   * รายงานแชทไม่เหมาะสม (App Store Guideline 1.2) รายงานได้ทั้งระหว่างงานและหลังงานจบ
+   * รายงานซ้ำจากฝั่งเดิมที่ทีมงานยังไม่ปิด: ต่อท้ายเหตุผลเดิม ไม่สร้างแถวใหม่ (กันกดซ้ำ)
+   */
+  async report(orderId: string, actor: ChatActor, reason: string) {
+    const order = await this.orders.findAccessibleById(orderId, actor);
+    if (!order.providerId) {
+      throw new BadRequestException('รายงานแชทได้หลังช่างรับงาน');
+    }
+    const text = reason.trim();
+    if (!text) throw new BadRequestException('กรุณาบอกเหตุผลที่รายงาน');
+    const reporter = senderOf(actor.role);
+    const open = await this.prisma.chatReport.findFirst({
+      where: { orderId, reporter, resolvedAt: null },
+      select: { id: true, reason: true },
+    });
+    if (open) {
+      await this.prisma.chatReport.update({
+        where: { id: open.id },
+        data: { reason: `${open.reason}\n---\n${text}`.slice(-2000) },
+      });
+    } else {
+      await this.prisma.chatReport.create({
+        data: { orderId, reporter, reason: text },
+      });
+      void this.adminAlert.chatReported(
+        order.orderNo,
+        reporter === ChatSender.CUSTOMER ? 'ลูกค้า' : 'ช่าง',
+      );
+    }
+    return { reported: true };
   }
 
   /** แอดมินเปิดอ่านกรณีมีปัญหา (บันทึก audit ที่ controller) ไม่เปลี่ยนสถานะอ่าน */

@@ -129,6 +129,12 @@ export class AdminAlertService {
     );
   }
 
+  chatReported(orderNo: string, reporterLabel: string) {
+    return this.send(
+      `🚩 ${reporterLabel}รายงานแชทไม่เหมาะสม งาน ${orderNo} เปิดอ่านแชทและจัดการในหน้าแอดมิน`,
+    );
+  }
+
   withdrawalRequested(nickname: string, amountText: string) {
     return this.send(`💸 คำขอเบิกเงิน ${amountText} จาก ${nickname} รอโอน`);
   }

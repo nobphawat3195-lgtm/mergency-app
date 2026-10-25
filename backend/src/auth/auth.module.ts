@@ -4,6 +4,8 @@ import { PassportModule } from '@nestjs/passport';
 
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { AppleLoginController } from './apple-login.controller';
+import { AppleLoginService } from './apple-login.service';
 import { JwtStrategy } from './jwt.strategy';
 import { LineLoginController } from './line-login.controller';
 import { LineLoginService } from './line-login.service';
@@ -23,8 +25,8 @@ import { readSecret } from '../config/environment';
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy, LineLoginService],
-  controllers: [AuthController, LineLoginController],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, LineLoginService, AppleLoginService],
+  controllers: [AuthController, LineLoginController, AppleLoginController],
+  exports: [AuthService, AppleLoginService],
 })
 export class AuthModule {}

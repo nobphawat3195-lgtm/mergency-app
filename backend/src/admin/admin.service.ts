@@ -218,6 +218,50 @@ export class AdminService {
     return { orderNo: order.orderNo, messages };
   }
 
+  /** รายงานแชทที่ยังไม่ปิด พร้อมช่างของงาน ให้ทีมงานเปิดแชทอ่านแล้วระงับช่างได้ถ้าจำเป็น */
+  async listChatReports() {
+    const reports = await this.prisma.chatReport.findMany({
+      where: { resolvedAt: null },
+      orderBy: { createdAt: 'asc' },
+      take: 100,
+      select: {
+        id: true,
+        reporter: true,
+        reason: true,
+        createdAt: true,
+        order: {
+          select: {
+            id: true,
+            orderNo: true,
+            status: true,
+            provider: { select: { id: true, nickname: true, phone: true } },
+          },
+        },
+      },
+    });
+    return reports.map(({ order, ...report }) => ({
+      ...report,
+      orderId: order.id,
+      orderNo: order.orderNo,
+      orderStatus: order.status,
+      provider: order.provider,
+    }));
+  }
+
+  async resolveChatReport(id: string) {
+    const report = await this.prisma.chatReport.findUnique({
+      where: { id },
+      select: { resolvedAt: true },
+    });
+    if (!report) throw new NotFoundException('ไม่พบรายงานนี้');
+    if (report.resolvedAt) return { resolved: true };
+    await this.prisma.chatReport.update({
+      where: { id },
+      data: { resolvedAt: new Date() },
+    });
+    return { resolved: true };
+  }
+
   /**
    * หมวดบริการและบริการย่อยทั้งหมด (รวมที่ปิดอยู่) พร้อมจำนวนช่างที่อนุมัติแล้วในหมวด
    * ให้แอดมินเห็นว่าหมวดไหนยังไม่มีช่าง ควรปิดไว้ก่อน
@@ -428,6 +472,7 @@ export class AdminService {
       pendingSettlements,
       outstandingDebt,
       completedCount,
+      openChatReports,
     ] = await Promise.all([
       this.prisma.order.count(),
       this.prisma.order.findMany({
@@ -447,6 +492,7 @@ export class AdminService {
       this.prisma.commissionSettlement.count({ where: { status: 'PENDING' } }),
       this.wallet.totalOutstandingDebt(),
       this.prisma.order.count({ where: { status: OrderStatus.COMPLETED } }),
+      this.prisma.chatReport.count({ where: { resolvedAt: null } }),
     ]);
 
     const commissionRevenue = completedOrders.reduce(
@@ -464,6 +510,7 @@ export class AdminService {
       noMatchOrders,
       pendingSlips,
       pendingSettlements,
+      openChatReports,
       /** ค่าบริการที่ช่างค้างจากงานเงินสดรวมกัน (สตางค์) ยังไม่ได้เข้าบัญชีบริษัท */
       outstandingDebt,
     };

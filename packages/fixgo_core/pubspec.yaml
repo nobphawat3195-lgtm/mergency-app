@@ -27,6 +27,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   flutter_web_auth_2: ^5.1.0
+  # Sign in with Apple บนแอป iPhone (App Store Guideline 4.8) และ sha256 ของ nonce
+  sign_in_with_apple: ^7.0.1
+  crypto: ^3.0.6
   # ^6.5 ยัง build ได้บน Flutter 3.35 (deploy/web.Dockerfile)
   audioplayers: ^6.5.0
 

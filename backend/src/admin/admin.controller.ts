@@ -221,6 +221,18 @@ export class AdminController {
     return this.admin.listOrderMessages(id);
   }
 
+  /** รายงานแชทไม่เหมาะสมที่ยังไม่ปิด (ลูกค้า/ช่างกดรายงานในแอป) */
+  @Get('chat-reports')
+  listChatReports() {
+    return this.admin.listChatReports();
+  }
+
+  @Post('chat-reports/:id/resolve')
+  @Audit('CHAT_REPORT_RESOLVE', 'chatReport')
+  resolveChatReport(@Param('id') id: string) {
+    return this.admin.resolveChatReport(id);
+  }
+
   @Post('orders/:id/redispatch')
   @Audit('ORDER_REDISPATCH', 'order')
   redispatch(@Param('id') id: string) {

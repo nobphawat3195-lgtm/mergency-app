@@ -12,3 +12,9 @@ export class SendOrderMessageDto {
   @MaxLength(500)
   imageUrl?: string;
 }
+
+export class ReportOrderChatDto {
+  @IsString({ message: 'กรุณาบอกเหตุผลที่รายงาน' })
+  @MaxLength(500, { message: 'เหตุผลยาวเกิน 500 ตัวอักษร' })
+  reason!: string;
+}

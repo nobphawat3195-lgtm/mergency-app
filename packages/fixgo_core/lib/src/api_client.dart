@@ -233,6 +233,30 @@ class FixGoApiClient {
     );
   }
 
+  /// Sign in with Apple (แอป iPhone): ส่ง identity token และ nonce ดิบให้ backend ตรวจ
+  /// ช่างใหม่ได้ hasProfile = false ต้องส่งใบสมัครก่อน (เหมือนล็อกอิน LINE)
+  Future<({String accessToken, bool hasProfile})> signInWithApple({
+    required ApiRole role,
+    required String identityToken,
+    required String nonce,
+    String? authorizationCode,
+    String? fullName,
+  }) async {
+    final result = await _send('POST', '/auth/apple', body: {
+      'app': role == ApiRole.provider ? 'provider' : 'customer',
+      'identityToken': identityToken,
+      'nonce': nonce,
+      if (authorizationCode != null) 'authorizationCode': authorizationCode,
+      if (fullName != null && fullName.isNotEmpty) 'fullName': fullName,
+    }) as Map<String, dynamic>;
+    final token = result['accessToken'] as String;
+    accessToken = token;
+    return (
+      accessToken: token,
+      hasProfile: result['hasProfile'] as bool? ?? true,
+    );
+  }
+
   /// ชื่อและเบอร์ของลูกค้าที่ล็อกอินอยู่ และเข้าด้วย LINE หรือไม่
   Future<({String? name, String? phone, bool viaLine})> getMyAccount() async {
     final result = await _send('GET', '/account') as Map<String, dynamic>;
@@ -494,6 +518,13 @@ class FixGoApiClient {
       if (imageUrl != null) 'imageUrl': imageUrl,
     }) as Map<String, dynamic>;
     return ChatMessage.fromJson(result);
+  }
+
+  /// รายงานแชทไม่เหมาะสม ทีมงานได้แจ้งเตือนและเปิดอ่านแชทของงานนี้
+  Future<void> reportOrderChat(String orderId, String reason) async {
+    await _send('POST', '/orders/$orderId/messages/report', body: {
+      'reason': reason,
+    });
   }
 
   // ---------- Provider ----------

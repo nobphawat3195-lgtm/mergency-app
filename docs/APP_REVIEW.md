@@ -50,6 +50,15 @@ LEGAL_UPDATED_AT="..."
 - เงื่อนไขก่อนลบ: ไม่มีงานที่ยังไม่จบ, ลูกค้าไม่มีงานที่ยังไม่ชำระ, ช่างไม่มียอดคงเหลือหรือคำขอเบิกที่รอโอน
 - ลบ/ปิดบังเบอร์ ชื่อ ที่อยู่ หมายเหตุ รูป ความเห็น ข้อมูลผู้ขาย รูปเครื่องมือ บัญชีรับเงิน ข้อความแชท และรูปปิดงาน
   เก็บตัวเลขธุรกรรมไว้ตามกฎหมายบัญชี โทเคนเดิมใช้ไม่ได้ทันที เบอร์เดิมสมัครใหม่ได้เป็นบัญชีใหม่
+- บัญชีที่เข้าด้วย Sign in with Apple: backend ยกเลิกสิทธิ์กับ Apple (revoke token) ให้ด้วยตามที่ Apple บังคับ
+  ต้องตั้ง `APPLE_TEAM_ID`, `APPLE_SIGNIN_KEY_ID`, `APPLE_SIGNIN_PRIVATE_KEY` ในเซิร์ฟเวอร์ (ดู `deploy/.env.production.example`)
+  ไม่ตั้ง = ลบบัญชีได้ปกติแต่ไม่ revoke ควรตั้งก่อนส่งรีวิว
+
+## 3.1 แชทและการรายงาน (App Store Guideline 1.2)
+
+- แชทมีเฉพาะลูกค้ากับช่างของงานนั้น เปิดเมื่อช่างรับงาน อ่านอย่างเดียวหลังงานจบ
+- ไอคอนธง (รายงาน) ในหน้าแชท: เลือกเหตุผลแล้วส่ง ทีมงานได้แจ้งเตือนทาง LINE/webhook ของแอดมิน
+- หน้าแอดมิน > "รายงานแชทไม่เหมาะสม": เปิดอ่านแชท (บันทึก audit) ระงับช่าง แล้วกดปิดรายงาน
 
 ## 4. App Privacy (หน้า "App Privacy" ใน App Store Connect)
 
@@ -89,7 +98,7 @@ FixGo is an on-demand roadside car repair service in Thailand. A driver whose ca
 SIGN-IN
 Use the phone number login (not LINE):
 Phone: 0800000001  /  OTP code: xxxxxx
-This review number skips SMS and always accepts the code above. LINE Login is an optional alternative; phone number login gives the same access.
+This review number skips SMS and always accepts the code above. Sign in with Apple and LINE Login are optional alternatives on the same screen; all three give the same access.
 
 HOW TO TEST
 1. Sign in, allow location, tap a symptom (e.g. battery) on the home screen, choose a vehicle type and confirm the meeting point.
@@ -105,7 +114,7 @@ PERMISSIONS
 - Notifications: job status updates (mechanic accepted, arriving, price quote).
 
 CHAT
-Chat exists only between the customer and the one mechanic assigned to that job, opens when the mechanic accepts and becomes read-only when the job ends. Users can contact support from the Profile tab.
+Chat exists only between the customer and the one mechanic assigned to that job, opens when the mechanic accepts and becomes read-only when the job ends. The flag icon in the chat screen reports the conversation to our team, who review it and can suspend the mechanic's account. Users can also contact support from the Profile tab.
 ```
 
 **FixGo Fixer (แอปช่าง)**
@@ -114,7 +123,7 @@ FixGo Fixer is the app for mechanics who take roadside repair jobs from the FixG
 
 SIGN-IN
 Phone: 0800000002  /  OTP code: xxxxxx
-This is a pre-approved mechanic account (new mechanics must be verified by our team before they can take jobs). LINE Login is an optional alternative.
+This is a pre-approved mechanic account (new mechanics must be verified by our team before they can take jobs). Sign in with Apple and LINE Login are optional alternatives; a new Apple or LINE account goes to the mechanic application form.
 
 HOW TO TEST
 1. Sign in and switch on "พร้อมรับงาน" (Ready for jobs).
@@ -130,6 +139,9 @@ Mechanics are paid for physical repair work done in person. Earnings and platfor
 PERMISSIONS
 - Location (When In Use): to receive jobs near the mechanic and navigate to the customer. The app asks the mechanic to keep it open while online; it does not track location in the background.
 - Photo library: profile photo, tool verification photos, job completion photos and payment slips.
+
+CHAT
+Chat is only with the customer of a job the mechanic accepted; the flag icon in the chat screen reports it to our team.
 ```
 
 ## 6. สิ่งที่ยังต้องทำเองก่อนส่ง

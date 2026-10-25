@@ -24,6 +24,8 @@ export interface JwtPayload {
   phone: string;
   /** มีเฉพาะโทเคนช่างที่ล็อกอินด้วย LINE แต่ยังไม่ได้ส่งใบสมัคร (sub = pending:line:<id>) */
   lineUserId?: string;
+  /** มีเฉพาะโทเคนช่างที่ล็อกอินด้วย Apple แต่ยังไม่ได้ส่งใบสมัคร (sub = pending:apple:<id>) */
+  appleUserId?: string;
 }
 
 @Injectable()

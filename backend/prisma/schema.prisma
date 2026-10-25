@@ -31,16 +31,18 @@ model OtpCode {
 // ---------- Customer ----------
 
 model Customer {
-  id         String    @id @default(uuid())
+  id          String    @id @default(uuid())
   /// null เมื่อสมัครด้วย LINE (LINE ไม่ส่งเบอร์โทรมาให้)
-  phone      String?   @unique
+  phone       String?   @unique
   /// userId จาก LINE Login (ค่า sub ใน id_token) ใช้แทนเบอร์โทรในการเข้าสู่ระบบ
-  lineUserId String?   @unique
-  name       String?
+  lineUserId  String?   @unique
+  /// userId จาก Sign in with Apple (ค่า sub ใน identity token) แอป iPhone เท่านั้น
+  appleUserId String?   @unique
+  name        String?
   /// ลบบัญชีแล้ว: ข้อมูลส่วนตัวถูกลบ/ปิดบัง เก็บเฉพาะประวัติธุรกรรมตามกฎหมายบัญชี
-  deletedAt  DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   orders Order[]
 }
@@ -60,6 +62,8 @@ model Provider {
   phone           String  @unique
   /// userId จาก LINE Login (ไม่มีถ้าสมัครด้วยเบอร์โทร) แอดมินควรโทรยืนยันเบอร์ก่อนอนุมัติ
   lineUserId      String? @unique
+  /// userId จาก Sign in with Apple (ไม่มีถ้าสมัครด้วยเบอร์โทร/LINE) เบอร์ในใบสมัครกรอกเอง เหมือน LINE
+  appleUserId     String? @unique
   realName        String
   nickname        String
   experienceYears Int
@@ -272,6 +276,7 @@ model Order {
   photos           OrderPhoto[]
   closePhotos      OrderClosePhoto[]
   messages         OrderMessage[]
+  chatReports      ChatReport[]
   dispatchAttempts DispatchAttempt[]
   payment          Payment?
   walletEntries    WalletEntry[]
@@ -408,6 +413,22 @@ model OrderMessage {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
+}
+
+/// ลูกค้าหรือช่างรายงานแชทไม่เหมาะสม (App Store Guideline 1.2) แอดมินเปิดอ่านแชทแล้วจัดการ
+/// เช่น ระงับช่าง แล้วกดปิดรายงาน
+model ChatReport {
+  id         String     @id @default(uuid())
+  orderId    String
+  reporter   ChatSender
+  reason     String
+  createdAt  DateTime   @default(now())
+  resolvedAt DateTime?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([resolvedAt, createdAt])
+  @@index([orderId])
 }
 
 model OrderPhoto {
@@ -668,4 +689,16 @@ model WebPushSubscription {
   lastSeenAt DateTime @default(now())
 
   @@index([role, userId])
+}
+
+// ---------- Sign in with Apple ----------
+
+/// refresh token ของ Apple ต่อผู้ใช้ เก็บไว้ยกเลิก (revoke) ตอนลบบัญชีตามที่ Apple บังคับ
+/// ผูกด้วย appleUserId เพราะช่างใหม่ยังไม่มีแถว Provider ตอนล็อกอินครั้งแรก
+model AppleToken {
+  appleUserId  String   @id
+  /// bundle id ที่ใช้ขอ token (ลูกค้า/ช่างคนละ client_id) ใช้ตอน revoke
+  clientId     String
+  refreshToken String
+  updatedAt    DateTime @updatedAt
 }

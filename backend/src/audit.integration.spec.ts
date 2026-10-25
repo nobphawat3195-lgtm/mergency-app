@@ -89,7 +89,12 @@ integration('FixGo audit regressions on PostgreSQL', () => {
     alerts as never,
     uploads as never,
   );
-  const account = new AccountService(prisma, wallet, uploads as never);
+  const account = new AccountService(
+    prisma,
+    wallet,
+    uploads as never,
+    { revoke: async () => undefined } as never,
+  );
   let customerId: string;
   let providerId: string;
   let categoryId: string;

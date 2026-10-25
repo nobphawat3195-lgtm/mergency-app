@@ -197,7 +197,23 @@ class _OrderChatScreenState extends State<OrderChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: FixGoColors.surface,
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          IconButton(
+            tooltip: 'รายงานแชทไม่เหมาะสม',
+            icon: const Icon(Icons.flag_outlined),
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => ReportChatDialog(
+                api: widget.api,
+                orderId: widget.orderId,
+                otherParty: widget.me == ChatSender.customer ? 'ช่าง' : 'ลูกค้า',
+              ),
+            ),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
@@ -422,6 +438,139 @@ class _Bubble extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// รายงานแชทไม่เหมาะสม (App Store Guideline 1.2): เลือกเหตุผลแล้วเขียนเพิ่มได้
+/// ทีมงานได้แจ้งเตือน เปิดอ่านแชท และระงับช่างได้ถ้าจำเป็น
+class ReportChatDialog extends StatefulWidget {
+  const ReportChatDialog({
+    super.key,
+    required this.api,
+    required this.orderId,
+    required this.otherParty,
+  });
+
+  final FixGoApiClient api;
+  final String orderId;
+
+  /// "ช่าง" หรือ "ลูกค้า"
+  final String otherParty;
+
+  static const reasons = [
+    'ใช้คำหยาบหรือข่มขู่',
+    'คุกคามหรือส่งข้อความ/รูปไม่เหมาะสม',
+    'ขอเงินหรือให้โอนนอกแอป',
+    'อื่นๆ',
+  ];
+
+  @override
+  State<ReportChatDialog> createState() => _ReportChatDialogState();
+}
+
+class _ReportChatDialogState extends State<ReportChatDialog> {
+  final _detail = TextEditingController();
+  String? _reason;
+  bool _sending = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _detail.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final reason = _reason;
+    if (reason == null) return;
+    final detail = _detail.text.trim();
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+    try {
+      await widget.api.reportOrderChat(
+        widget.orderId,
+        detail.isEmpty ? reason : '$reason: $detail',
+      );
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.of(context).pop();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('ส่งรายงานแล้ว ทีมงานจะตรวจสอบโดยเร็ว'),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _error = userMessageFor(error));
+    } catch (_) {
+      if (mounted) setState(() => _error = 'เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('รายงานแชทไม่เหมาะสม'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'ทีมงานจะเปิดอ่านแชทของงานนี้และติดต่อกลับ '
+              'ถ้า${widget.otherParty}ทำผิดจะถูกระงับการใช้งาน',
+              style: const TextStyle(color: FixGoColors.textSecondary),
+            ),
+            const SizedBox(height: FixGoSpacing.sm),
+            Wrap(
+              spacing: FixGoSpacing.sm,
+              runSpacing: FixGoSpacing.xs,
+              children: [
+                for (final reason in ReportChatDialog.reasons)
+                  ChoiceChip(
+                    label: Text(reason),
+                    selected: _reason == reason,
+                    onSelected: _sending
+                        ? null
+                        : (_) => setState(() => _reason = reason),
+                  ),
+              ],
+            ),
+            const SizedBox(height: FixGoSpacing.sm),
+            TextField(
+              controller: _detail,
+              enabled: !_sending,
+              maxLength: 300,
+              maxLines: 3,
+              minLines: 1,
+              decoration: const InputDecoration(
+                hintText: 'รายละเอียดเพิ่มเติม (ไม่บังคับ)',
+              ),
+            ),
+            if (_error != null)
+              Text(_error!, style: const TextStyle(color: FixGoColors.error)),
+            const SizedBox(height: FixGoSpacing.sm),
+            const Text(
+              'มีเหตุฉุกเฉินหรือไม่ปลอดภัย โทร 191 ทันที',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _sending ? null : () => Navigator.of(context).pop(),
+          child: const Text('ยกเลิก'),
+        ),
+        FilledButton(
+          onPressed: _sending || _reason == null ? null : _submit,
+          child: Text(_sending ? 'กำลังส่ง...' : 'ส่งรายงาน'),
+        ),
+      ],
     );
   }
 }
