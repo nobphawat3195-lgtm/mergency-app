@@ -36,3 +36,13 @@ npm-debug.log*
 .idea/
 deploy/backups/
 deploy/.admin-created
+
+# ใบรับรอง/คีย์เซ็นแอป iOS และ Android ห้ามเข้า repo (ดู docs/BUILD.md)
+*.p12
+*.p8
+*.mobileprovision
+*.cer
+*.csr
+*.jks
+*.keystore
+fixgo_distribution.key

@@ -82,6 +82,36 @@ Firebase ฝั่ง iOS ตั้งผ่าน `--dart-define` ไม่ต�
 | Secret | `IOS_CUSTOMER_PROFILE_BASE64`, `IOS_PROVIDER_PROFILE_BASE64` | Provisioning profile แบบ App Store ของแต่ละ Bundle ID (`base64 -i x.mobileprovision`) |
 | Secret | `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_KEY_BASE64` | App Store Connect API key (Users and Access > Integrations) และไฟล์ `.p8` แบบ base64 |
 
+#### สร้างใบรับรองและ profile โดยไม่ต้องใช้ Mac
+
+ใช้ `openssl` บน Linux หรือ Windows (Git Bash มีให้) ทำครั้งเดียว ใบรับรองใช้ร่วมกันทั้งสองแอป อายุ 1 ปี
+**ห้าม commit ไฟล์ `.key` `.p12` `.p8` เข้า repo** เก็บไว้ใน password manager
+
+1. สร้าง private key และ CSR
+   ```bash
+   openssl genrsa -out fixgo_distribution.key 2048
+   openssl req -new -key fixgo_distribution.key -out fixgo_distribution.csr \
+     -subj "/emailAddress=<อีเมล Apple ID>/CN=FixGo Distribution/C=TH"
+   ```
+2. Apple Developer > Certificates > + > **Apple Distribution** อัปโหลด `fixgo_distribution.csr` แล้วดาวน์โหลด `distribution.cer`
+3. รวมเป็น `.p12` (ตั้งรหัสผ่านตอนถาม รหัสนี้คือ `IOS_DISTRIBUTION_CERT_PASSWORD`)
+   ```bash
+   openssl x509 -in distribution.cer -inform DER -out distribution.pem -outform PEM
+   openssl pkcs12 -export -legacy -inkey fixgo_distribution.key -in distribution.pem -out fixgo_distribution.p12
+   ```
+   `-legacy` ให้ keychain ของ macOS บน CI เปิดไฟล์ได้ (ถ้า openssl เป็นรุ่น 1.1 ให้ตัด `-legacy` ออก)
+4. Apple Developer > Profiles > + > **App Store Connect** เลือก App ID เลือกใบรับรองจากข้อ 2 ทำสองครั้ง (`com.fixgo.fixgoCustomer`, `com.fixgo.fixgoProvider`) ดาวน์โหลด `.mobileprovision`
+   ถ้าเปิด capability ใน App ID ทีหลัง (เช่น Time Sensitive) ต้องสร้าง profile ใหม่
+5. App Store Connect > Users and Access > Integrations > App Store Connect API > + (สิทธิ์ App Manager) จด Key ID, Issuer ID และดาวน์โหลด `AuthKey_XXXX.p8` (ดาวน์โหลดได้ครั้งเดียว)
+6. แปลงเป็น base64 บรรทัดเดียวแล้ววางใน GitHub Secrets
+   ```bash
+   base64 -w0 fixgo_distribution.p12          # IOS_DISTRIBUTION_CERT_BASE64
+   base64 -w0 FixGo_Customer.mobileprovision  # IOS_CUSTOMER_PROFILE_BASE64
+   base64 -w0 FixGo_Provider.mobileprovision  # IOS_PROVIDER_PROFILE_BASE64
+   base64 -w0 AuthKey_XXXX.p8                 # APP_STORE_CONNECT_KEY_BASE64
+   ```
+   Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("fixgo_distribution.p12")) | Set-Clipboard`
+
 ตัวแปร `API_BASE_URL`, `FIREBASE_PROJECT_ID`, `FIREBASE_SENDER_ID`, `FIREBASE_API_KEY`, `SENTRY_*_DSN` ใช้ชุดเดียวกับ Android
 Profile ของแอปช่างต้องเปิด Push Notifications และ Time Sensitive Notifications ใน App ID
 
