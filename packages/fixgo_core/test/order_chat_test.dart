@@ -36,6 +36,13 @@ class _ChatApi extends FixGoApiClient {
     messages.add(message);
     return message;
   }
+
+  final reports = <String>[];
+
+  @override
+  Future<void> reportOrderChat(String orderId, String reason) async {
+    reports.add('$orderId|$reason');
+  }
 }
 
 ChatMessage _msg(String id, ChatSender sender, String text) => ChatMessage(
@@ -161,5 +168,29 @@ void main() {
     });
     expect(message.sender, ChatSender.provider);
     expect(message.imageUrl, isNotNull);
+  });
+
+  testWidgets('reports the chat with a reason and optional detail',
+      (tester) async {
+    final api = _ChatApi(canSend: true);
+    await _pump(tester, api);
+    await tester.tap(find.byTooltip('รายงานแชทไม่เหมาะสม'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('ถ้าช่างทำผิดจะถูกระงับการใช้งาน'), findsOneWidget);
+
+    // ต้องเลือกเหตุผลก่อนจึงกดส่งได้
+    final send = find.widgetWithText(FilledButton, 'ส่งรายงาน');
+    expect(tester.widget<FilledButton>(send).onPressed, isNull);
+    await tester.tap(find.text('ใช้คำหยาบหรือข่มขู่'));
+    await tester.pump();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'รายละเอียดเพิ่มเติม (ไม่บังคับ)'),
+      'ด่าลูกค้า',
+    );
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+
+    expect(api.reports, ['o1|ใช้คำหยาบหรือข่มขู่: ด่าลูกค้า']);
+    expect(find.text('ส่งรายงานแล้ว ทีมงานจะตรวจสอบโดยเร็ว'), findsOneWidget);
   });
 }
